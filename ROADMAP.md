@@ -25,9 +25,9 @@
 - [x] Git 저장소 초기화
 - [x] GitHub 원격 연결
 - [x] Python 가상환경 생성
-- [~] 기준 문서 작성
-- [ ] 문서 검증
-- [ ] 첫 Commit과 Push
+- [x] 기준 문서 작성
+- [x] 문서 검증
+- [x] 첫 Commit과 Push
 - [ ] Codex CLI 설치
 - [ ] Codex 읽기 전용 분석
 - [ ] Phase 0 평가
