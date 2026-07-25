@@ -11,9 +11,9 @@
 ## 현재 위치
 
 - 현재 Phase: Phase 0
-- 현재 Lesson: 기준 문서 작성
+- 현재 Lesson: 제한된 Codex 문서 수정 검토
 - 현재 상태: 진행 중
-- 다음 단계: 문서 검증과 첫 Commit
+- 다음 단계: 제한된 Codex 문서 수정 검토 및 Phase 0 평가
 
 ## Phase 0 — 프로젝트 기반
 
@@ -28,8 +28,8 @@
 - [x] 기준 문서 작성
 - [x] 문서 검증
 - [x] 첫 Commit과 Push
-- [ ] Codex CLI 설치
-- [ ] Codex 읽기 전용 분석
+- [x] Codex CLI 설치
+- [x] Codex 읽기 전용 분석
 - [ ] Phase 0 평가
 
 ## Phase 1 — Agentic AI 기초

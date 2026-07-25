@@ -14,6 +14,10 @@ while teaching the learner every major concept and implementation decision.
 Phase 0. Do not implement application features until the project foundation
 and learning documents have been reviewed and committed.
 
+Application features must not be implemented until the Phase 0 evaluation is
+complete. Phase 1 focuses on theory and comparison experiments. Real OpenAI API
+implementation starts in Phase 2.
+
 ## Required Behavior
 
 - Read MASTER.md before proposing changes.
