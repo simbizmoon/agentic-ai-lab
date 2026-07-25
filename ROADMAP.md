@@ -10,12 +10,14 @@
 
 ## 현재 위치
 
-- 현재 Phase: Phase 0
-- 현재 Lesson: 제한된 Codex 문서 수정 검토
-- 현재 상태: 진행 중
-- 다음 단계: 제한된 Codex 문서 수정 검토 및 Phase 0 평가
+- 현재 Phase: Phase 1
+- 현재 Lesson: Lesson 1.1 — Chatbot, Workflow, Agent의 차이
+- 현재 상태: 시작 준비 완료
+- 다음 단계: Phase 1 Lesson 1.1 이론 및 비교 실습
 
 ## Phase 0 — 프로젝트 기반
+
+- 상태: 완료
 
 - [x] ChatGPT Project 생성
 - [x] Work와 Plugins 확인
@@ -30,7 +32,9 @@
 - [x] 첫 Commit과 Push
 - [x] Codex CLI 설치
 - [x] Codex 읽기 전용 분석
-- [ ] Phase 0 평가
+- [x] 제한된 Codex 문서 수정 실습
+- [x] Git Diff와 Commit 검증
+- [x] Phase 0 평가
 
 ## Phase 1 — Agentic AI 기초
 

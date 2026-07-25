@@ -11,12 +11,10 @@ while teaching the learner every major concept and implementation decision.
 
 ## Current Stage
 
-Phase 0. Do not implement application features until the project foundation
-and learning documents have been reviewed and committed.
+Phase 1. This phase focuses on theory, design judgment, and comparison experiments.
 
-Application features must not be implemented until the Phase 0 evaluation is
-complete. Phase 1 focuses on theory and comparison experiments. Real OpenAI API
-implementation starts in Phase 2.
+Do not implement unnecessary application code during Phase 1. Real OpenAI API
+calls and application feature implementation start in Phase 2.
 
 ## Required Behavior
 

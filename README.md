@@ -39,5 +39,7 @@ source .venv/bin/activate
 
 ## Current Status
 
-Phase 0 — 프로젝트 기반 구성
+Phase 1 — Agentic AI 기초
+
+현재 Lesson: Chatbot, Workflow, Agent의 차이
 
