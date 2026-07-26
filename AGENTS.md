@@ -11,10 +11,11 @@ while teaching the learner every major concept and implementation decision.
 
 ## Current Stage
 
-Phase 1. This phase focuses on theory, design judgment, and comparison experiments.
+Phase 2 start-ready. This phase begins basic OpenAI API calls and small practice implementations.
 
-Do not implement unnecessary application code during Phase 1. Real OpenAI API
-calls and application feature implementation start in Phase 2.
+Do not implement Agent features, RAG, Memory, or Multi-Agent systems yet. API keys
+and secrets must never be stored in Git. Implement only the smallest useful step
+at a time, test it, and then move to the next step.
 
 ## Required Behavior
 

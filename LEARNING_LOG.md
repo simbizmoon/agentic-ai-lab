@@ -86,6 +86,50 @@ Phase 0 이해도 평가 결과는 통과이다.
 - 고정된 반복 절차 → Workflow
 - 상황 판단과 반복 수행 → Agent
 
+## Session 002 — Agentic AI 기초
+
+### 완료한 Lesson
+
+- Lesson 1.1 Chatbot, Workflow, Agent의 차이
+- Lesson 1.2 Goal, Environment, State, Action, Observation
+- Lesson 1.3 Agent Loop와 Deterministic/Probabilistic 처리
+- Lesson 1.4 자율성 단계와 Agent가 필요하지 않은 문제
+- Lesson 1.5 같은 문제의 Chatbot/Workflow/Agent 비교 설계
+- Lesson 1.6 Agent 실패 유형과 안전장치
+- Lesson 1.7 Phase 1 종합 Agent 설계
+
+### 핵심 학습 내용
+
+- Chatbot은 단순 설명과 질의응답에 적합하고, Workflow는 고정된 반복 절차에 적합하며, Agent는 상황 판단과 반복 수행이 필요한 문제에 적합하다.
+- Agent 구성요소는 Goal, Environment, State, Action, Observation으로 나누어 볼 수 있다.
+- Agent Loop는 관찰, 판단, 행동, 결과 확인을 반복하는 구조이다.
+- Deterministic 처리는 규칙, 검증, 계산처럼 코드로 확정할 수 있는 영역에 사용하고, Probabilistic 처리는 해석, 요약, 분류처럼 불확실성이 있는 영역에 사용한다.
+- 최소 자율성 원칙에 따라 필요한 만큼만 Agent에게 판단 권한을 준다.
+- Human-in-the-loop는 삭제, 발송, 비용 증가, 보안 변경처럼 중요한 작업에 사람의 승인을 넣는 안전장치이다.
+- Hallucination은 모델이 그럴듯하지만 틀린 내용을 생성하는 실패 유형이다.
+- Prompt Injection은 외부 입력이나 문서가 모델의 지시 체계를 악용하려는 공격이다.
+- 객관적 완료 조건은 작업이 끝났는지 주관이 아니라 검증 가능한 기준으로 판단하게 해 준다.
+- 최소 권한은 Agent와 도구가 필요한 범위의 권한만 갖게 하는 보안 원칙이다.
+
+### 잘 이해한 내용
+
+- Chatbot, Workflow, Agent의 차이를 사례로 구분했다.
+- Agent 구성요소와 Agent Loop를 연결해서 설명했다.
+- Deterministic/Probabilistic 분리 기준을 설계 판단에 적용했다.
+- 최소 자율성, Human-in-the-loop, 최소 권한을 안전장치로 설명했다.
+
+### 보완한 내용
+
+- Hallucination과 Prompt Injection을 단순 오류가 아니라 Agent 설계에서 통제해야 할 실패 유형으로 정리했다.
+- 완료 조건을 "잘 작동한다"가 아니라 테스트 가능하고 관찰 가능한 기준으로 써야 함을 보완했다.
+- Agent가 필요하지 않은 문제는 Workflow나 일반 코드로 해결하는 것이 더 안전할 수 있음을 정리했다.
+
+### Phase 1 최종 평가
+
+- 점수: 93점
+- 결과: 통과
+- 다음 단계: Phase 2에서 OpenAI API, SDK, HTTP Request와 Response를 학습한다.
+
 ### 자기평가
 
 작성 예정

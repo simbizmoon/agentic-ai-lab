@@ -39,7 +39,7 @@ source .venv/bin/activate
 
 ## Current Status
 
-Phase 1 — Agentic AI 기초
+Phase 2 — OpenAI API 기초 시작 준비
 
-현재 Lesson: Chatbot, Workflow, Agent의 차이
+현재 Lesson: API, SDK, HTTP Request와 Response
 

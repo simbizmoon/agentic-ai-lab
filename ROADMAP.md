@@ -10,10 +10,10 @@
 
 ## 현재 위치
 
-- 현재 Phase: Phase 1
-- 현재 Lesson: Lesson 1.1 — Chatbot, Workflow, Agent의 차이
+- 현재 Phase: Phase 2
+- 현재 Lesson: Lesson 2.1 — API, SDK, HTTP Request와 Response
 - 현재 상태: 시작 준비 완료
-- 다음 단계: Phase 1 Lesson 1.1 이론 및 비교 실습
+- 다음 단계: Phase 2 Lesson 2.1 이론 및 기초 실습
 
 ## Phase 0 — 프로젝트 기반
 
@@ -38,15 +38,17 @@
 
 ## Phase 1 — Agentic AI 기초
 
-- [ ] 생성형 AI와 LLM
-- [ ] Chatbot, Workflow 및 Agent
-- [ ] Goal, Environment, State, Action, Observation
-- [ ] Agent Loop
-- [ ] Deterministic과 Probabilistic 처리
-- [ ] 자율성 단계
-- [ ] Agent가 필요하지 않은 문제
-- [ ] 비교 실험
-- [ ] 평가
+- 상태: 완료
+
+- [x] 생성형 AI와 LLM
+- [x] Chatbot, Workflow 및 Agent
+- [x] Goal, Environment, State, Action, Observation
+- [x] Agent Loop
+- [x] Deterministic과 Probabilistic 처리
+- [x] 자율성 단계
+- [x] Agent가 필요하지 않은 문제
+- [x] 비교 실험
+- [x] 평가
 
 ## Phase 2 — OpenAI API 기초
 
