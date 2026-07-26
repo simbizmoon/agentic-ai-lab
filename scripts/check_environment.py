@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -30,7 +29,8 @@ def is_virtual_environment() -> bool:
 def main() -> int:
     errors = 0
 
-    if sys.version_info >= (3, 12):
+    # Intentionally verify the active interpreter for the environment check.
+    if sys.version_info >= (3, 12):  # noqa: UP036
         ok(f"Python version is {sys.version_info.major}.{sys.version_info.minor}")
     else:
         error("Python version must be 3.12 or newer")
@@ -63,6 +63,9 @@ def main() -> int:
     else:
         ok("Settings loaded successfully")
         ok("OPENAI_API_KEY is configured")
+        ok(f"OPENAI_MODEL={settings.openai_model}")
+        ok(f"OPENAI_TIMEOUT_SECONDS={settings.openai_timeout_seconds}")
+        ok(f"OPENAI_MAX_RETRIES={settings.openai_max_retries}")
         ok(f"APP_ENV={settings.app_env}")
         ok(f"LOG_LEVEL={settings.log_level}")
         ok(f"MAX_AGENT_STEPS={settings.max_agent_steps}")
