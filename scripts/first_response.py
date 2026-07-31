@@ -75,6 +75,16 @@ def main() -> int:
     print(f"Model: {settings.openai_model}")
     print(f"Response ID: {result.response_id}")
     print(f"Request ID: {result.request_id or 'unavailable'}")
+    if result.usage is None:
+        print("Usage: unavailable")
+    else:
+        print("Usage:")
+        print(f"  Input Tokens: {result.usage.input_tokens}")
+        print(f"  Cached Input Tokens: {result.usage.cached_input_tokens}")
+        print(f"  Output Tokens: {result.usage.output_tokens}")
+        print(f"  Reasoning Tokens: {result.usage.reasoning_tokens}")
+        print(f"  Total Tokens: {result.usage.total_tokens}")
+    print(f"Elapsed Seconds: {result.elapsed_seconds:.3f}")
     print("Answer:")
     print(result.text)
     return 0
