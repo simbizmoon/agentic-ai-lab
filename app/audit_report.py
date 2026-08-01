@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,7 @@ from app.observability import AUDIT_SCHEMA_VERSION
 @dataclass(frozen=True)
 class ParsedSuccessEvent:
     model: str
+    timestamp_utc: datetime
     attempts: int
     correction_attempted: bool
     recorded_total_tokens: int | None
@@ -29,6 +32,7 @@ class ParsedSuccessEvent:
 @dataclass(frozen=True)
 class ParsedFailureEvent:
     model: str
+    timestamp_utc: datetime
     error_type: str
     recovery_action: str
     retryable: bool
@@ -72,6 +76,33 @@ class AuditReport:
     models: tuple[ModelAuditStats, ...]
 
 
+class AuditStatusFilter(str, Enum):
+    ALL = "all"
+    SUCCESS = "success"
+    FAILURE = "failure"
+
+
+@dataclass(frozen=True)
+class AuditReportFilter:
+    since: datetime | None = None
+    until: datetime | None = None
+    model: str | None = None
+    status: AuditStatusFilter = AuditStatusFilter.ALL
+
+    def __post_init__(self) -> None:
+        if self.since is not None and not _is_timezone_aware(self.since):
+            raise ValueError("since must be timezone-aware")
+        if self.until is not None and not _is_timezone_aware(self.until):
+            raise ValueError("until must be timezone-aware")
+        if self.since is not None and self.until is not None and self.since >= self.until:
+            raise ValueError("since must be earlier than until")
+        if self.model is not None:
+            if not self.model.strip():
+                raise ValueError("model must not be empty")
+            if self.model != self.model.strip():
+                raise ValueError("model must not include surrounding whitespace")
+
+
 def read_audit_events(
     path: Path,
 ) -> ParsedAuditEvents:
@@ -95,6 +126,31 @@ def read_audit_events(
         ) from error
 
     return ParsedAuditEvents(successes=tuple(successes), failures=tuple(failures))
+
+
+def filter_audit_events(
+    *,
+    events: ParsedAuditEvents,
+    report_filter: AuditReportFilter,
+) -> ParsedAuditEvents:
+    successes = events.successes
+    failures = events.failures
+
+    if report_filter.status is AuditStatusFilter.FAILURE:
+        successes = ()
+    else:
+        successes = tuple(
+            event for event in successes if _event_matches_filter(event, report_filter)
+        )
+
+    if report_filter.status is AuditStatusFilter.SUCCESS:
+        failures = ()
+    else:
+        failures = tuple(
+            event for event in failures if _event_matches_filter(event, report_filter)
+        )
+
+    return ParsedAuditEvents(successes=successes, failures=failures)
 
 
 def build_audit_report(
@@ -138,9 +194,20 @@ def build_audit_report(
 
 def format_audit_report(
     report: AuditReport,
+    *,
+    report_filter: AuditReportFilter | None = None,
 ) -> str:
+    if report_filter is None:
+        report_filter = AuditReportFilter()
+
     lines = [
         "Structured Analysis Audit Report",
+        "",
+        "Filters",
+        f"  Since: {_format_filter_datetime(report_filter.since)}",
+        f"  Until: {_format_filter_datetime(report_filter.until)}",
+        f"  Model: {report_filter.model or 'all'}",
+        f"  Status: {report_filter.status.value}",
         "",
         "Summary",
         f"  Total Events: {report.total_events}",
@@ -228,29 +295,33 @@ def _parse_event(
     event_type = payload["event_type"]
     status = payload["status"]
     model = payload["model"]
-    timestamp_utc = payload["timestamp_utc"]
     if not _is_non_empty_string(model):
         raise InvalidAuditEventError(
             f"Invalid audit event on line {line_number}: model is invalid."
         )
-    if not isinstance(timestamp_utc, str) or not timestamp_utc.strip():
-        raise InvalidAuditEventError(
-            f"Invalid audit event on line {line_number}: timestamp is invalid."
-        )
+    timestamp_utc = _parse_timestamp(payload["timestamp_utc"], line_number=line_number)
 
     if event_type == "structured_analysis_completed":
         if status != "success":
             raise InvalidAuditEventError(
                 f"Invalid audit event on line {line_number}: event status mismatch."
             )
-        return _parse_success_event(payload, line_number=line_number)
+        return _parse_success_event(
+            payload,
+            timestamp_utc=timestamp_utc,
+            line_number=line_number,
+        )
 
     if event_type == "structured_analysis_failed":
         if status != "failure":
             raise InvalidAuditEventError(
                 f"Invalid audit event on line {line_number}: event status mismatch."
             )
-        return _parse_failure_event(payload, line_number=line_number)
+        return _parse_failure_event(
+            payload,
+            timestamp_utc=timestamp_utc,
+            line_number=line_number,
+        )
 
     raise InvalidAuditEventError(
         f"Invalid audit event on line {line_number}: unknown event type."
@@ -260,6 +331,7 @@ def _parse_event(
 def _parse_success_event(
     payload: dict[str, Any],
     *,
+    timestamp_utc: datetime,
     line_number: int,
 ) -> ParsedSuccessEvent:
     for field_name in (
@@ -302,6 +374,7 @@ def _parse_success_event(
 
     return ParsedSuccessEvent(
         model=payload["model"],
+        timestamp_utc=timestamp_utc,
         attempts=attempts,
         correction_attempted=correction_attempted,
         recorded_total_tokens=recorded_total_tokens,
@@ -312,6 +385,7 @@ def _parse_success_event(
 def _parse_failure_event(
     payload: dict[str, Any],
     *,
+    timestamp_utc: datetime,
     line_number: int,
 ) -> ParsedFailureEvent:
     for field_name in ("error_type", "recovery_action", "retryable", "budget"):
@@ -335,6 +409,7 @@ def _parse_failure_event(
 
     return ParsedFailureEvent(
         model=payload["model"],
+        timestamp_utc=timestamp_utc,
         error_type=error_type,
         recovery_action=recovery_action,
         retryable=retryable,
@@ -359,6 +434,24 @@ def _parse_recorded_total_tokens(
             f"Invalid audit event on line {line_number}: token count is invalid."
         )
     return total_tokens
+
+
+def _parse_timestamp(value: object, *, line_number: int) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidAuditEventError(
+            f"Invalid audit event on line {line_number}: timestamp is invalid."
+        )
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise InvalidAuditEventError(
+            f"Invalid audit event on line {line_number}: timestamp is invalid."
+        ) from error
+    if not _is_timezone_aware(parsed):
+        raise InvalidAuditEventError(
+            f"Invalid audit event on line {line_number}: timestamp is invalid."
+        )
+    return parsed.astimezone(UTC)
 
 
 def _build_model_stats(
@@ -399,6 +492,17 @@ def _build_model_stats(
     return tuple(stats)
 
 
+def _event_matches_filter(
+    event: ParsedSuccessEvent | ParsedFailureEvent,
+    report_filter: AuditReportFilter,
+) -> bool:
+    if report_filter.since is not None and event.timestamp_utc < report_filter.since:
+        return False
+    if report_filter.until is not None and event.timestamp_utc >= report_filter.until:
+        return False
+    return report_filter.model is None or event.model == report_filter.model
+
+
 def _require_field(
     payload: dict[str, Any],
     field_name: str,
@@ -423,6 +527,10 @@ def _is_non_empty_string(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _is_timezone_aware(value: datetime) -> bool:
+    return value.tzinfo is not None and value.utcoffset() is not None
+
+
 def _divide(numerator: float, denominator: int) -> float:
     if denominator == 0:
         return 0.0
@@ -435,6 +543,12 @@ def _sorted_counter(counter: Counter[str]) -> tuple[tuple[str, int], ...]:
 
 def _format_percent(value: float) -> str:
     return f"{value * 100:.2f}%"
+
+
+def _format_filter_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "all"
+    return value.astimezone(UTC).isoformat()
 
 
 def _format_pairs(pairs: tuple[tuple[str, int], ...]) -> list[str]:

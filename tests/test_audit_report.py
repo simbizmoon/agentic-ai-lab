@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import FrozenInstanceError, asdict
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from app.audit_report import (
     AuditReport,
+    AuditReportFilter,
+    AuditStatusFilter,
     ModelAuditStats,
     ParsedAuditEvents,
     ParsedFailureEvent,
     ParsedSuccessEvent,
     build_audit_report,
+    filter_audit_events,
     format_audit_report,
     read_audit_events,
 )
@@ -30,12 +34,15 @@ SECRET_VALUES = (
     "PRIVATE-KEYWORD",
     "PRIVATE-REVIEW-REASON",
     "PRIVATE-ERROR-MESSAGE",
+    "PRIVATE-TIMESTAMP",
 )
+BASE_TIME = datetime(2026, 8, 2, 0, 0, tzinfo=UTC)
 
 
 def success_event(
     *,
     model: str = "gpt-test",
+    timestamp_utc: object = "2026-08-02T00:00:00+00:00",
     attempts: int = 1,
     correction_attempted: bool = False,
     total_tokens: int | None = 30,
@@ -53,7 +60,7 @@ def success_event(
     return {
         "schema_version": AUDIT_SCHEMA_VERSION,
         "event_type": "structured_analysis_completed",
-        "timestamp_utc": "2026-08-02T00:00:00+00:00",
+        "timestamp_utc": timestamp_utc,
         "status": "success",
         "model": model,
         "attempts": attempts,
@@ -77,6 +84,7 @@ def success_event(
 def failure_event(
     *,
     model: str = "gpt-test",
+    timestamp_utc: object = "2026-08-02T00:00:00+00:00",
     error_type: str = "RuntimeError",
     recovery_action: str = "abort",
     retryable: bool = False,
@@ -84,7 +92,7 @@ def failure_event(
     return {
         "schema_version": AUDIT_SCHEMA_VERSION,
         "event_type": "structured_analysis_failed",
-        "timestamp_utc": "2026-08-02T00:00:00+00:00",
+        "timestamp_utc": timestamp_utc,
         "status": "failure",
         "model": model,
         "error_type": error_type,
@@ -96,6 +104,40 @@ def failure_event(
             "max_elapsed_seconds": 30.0,
         },
     }
+
+
+def parsed_success(
+    model: str = "gpt-test",
+    timestamp_utc: datetime = BASE_TIME,
+    attempts: int = 1,
+    correction_attempted: bool = False,
+    recorded_total_tokens: int | None = 30,
+    total_elapsed_seconds: float = 0.5,
+) -> ParsedSuccessEvent:
+    return ParsedSuccessEvent(
+        model=model,
+        timestamp_utc=timestamp_utc,
+        attempts=attempts,
+        correction_attempted=correction_attempted,
+        recorded_total_tokens=recorded_total_tokens,
+        total_elapsed_seconds=total_elapsed_seconds,
+    )
+
+
+def parsed_failure(
+    model: str = "gpt-test",
+    timestamp_utc: datetime = BASE_TIME,
+    error_type: str = "RuntimeError",
+    recovery_action: str = "abort",
+    retryable: bool = False,
+) -> ParsedFailureEvent:
+    return ParsedFailureEvent(
+        model=model,
+        timestamp_utc=timestamp_utc,
+        error_type=error_type,
+        recovery_action=recovery_action,
+        retryable=retryable,
+    )
 
 
 def write_events(path: Path, *events: dict[str, object]) -> None:
@@ -139,7 +181,7 @@ def test_read_success_event(tmp_path: Path) -> None:
 
     events = read_audit_events(path)
 
-    assert events.successes == (ParsedSuccessEvent("gpt-test", 1, False, 30, 0.5),)
+    assert events.successes == (parsed_success(),)
     assert events.failures == ()
 
 
@@ -149,7 +191,7 @@ def test_read_failure_event(tmp_path: Path) -> None:
 
     events = read_audit_events(path)
 
-    assert events.failures == (ParsedFailureEvent("gpt-test", "RuntimeError", "abort", False),)
+    assert events.failures == (parsed_failure(),)
 
 
 def test_read_multiple_success_and_failure_events(tmp_path: Path) -> None:
@@ -332,17 +374,69 @@ def test_read_errors_do_not_include_raw_sensitive_line(tmp_path: Path) -> None:
     assert_no_secret(read_one_error(path))
 
 
+def test_read_parses_utc_offset_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc="2026-08-02T00:00:00+00:00"))
+
+    assert read_audit_events(path).successes[0].timestamp_utc == BASE_TIME
+
+
+def test_read_parses_z_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc="2026-08-02T00:00:00Z"))
+
+    assert read_audit_events(path).successes[0].timestamp_utc == BASE_TIME
+
+
+def test_read_normalizes_non_utc_timestamp_to_utc(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc="2026-08-02T09:00:00+09:00"))
+
+    assert read_audit_events(path).successes[0].timestamp_utc == BASE_TIME
+
+
+def test_read_rejects_invalid_iso_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc="not-a-timestamp"))
+
+    with pytest.raises(InvalidAuditEventError):
+        read_audit_events(path)
+
+
+def test_read_rejects_naive_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc="2026-08-02T00:00:00"))
+
+    with pytest.raises(InvalidAuditEventError):
+        read_audit_events(path)
+
+
+def test_read_rejects_non_string_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc=123))
+
+    with pytest.raises(InvalidAuditEventError):
+        read_audit_events(path)
+
+
+def test_timestamp_error_omits_raw_sensitive_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "audit.jsonl"
+    write_events(path, success_event(timestamp_utc="PRIVATE-TIMESTAMP"))
+
+    assert_no_secret(read_one_error(path))
+
+
 def make_report_events() -> ParsedAuditEvents:
     return ParsedAuditEvents(
         successes=(
-            ParsedSuccessEvent("gpt-b", 1, False, 20, 0.2),
-            ParsedSuccessEvent("gpt-a", 2, True, 40, 0.4),
-            ParsedSuccessEvent("gpt-a", 1, False, None, 1.0),
+            parsed_success("gpt-b", BASE_TIME, 1, False, 20, 0.2),
+            parsed_success("gpt-a", BASE_TIME + timedelta(minutes=1), 2, True, 40, 0.4),
+            parsed_success("gpt-a", BASE_TIME + timedelta(minutes=2), 1, False, None, 1.0),
         ),
         failures=(
-            ParsedFailureEvent("gpt-b", "ZError", "abort", False),
-            ParsedFailureEvent("gpt-b", "AError", "retry_later", True),
-            ParsedFailureEvent("gpt-a", "AError", "abort", False),
+            parsed_failure("gpt-b", BASE_TIME, "ZError", "abort", False),
+            parsed_failure("gpt-b", BASE_TIME + timedelta(minutes=1), "AError", "retry_later", True),
+            parsed_failure("gpt-a", BASE_TIME + timedelta(minutes=2), "AError", "abort", False),
         ),
     )
 
@@ -450,8 +544,8 @@ def test_report_usage_none_is_excluded_from_token_average() -> None:
     report = build_audit_report(
         ParsedAuditEvents(
             successes=(
-                ParsedSuccessEvent("gpt", 1, False, None, 0.1),
-                ParsedSuccessEvent("gpt", 1, False, 10, 0.1),
+                parsed_success(recorded_total_tokens=None),
+                parsed_success(recorded_total_tokens=10),
             ),
             failures=(),
         )
@@ -461,11 +555,237 @@ def test_report_usage_none_is_excluded_from_token_average() -> None:
     assert report.average_recorded_tokens == 10.0
 
 
+def test_audit_report_filter_defaults() -> None:
+    report_filter = AuditReportFilter()
+
+    assert report_filter.since is None
+    assert report_filter.until is None
+    assert report_filter.model is None
+    assert report_filter.status is AuditStatusFilter.ALL
+
+
+def test_audit_report_filter_accepts_since() -> None:
+    assert AuditReportFilter(since=BASE_TIME).since == BASE_TIME
+
+
+def test_audit_report_filter_accepts_until() -> None:
+    assert AuditReportFilter(until=BASE_TIME).until == BASE_TIME
+
+
+def test_audit_report_filter_accepts_model() -> None:
+    assert AuditReportFilter(model="gpt-test").model == "gpt-test"
+
+
+def test_audit_status_filter_values() -> None:
+    assert AuditStatusFilter.ALL.value == "all"
+    assert AuditStatusFilter.SUCCESS.value == "success"
+    assert AuditStatusFilter.FAILURE.value == "failure"
+
+
+def test_audit_report_filter_rejects_naive_since() -> None:
+    with pytest.raises(ValueError, match="since"):
+        AuditReportFilter(since=BASE_TIME.replace(tzinfo=None))
+
+
+def test_audit_report_filter_rejects_naive_until() -> None:
+    with pytest.raises(ValueError, match="until"):
+        AuditReportFilter(until=BASE_TIME.replace(tzinfo=None))
+
+
+def test_audit_report_filter_rejects_same_since_and_until() -> None:
+    with pytest.raises(ValueError, match="since"):
+        AuditReportFilter(since=BASE_TIME, until=BASE_TIME)
+
+
+def test_audit_report_filter_rejects_since_after_until() -> None:
+    with pytest.raises(ValueError, match="since"):
+        AuditReportFilter(since=BASE_TIME + timedelta(seconds=1), until=BASE_TIME)
+
+
+def test_audit_report_filter_rejects_empty_model() -> None:
+    with pytest.raises(ValueError, match="model"):
+        AuditReportFilter(model="")
+
+
+def test_audit_report_filter_rejects_blank_model() -> None:
+    with pytest.raises(ValueError, match="model"):
+        AuditReportFilter(model="   ")
+
+
+def test_audit_report_filter_rejects_surrounding_model_whitespace() -> None:
+    with pytest.raises(ValueError, match="model"):
+        AuditReportFilter(model=" gpt-test ")
+
+
+def test_audit_report_filter_is_frozen() -> None:
+    report_filter = AuditReportFilter()
+
+    with pytest.raises(FrozenInstanceError):
+        report_filter.model = "gpt-test"
+
+
+def make_filter_events() -> ParsedAuditEvents:
+    return ParsedAuditEvents(
+        successes=(
+            parsed_success("gpt-a", BASE_TIME),
+            parsed_success("gpt-A", BASE_TIME + timedelta(minutes=1)),
+            parsed_success("gpt-b", BASE_TIME + timedelta(minutes=2)),
+        ),
+        failures=(
+            parsed_failure("gpt-a", BASE_TIME + timedelta(minutes=3)),
+            parsed_failure("gpt-b", BASE_TIME + timedelta(minutes=4)),
+        ),
+    )
+
+
+def test_filter_default_keeps_all_events() -> None:
+    events = make_filter_events()
+
+    assert filter_audit_events(events=events, report_filter=AuditReportFilter()) == events
+
+
+def test_filter_since_includes_boundary() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(since=BASE_TIME),
+    )
+
+    assert len(filtered.successes) == 3
+    assert len(filtered.failures) == 2
+
+
+def test_filter_since_excludes_earlier_events() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(since=BASE_TIME + timedelta(minutes=2)),
+    )
+
+    assert [event.model for event in filtered.successes] == ["gpt-b"]
+    assert len(filtered.failures) == 2
+
+
+def test_filter_until_excludes_boundary() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(until=BASE_TIME + timedelta(minutes=2)),
+    )
+
+    assert [event.model for event in filtered.successes] == ["gpt-a", "gpt-A"]
+
+
+def test_filter_until_includes_earlier_events() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(until=BASE_TIME + timedelta(minutes=1)),
+    )
+
+    assert filtered.successes == (parsed_success("gpt-a", BASE_TIME),)
+
+
+def test_filter_compares_equivalent_times_with_different_offsets() -> None:
+    plus_nine = datetime(2026, 8, 2, 9, 0, tzinfo=timezone(timedelta(hours=9)))
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(since=plus_nine),
+    )
+
+    assert len(filtered.successes) == 3
+
+
+def test_filter_model_exact_match() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(model="gpt-a"),
+    )
+
+    assert len(filtered.successes) == 1
+    assert len(filtered.failures) == 1
+
+
+def test_filter_model_is_case_sensitive() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(model="gpt-A"),
+    )
+
+    assert filtered.successes == (parsed_success("gpt-A", BASE_TIME + timedelta(minutes=1)),)
+    assert filtered.failures == ()
+
+
+def test_filter_status_success() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(status=AuditStatusFilter.SUCCESS),
+    )
+
+    assert len(filtered.successes) == 3
+    assert filtered.failures == ()
+
+
+def test_filter_status_failure() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(status=AuditStatusFilter.FAILURE),
+    )
+
+    assert filtered.successes == ()
+    assert len(filtered.failures) == 2
+
+
+def test_filter_status_all() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(status=AuditStatusFilter.ALL),
+    )
+
+    assert len(filtered.successes) == 3
+    assert len(filtered.failures) == 2
+
+
+def test_filter_combines_period_model_and_status_with_and() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(
+            since=BASE_TIME + timedelta(minutes=2),
+            until=BASE_TIME + timedelta(minutes=5),
+            model="gpt-b",
+            status=AuditStatusFilter.FAILURE,
+        ),
+    )
+
+    assert filtered.successes == ()
+    assert filtered.failures == (
+        parsed_failure("gpt-b", BASE_TIME + timedelta(minutes=4)),
+    )
+
+
+def test_filter_empty_result_is_valid() -> None:
+    filtered = filter_audit_events(
+        events=make_filter_events(),
+        report_filter=AuditReportFilter(model="missing-model"),
+    )
+
+    assert filtered == ParsedAuditEvents(successes=(), failures=())
+
+
+def test_filter_does_not_mutate_original_events() -> None:
+    events = make_filter_events()
+    before = events
+
+    filter_audit_events(
+        events=events,
+        report_filter=AuditReportFilter(model="missing-model"),
+    )
+
+    assert events == before
+
+
 def test_formatter_includes_all_sections() -> None:
     output = format_audit_report(build_audit_report(make_report_events()))
 
     for section in (
         "Structured Analysis Audit Report",
+        "Filters",
         "Summary",
         "Correction",
         "Recorded Usage",
@@ -498,12 +818,69 @@ def test_formatter_prints_none_for_empty_aggregates() -> None:
     assert "Models\n  None" in output
 
 
+def test_formatter_includes_filters_section() -> None:
+    output = format_audit_report(build_audit_report(make_report_events()))
+
+    assert "Filters" in output
+
+
+def test_formatter_default_filter_outputs_all() -> None:
+    output = format_audit_report(build_audit_report(make_report_events()))
+
+    assert "Since: all" in output
+    assert "Until: all" in output
+    assert "Model: all" in output
+    assert "Status: all" in output
+
+
+def test_formatter_outputs_utc_iso_datetimes() -> None:
+    output = format_audit_report(
+        build_audit_report(make_report_events()),
+        report_filter=AuditReportFilter(
+            since=BASE_TIME,
+            until=BASE_TIME + timedelta(hours=1),
+        ),
+    )
+
+    assert "Since: 2026-08-02T00:00:00+00:00" in output
+    assert "Until: 2026-08-02T01:00:00+00:00" in output
+
+
+def test_formatter_outputs_model_filter() -> None:
+    output = format_audit_report(
+        build_audit_report(make_report_events()),
+        report_filter=AuditReportFilter(model="gpt-a"),
+    )
+
+    assert "Model: gpt-a" in output
+
+
+def test_formatter_outputs_status_filter() -> None:
+    output = format_audit_report(
+        build_audit_report(make_report_events()),
+        report_filter=AuditReportFilter(status=AuditStatusFilter.FAILURE),
+    )
+
+    assert "Status: failure" in output
+
+
+def test_formatter_keeps_existing_sections_with_filters() -> None:
+    output = format_audit_report(
+        build_audit_report(make_report_events()),
+        report_filter=AuditReportFilter(status=AuditStatusFilter.SUCCESS),
+    )
+
+    assert "Summary" in output
+    assert "Recovery Actions" in output
+    assert "Models" in output
+
+
 def test_formatter_does_not_output_response_id() -> None:
     path_event = success_event()
     assert "resp-private" not in format_audit_report(
         build_audit_report(
             ParsedAuditEvents(
-                successes=(ParsedSuccessEvent("gpt", 1, False, 1, 0.1),),
+                successes=(parsed_success(recorded_total_tokens=1, total_elapsed_seconds=0.1),),
                 failures=(),
             )
         )
