@@ -74,6 +74,7 @@ def valid_analysis() -> TextAnalysis:
         sentiment=Sentiment.NEUTRAL,
         keywords=["착석", "진동", "알림"],
         requires_review=False,
+        review_reason=None,
     )
 
 
@@ -116,6 +117,7 @@ def test_analyze_text_returns_text_analysis_object() -> None:
     assert isinstance(result.analysis, TextAnalysis)
     assert result.analysis.topic == "착석 알림"
     assert result.analysis.sentiment is Sentiment.NEUTRAL
+    assert result.analysis.review_reason is None
 
 
 def test_analyze_text_returns_response_and_request_ids() -> None:

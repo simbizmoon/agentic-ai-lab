@@ -13,6 +13,7 @@ def valid_analysis_data() -> dict[str, object]:
         "sentiment": "neutral",
         "keywords": ["Agent", "Workflow"],
         "requires_review": False,
+        "review_reason": None,
     }
 
 
@@ -49,6 +50,22 @@ def sentiment_property_schema(schema: dict[str, object]) -> dict[str, object]:
     return sentiment_schema
 
 
+def schema_types(schema_fragment: dict[str, object]) -> set[str]:
+    types: set[str] = set()
+    schema_type = schema_fragment.get("type")
+    if isinstance(schema_type, str):
+        types.add(schema_type)
+
+    for key in ("anyOf", "oneOf", "allOf"):
+        nested = schema_fragment.get(key)
+        if isinstance(nested, list):
+            for item in nested:
+                if isinstance(item, dict):
+                    types.update(schema_types(item))
+
+    return types
+
+
 def test_text_analysis_accepts_valid_input() -> None:
     analysis = TextAnalysis(**valid_analysis_data())
 
@@ -57,6 +74,7 @@ def test_text_analysis_accepts_valid_input() -> None:
     assert analysis.sentiment is Sentiment.NEUTRAL
     assert analysis.keywords == ["Agent", "Workflow"]
     assert analysis.requires_review is False
+    assert analysis.review_reason is None
 
 
 def test_text_analysis_converts_neutral_string_to_enum() -> None:
@@ -274,10 +292,128 @@ def test_text_analysis_accepts_false_requires_review() -> None:
 def test_text_analysis_accepts_true_requires_review() -> None:
     data = valid_analysis_data()
     data["requires_review"] = True
+    data["review_reason"] = "사용자 안전 검토가 필요하다."
 
     analysis = TextAnalysis(**data)
 
     assert analysis.requires_review is True
+
+
+def test_text_analysis_allows_false_requires_review_with_no_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = False
+    data["review_reason"] = None
+
+    analysis = TextAnalysis(**data)
+
+    assert analysis.requires_review is False
+    assert analysis.review_reason is None
+
+
+def test_text_analysis_allows_true_requires_review_with_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = "안전 관련 판단이 필요하다."
+
+    analysis = TextAnalysis(**data)
+
+    assert analysis.requires_review is True
+    assert analysis.review_reason == "안전 관련 판단이 필요하다."
+
+
+def test_text_analysis_rejects_true_requires_review_without_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = None
+
+    with pytest.raises(ValidationError) as exc_info:
+        TextAnalysis(**data)
+
+    assert exc_info.value.errors()[0]["loc"] == ()
+
+
+def test_text_analysis_rejects_true_requires_review_with_empty_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = ""
+
+    with pytest.raises(ValidationError) as exc_info:
+        TextAnalysis(**data)
+
+    assert ("review_reason",) in error_locations(exc_info.value)
+
+
+def test_text_analysis_rejects_true_requires_review_with_whitespace_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = "   "
+
+    with pytest.raises(ValidationError) as exc_info:
+        TextAnalysis(**data)
+
+    assert ("review_reason",) in error_locations(exc_info.value)
+
+
+def test_text_analysis_rejects_false_requires_review_with_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = False
+    data["review_reason"] = "검토 사유가 없어야 한다."
+
+    with pytest.raises(ValidationError) as exc_info:
+        TextAnalysis(**data)
+
+    assert exc_info.value.errors()[0]["loc"] == ()
+
+
+def test_text_analysis_trims_review_reason_whitespace() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = "  안전성 검토 필요  "
+
+    analysis = TextAnalysis(**data)
+
+    assert analysis.review_reason == "안전성 검토 필요"
+
+
+def test_text_analysis_rejects_review_reason_longer_than_300_characters() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = "a" * 301
+
+    with pytest.raises(ValidationError) as exc_info:
+        TextAnalysis(**data)
+
+    assert ("review_reason",) in error_locations(exc_info.value)
+
+
+def test_text_analysis_rejects_missing_review_reason() -> None:
+    data = valid_analysis_data()
+    del data["review_reason"]
+
+    with pytest.raises(ValidationError) as exc_info:
+        TextAnalysis(**data)
+
+    assert ("review_reason",) in error_locations(exc_info.value)
+
+
+def test_text_analysis_model_dump_json_mode_includes_none_review_reason() -> None:
+    analysis = TextAnalysis(**valid_analysis_data())
+
+    dumped = analysis.model_dump(mode="json")
+
+    assert "review_reason" in dumped
+    assert dumped["review_reason"] is None
+
+
+def test_text_analysis_model_dump_json_mode_includes_string_review_reason() -> None:
+    data = valid_analysis_data()
+    data["requires_review"] = True
+    data["review_reason"] = "안전성 검토 필요"
+    analysis = TextAnalysis(**data)
+
+    dumped = analysis.model_dump(mode="json")
+
+    assert dumped["review_reason"] == "안전성 검토 필요"
 
 
 def test_text_analysis_rejects_extra_field() -> None:
@@ -309,6 +445,7 @@ def test_text_analysis_json_schema_contains_core_structure() -> None:
         "sentiment",
         "keywords",
         "requires_review",
+        "review_reason",
     }
 
     properties = schema["properties"]
@@ -319,6 +456,7 @@ def test_text_analysis_json_schema_contains_core_structure() -> None:
         "sentiment",
         "keywords",
         "requires_review",
+        "review_reason",
     }
 
     sentiment_schema = sentiment_property_schema(schema)
@@ -326,3 +464,6 @@ def test_text_analysis_json_schema_contains_core_structure() -> None:
     requires_review_schema = properties["requires_review"]
     assert isinstance(requires_review_schema, dict)
     assert requires_review_schema["type"] == "boolean"
+    review_reason_schema = properties["review_reason"]
+    assert isinstance(review_reason_schema, dict)
+    assert {"string", "null"}.issubset(schema_types(review_reason_schema))

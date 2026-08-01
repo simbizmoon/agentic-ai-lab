@@ -50,7 +50,9 @@ def analyze_text(
             "한국어로 주제와 요약을 작성하세요. "
             "sentiment는 positive, neutral, negative 중 하나여야 합니다. "
             "keywords는 1개 이상 5개 이하로 작성하세요. "
-            "requires_review에는 추가 검토 필요 여부를 담으세요."
+            "requires_review에는 추가 검토 필요 여부를 담으세요. "
+            "requires_review가 true이면 review_reason에 구체적인 한국어 검토 사유를 작성하세요. "
+            "requires_review가 false이면 review_reason은 null이어야 합니다."
         ),
         input=cleaned_input,
         text_format=TextAnalysis,

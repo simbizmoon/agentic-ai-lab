@@ -101,6 +101,7 @@ def main() -> int:
     for keyword in result.analysis.keywords:
         print(f"    - {keyword}")
     print(f"  Requires Review: {str(result.analysis.requires_review).lower()}")
+    print(f"  Review Reason: {result.analysis.review_reason or 'unavailable'}")
     return 0
 
 

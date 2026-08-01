@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
 Keyword = Annotated[str, Field(min_length=1, max_length=50)]
+ReviewReason = Annotated[str, Field(min_length=1, max_length=300)]
 
 
 class Sentiment(str, Enum):
@@ -22,6 +30,7 @@ class TextAnalysis(BaseModel):
     sentiment: Sentiment
     keywords: list[Keyword] = Field(min_length=1, max_length=5)
     requires_review: StrictBool
+    review_reason: ReviewReason | None
 
     @field_validator("topic", "summary")
     @classmethod
@@ -50,3 +59,24 @@ class TextAnalysis(BaseModel):
             normalized_keywords.append(normalized_keyword)
 
         return normalized_keywords
+
+    @field_validator("review_reason")
+    @classmethod
+    def normalize_review_reason(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("review_reason must not be empty")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_review_reason_policy(self) -> Self:
+        if self.requires_review and self.review_reason is None:
+            raise ValueError("review_reason is required when requires_review is true")
+
+        if not self.requires_review and self.review_reason is not None:
+            raise ValueError("review_reason must be None when requires_review is false")
+
+        return self
