@@ -1,0 +1,131 @@
+"""Pure recovery policy decisions for handled errors."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+import openai
+
+from app.exceptions import (
+    StructuredResponseIncompleteError,
+    StructuredResponseParseError,
+    StructuredResponseRefusalError,
+    StructuredResponseStatusError,
+)
+
+
+class RecoveryAction(str, Enum):
+    RETRY_LATER = "retry_later"
+    MODIFY_REQUEST = "modify_request"
+    FIX_CONFIGURATION = "fix_configuration"
+    HUMAN_REVIEW = "human_review"
+    ABORT = "abort"
+
+
+@dataclass(frozen=True)
+class RecoveryDecision:
+    retryable: bool
+    action: RecoveryAction
+    reason: str
+
+
+def decide_recovery(error: BaseException) -> RecoveryDecision:
+    """Return the recommended recovery policy for an error."""
+
+    if isinstance(error, openai.AuthenticationError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.FIX_CONFIGURATION,
+            reason="OpenAI authentication configuration must be fixed.",
+        )
+
+    if isinstance(error, openai.PermissionDeniedError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.FIX_CONFIGURATION,
+            reason="OpenAI permission configuration must be fixed.",
+        )
+
+    if isinstance(error, openai.BadRequestError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.MODIFY_REQUEST,
+            reason="The OpenAI request must be corrected before retrying.",
+        )
+
+    if isinstance(error, openai.NotFoundError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.FIX_CONFIGURATION,
+            reason="The configured OpenAI resource must be fixed.",
+        )
+
+    if isinstance(error, openai.RateLimitError):
+        return RecoveryDecision(
+            retryable=True,
+            action=RecoveryAction.RETRY_LATER,
+            reason="OpenAI rate limits require retrying later.",
+        )
+
+    if isinstance(error, openai.APITimeoutError):
+        return RecoveryDecision(
+            retryable=True,
+            action=RecoveryAction.RETRY_LATER,
+            reason="The OpenAI request timed out and may be retried later.",
+        )
+
+    if isinstance(error, openai.APIConnectionError):
+        return RecoveryDecision(
+            retryable=True,
+            action=RecoveryAction.RETRY_LATER,
+            reason="The OpenAI connection failed and may be retried later.",
+        )
+
+    if isinstance(error, openai.InternalServerError):
+        return RecoveryDecision(
+            retryable=True,
+            action=RecoveryAction.RETRY_LATER,
+            reason="OpenAI server errors may be retried later.",
+        )
+
+    if isinstance(error, StructuredResponseIncompleteError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.MODIFY_REQUEST,
+            reason="The structured analysis request should be simplified or modified.",
+        )
+
+    if isinstance(error, StructuredResponseRefusalError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.HUMAN_REVIEW,
+            reason="The structured analysis refusal requires human review.",
+        )
+
+    if isinstance(error, StructuredResponseParseError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The structured analysis response could not be parsed safely.",
+        )
+
+    if isinstance(error, StructuredResponseStatusError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The structured analysis response ended with an unexpected status.",
+        )
+
+    if isinstance(error, ValueError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.MODIFY_REQUEST,
+            reason="The request input must be modified.",
+        )
+
+    return RecoveryDecision(
+        retryable=False,
+        action=RecoveryAction.ABORT,
+        reason="The error is not recoverable by the current policy.",
+    )
