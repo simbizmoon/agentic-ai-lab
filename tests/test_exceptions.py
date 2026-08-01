@@ -34,3 +34,25 @@ def test_concrete_structured_analysis_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 5
+
+
+def test_structured_response_validation_error_stores_default_metadata() -> None:
+    error = StructuredResponseValidationError(
+        "validation failed",
+        elapsed_seconds=0.25,
+    )
+
+    assert str(error) == "validation failed"
+    assert error.elapsed_seconds == 0.25
+    assert error.attempts == 1
+
+
+def test_structured_response_validation_error_stores_attempt_count() -> None:
+    error = StructuredResponseValidationError(
+        "validation failed",
+        elapsed_seconds=0.75,
+        attempts=2,
+    )
+
+    assert error.elapsed_seconds == 0.75
+    assert error.attempts == 2

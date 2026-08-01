@@ -46,6 +46,32 @@ class StructuredAnalysisResult:
     elapsed_seconds: float
 
 
+@dataclass(frozen=True)
+class StructuredAnalysisExecution:
+    result: StructuredAnalysisResult
+    attempts: int
+    correction_attempted: bool
+    total_usage: TokenUsage | None
+    total_elapsed_seconds: float
+    response_ids: tuple[str, ...]
+
+
+def combine_token_usage(
+    usages: tuple[TokenUsage | None, ...],
+) -> TokenUsage | None:
+    present_usages = [usage for usage in usages if usage is not None]
+    if not present_usages:
+        return None
+
+    return TokenUsage(
+        input_tokens=sum(usage.input_tokens for usage in present_usages),
+        cached_input_tokens=sum(usage.cached_input_tokens for usage in present_usages),
+        output_tokens=sum(usage.output_tokens for usage in present_usages),
+        reasoning_tokens=sum(usage.reasoning_tokens for usage in present_usages),
+        total_tokens=sum(usage.total_tokens for usage in present_usages),
+    )
+
+
 def has_refusal(response: Any) -> bool:
     """Return whether a parsed response includes a refusal item."""
 
@@ -84,8 +110,11 @@ def _analyze_text_once(
             text_format=TextAnalysis,
         )
     except ValidationError as error:
+        elapsed_seconds = max(0.0, time.perf_counter() - start_time)
         raise StructuredResponseValidationError(
-            "OpenAI structured analysis response failed schema validation"
+            "OpenAI structured analysis response failed schema validation",
+            elapsed_seconds=elapsed_seconds,
+            attempts=1,
         ) from error
     elapsed_seconds = max(0.0, time.perf_counter() - start_time)
 
@@ -139,15 +168,44 @@ def analyze_text_with_correction(
     *,
     model: str,
     user_input: str,
-) -> StructuredAnalysisResult:
+) -> StructuredAnalysisExecution:
     """Analyze text and retry once only for schema validation failures."""
 
     try:
-        return _analyze_text_once(client, model=model, user_input=user_input)
-    except StructuredResponseValidationError:
-        return _analyze_text_once(
-            client,
-            model=model,
-            user_input=user_input,
-            correction_instruction=CORRECTION_INSTRUCTION,
+        first_result = _analyze_text_once(client, model=model, user_input=user_input)
+    except StructuredResponseValidationError as first_error:
+        try:
+            corrected_result = _analyze_text_once(
+                client,
+                model=model,
+                user_input=user_input,
+                correction_instruction=CORRECTION_INSTRUCTION,
+            )
+        except StructuredResponseValidationError as second_error:
+            raise StructuredResponseValidationError(
+                "OpenAI structured analysis response failed schema validation after correction",
+                elapsed_seconds=(
+                    first_error.elapsed_seconds + second_error.elapsed_seconds
+                ),
+                attempts=2,
+            ) from second_error
+
+        return StructuredAnalysisExecution(
+            result=corrected_result,
+            attempts=2,
+            correction_attempted=True,
+            total_usage=combine_token_usage((corrected_result.usage,)),
+            total_elapsed_seconds=(
+                first_error.elapsed_seconds + corrected_result.elapsed_seconds
+            ),
+            response_ids=(corrected_result.response_id,),
         )
+
+    return StructuredAnalysisExecution(
+        result=first_result,
+        attempts=1,
+        correction_attempted=False,
+        total_usage=combine_token_usage((first_result.usage,)),
+        total_elapsed_seconds=first_result.elapsed_seconds,
+        response_ids=(first_result.response_id,),
+    )

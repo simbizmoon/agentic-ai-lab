@@ -6,7 +6,10 @@ import pytest
 
 from app.recovery import RecoveryAction, RecoveryDecision
 from app.schemas.text_analysis import Sentiment, TextAnalysis
-from app.services.structured_analysis import StructuredAnalysisResult
+from app.services.structured_analysis import (
+    StructuredAnalysisExecution,
+    StructuredAnalysisResult,
+)
 from app.services.text_generation import TokenUsage
 from scripts import analyze_text as script
 
@@ -27,7 +30,7 @@ class FakeClient:
         self.closed = True
 
 
-def make_success_result() -> StructuredAnalysisResult:
+def make_success_result(usage: TokenUsage | None = None) -> StructuredAnalysisResult:
     return StructuredAnalysisResult(
         analysis=TextAnalysis(
             topic="착석 알림",
@@ -39,14 +42,46 @@ def make_success_result() -> StructuredAnalysisResult:
         ),
         response_id="resp_test",
         request_id="req_test",
-        usage=TokenUsage(
-            input_tokens=10,
-            cached_input_tokens=1,
-            output_tokens=20,
-            reasoning_tokens=2,
-            total_tokens=30,
-        ),
+        usage=usage,
         elapsed_seconds=0.1234,
+    )
+
+
+def make_usage() -> TokenUsage:
+    return TokenUsage(
+        input_tokens=10,
+        cached_input_tokens=1,
+        output_tokens=20,
+        reasoning_tokens=2,
+        total_tokens=30,
+    )
+
+
+def make_success_execution(
+    *,
+    total_usage: TokenUsage | None | object = None,
+) -> StructuredAnalysisExecution:
+    usage = make_usage() if total_usage is None else total_usage
+    result_usage = usage if isinstance(usage, TokenUsage) else None
+
+    return StructuredAnalysisExecution(
+        result=make_success_result(result_usage),
+        attempts=2,
+        correction_attempted=True,
+        total_usage=result_usage,
+        total_elapsed_seconds=0.75,
+        response_ids=("resp_test",),
+    )
+
+
+def make_success_execution_without_usage() -> StructuredAnalysisExecution:
+    return StructuredAnalysisExecution(
+        result=make_success_result(None),
+        attempts=1,
+        correction_attempted=False,
+        total_usage=None,
+        total_elapsed_seconds=0.25,
+        response_ids=("resp_test",),
     )
 
 
@@ -82,7 +117,9 @@ def test_exit_code_for_recovery_maps_actions(
     assert script.exit_code_for_recovery(decision) == expected_code
 
 
-def test_print_recovery_decision_outputs_expected_format(capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_recovery_decision_outputs_expected_format(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     decision = RecoveryDecision(
         retryable=True,
         action=RecoveryAction.RETRY_LATER,
@@ -99,7 +136,9 @@ def test_print_recovery_decision_outputs_expected_format(capsys: pytest.CaptureF
     )
 
 
-def test_print_recovery_decision_outputs_retryable_true(capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_recovery_decision_outputs_retryable_true(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     decision = RecoveryDecision(
         retryable=True,
         action=RecoveryAction.RETRY_LATER,
@@ -111,7 +150,9 @@ def test_print_recovery_decision_outputs_retryable_true(capsys: pytest.CaptureFi
     assert "Retryable: true" in capsys.readouterr().out
 
 
-def test_print_recovery_decision_outputs_retryable_false(capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_recovery_decision_outputs_retryable_false(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     decision = RecoveryDecision(
         retryable=False,
         action=RecoveryAction.ABORT,
@@ -134,11 +175,11 @@ def test_main_returns_zero_and_closes_client_on_success(
         *,
         model: str,
         user_input: str,
-    ) -> StructuredAnalysisResult:
+    ) -> StructuredAnalysisExecution:
         assert client is fake_client
         assert model == "test-model"
         assert user_input == USER_INPUT_TEXT
-        return make_success_result()
+        return make_success_execution()
 
     monkeypatch.setattr(script, "analyze_text_with_correction", fake_analyze_text)
 
@@ -175,7 +216,7 @@ def test_main_returns_exit_code_for_recovery_action_and_closes_client(
         *,
         model: str,
         user_input: str,
-    ) -> StructuredAnalysisResult:
+    ) -> StructuredAnalysisExecution:
         raise ValueError(f"{SECRET_TEXT} {user_input}")
 
     def fake_decide_recovery(error: BaseException) -> RecoveryDecision:
@@ -198,12 +239,61 @@ def test_main_returns_exit_code_for_recovery_action_and_closes_client(
     assert USER_INPUT_TEXT not in output
 
 
+def test_main_success_outputs_execution_and_recorded_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    exit_code = script.main()
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Execution:" in output
+    assert "  Attempts: 2" in output
+    assert "  Correction Attempted: true" in output
+    assert "  Total Elapsed Seconds: 0.750" in output
+    assert "Recorded Usage:" in output
+    assert "  Input Tokens: 10" in output
+    assert "  Cached Input Tokens: 1" in output
+    assert "  Output Tokens: 20" in output
+    assert "  Reasoning Tokens: 2" in output
+    assert "  Total Tokens: 30" in output
+
+
+def test_main_success_outputs_recorded_usage_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution_without_usage(),
+    )
+
+    exit_code = script.main()
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Recorded Usage: unavailable" in output
+
+
 def test_main_success_keeps_analysis_output_fields(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     configure_common_dependencies(monkeypatch)
-    monkeypatch.setattr(script, "analyze_text_with_correction", lambda *args, **kwargs: make_success_result())
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
 
     exit_code = script.main()
     output = capsys.readouterr().out

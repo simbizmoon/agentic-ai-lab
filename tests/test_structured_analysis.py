@@ -15,10 +15,8 @@ from app.exceptions import (
     StructuredResponseValidationError,
 )
 from app.schemas.text_analysis import Sentiment, TextAnalysis
-from app.services.structured_analysis import (
-    analyze_text,
-    analyze_text_with_correction,
-)
+from app.services import structured_analysis as service
+from app.services.structured_analysis import StructuredAnalysisExecution
 from app.services.text_generation import TokenUsage
 
 DEFAULT_OUTPUT = object()
@@ -98,13 +96,35 @@ def valid_analysis() -> TextAnalysis:
     )
 
 
-def fake_usage() -> FakeUsage:
+def fake_usage(
+    *,
+    input_tokens: int = 8,
+    cached_input_tokens: int = 2,
+    output_tokens: int = 12,
+    reasoning_tokens: int = 3,
+) -> FakeUsage:
     return FakeUsage(
-        input_tokens=8,
-        input_tokens_details=FakeInputTokenDetails(cached_tokens=2),
-        output_tokens=12,
-        output_tokens_details=FakeOutputTokenDetails(reasoning_tokens=3),
-        total_tokens=20,
+        input_tokens=input_tokens,
+        input_tokens_details=FakeInputTokenDetails(cached_tokens=cached_input_tokens),
+        output_tokens=output_tokens,
+        output_tokens_details=FakeOutputTokenDetails(reasoning_tokens=reasoning_tokens),
+        total_tokens=input_tokens + output_tokens,
+    )
+
+
+def token_usage(
+    *,
+    input_tokens: int = 8,
+    cached_input_tokens: int = 2,
+    output_tokens: int = 12,
+    reasoning_tokens: int = 3,
+) -> TokenUsage:
+    return TokenUsage(
+        input_tokens=input_tokens,
+        cached_input_tokens=cached_input_tokens,
+        output_tokens=output_tokens,
+        reasoning_tokens=reasoning_tokens,
+        total_tokens=input_tokens + output_tokens,
     )
 
 
@@ -112,6 +132,7 @@ def make_response(
     *,
     output_parsed: object = DEFAULT_OUTPUT,
     status: str = "completed",
+    response_id: str = "resp_structured",
     request_id: str | None = "req_structured",
     usage: FakeUsage | None = None,
     output: list[object] | None = None,
@@ -120,6 +141,7 @@ def make_response(
     return FakeParsedResponse(
         output_parsed=parsed,
         status=status,
+        id=response_id,
         _request_id=request_id,
         usage=usage,
         output=[] if output is None else output,
@@ -168,8 +190,60 @@ def make_api_connection_error() -> openai.APIConnectionError:
     return openai.APIConnectionError(message="connection failed", request=request)
 
 
+def set_perf_counter(monkeypatch: pytest.MonkeyPatch, values: list[float]) -> None:
+    perf_values = iter(values)
+    monkeypatch.setattr(service.time, "perf_counter", lambda: next(perf_values))
+
+
+def test_combine_token_usage_returns_none_when_all_missing() -> None:
+    assert service.combine_token_usage((None, None)) is None
+
+
+def test_combine_token_usage_returns_single_usage_values() -> None:
+    usage = token_usage()
+
+    assert service.combine_token_usage((usage,)) == usage
+
+
+def test_combine_token_usage_sums_two_usages() -> None:
+    first = token_usage(
+        input_tokens=2,
+        cached_input_tokens=1,
+        output_tokens=3,
+        reasoning_tokens=1,
+    )
+    second = token_usage(
+        input_tokens=5,
+        cached_input_tokens=2,
+        output_tokens=7,
+        reasoning_tokens=3,
+    )
+
+    assert service.combine_token_usage((first, second)) == TokenUsage(
+        input_tokens=7,
+        cached_input_tokens=3,
+        output_tokens=10,
+        reasoning_tokens=4,
+        total_tokens=17,
+    )
+
+
+def test_combine_token_usage_ignores_missing_values() -> None:
+    usage = token_usage()
+
+    assert service.combine_token_usage((None, usage, None)) == usage
+
+
+def test_combine_token_usage_does_not_modify_original_usage() -> None:
+    usage = token_usage()
+
+    service.combine_token_usage((usage, usage))
+
+    assert usage == token_usage()
+
+
 def test_analyze_text_returns_text_analysis_object() -> None:
-    result = analyze_text(
+    result = service.analyze_text(
         make_client(),
         model="test-model",
         user_input="착석 감지 시스템",
@@ -182,7 +256,7 @@ def test_analyze_text_returns_text_analysis_object() -> None:
 
 
 def test_analyze_text_returns_response_and_request_ids() -> None:
-    result = analyze_text(
+    result = service.analyze_text(
         make_client(),
         model="test-model",
         user_input="착석 감지 시스템",
@@ -193,23 +267,17 @@ def test_analyze_text_returns_response_and_request_ids() -> None:
 
 
 def test_analyze_text_converts_usage() -> None:
-    result = analyze_text(
+    result = service.analyze_text(
         make_client(usage=fake_usage()),
         model="test-model",
         user_input="착석 감지 시스템",
     )
 
-    assert result.usage == TokenUsage(
-        input_tokens=8,
-        cached_input_tokens=2,
-        output_tokens=12,
-        reasoning_tokens=3,
-        total_tokens=20,
-    )
+    assert result.usage == token_usage()
 
 
 def test_analyze_text_records_non_negative_elapsed_seconds() -> None:
-    result = analyze_text(
+    result = service.analyze_text(
         make_client(),
         model="test-model",
         user_input="착석 감지 시스템",
@@ -221,7 +289,7 @@ def test_analyze_text_records_non_negative_elapsed_seconds() -> None:
 def test_analyze_text_calls_parse_once_with_expected_arguments() -> None:
     client = make_client()
 
-    analyze_text(
+    service.analyze_text(
         client,
         model="test-model",
         user_input="  착석 감지 시스템  ",
@@ -240,7 +308,7 @@ def test_analyze_text_rejects_empty_input_without_api_call() -> None:
     client = make_client()
 
     with pytest.raises(ValueError, match="user_input"):
-        analyze_text(client, model="test-model", user_input="   ")
+        service.analyze_text(client, model="test-model", user_input="   ")
 
     assert client.responses.calls == []
 
@@ -249,32 +317,32 @@ def test_analyze_text_rejects_incomplete_status() -> None:
     client = make_client(status="incomplete")
 
     with pytest.raises(StructuredResponseIncompleteError, match="incomplete"):
-        analyze_text(client, model="test-model", user_input="착석 감지 시스템")
+        service.analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
 def test_analyze_text_rejects_other_non_completed_status() -> None:
     client = make_client(status="failed")
 
     with pytest.raises(StructuredResponseStatusError, match="not completed"):
-        analyze_text(client, model="test-model", user_input="착석 감지 시스템")
+        service.analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
 def test_analyze_text_rejects_missing_output_parsed() -> None:
     client = make_client(output_parsed=None)
 
     with pytest.raises(StructuredResponseParseError, match="response was empty"):
-        analyze_text(client, model="test-model", user_input="착석 감지 시스템")
+        service.analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
 def test_analyze_text_rejects_output_parsed_with_wrong_type() -> None:
     client = make_client(output_parsed={"topic": "착석"})
 
     with pytest.raises(StructuredResponseParseError, match="invalid type"):
-        analyze_text(client, model="test-model", user_input="착석 감지 시스템")
+        service.analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
 def test_analyze_text_allows_missing_usage() -> None:
-    result = analyze_text(
+    result = service.analyze_text(
         make_client(usage=None),
         model="test-model",
         user_input="착석 감지 시스템",
@@ -288,50 +356,80 @@ def test_analyze_text_rejects_refusal_response() -> None:
     client = make_client(output=refusal_output)
 
     with pytest.raises(StructuredResponseRefusalError, match="refused"):
-        analyze_text(client, model="test-model", user_input="착석 감지 시스템")
+        service.analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
-def test_analyze_text_converts_validation_error_and_calls_once() -> None:
+def test_analyze_text_converts_validation_error_and_calls_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     validation_error = make_validation_error()
     client = make_client(outcomes=[validation_error])
+    set_perf_counter(monkeypatch, [1.0, 1.25])
 
-    with pytest.raises(StructuredResponseValidationError, match="schema validation") as exc_info:
-        analyze_text(client, model="test-model", user_input="착석 감지 시스템")
+    with pytest.raises(
+        StructuredResponseValidationError,
+        match="schema validation",
+    ) as exc_info:
+        service.analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
     assert len(client.responses.calls) == 1
     assert exc_info.value.__cause__ is validation_error
+    assert exc_info.value.elapsed_seconds == 0.25
+    assert exc_info.value.attempts == 1
 
 
-def test_analyze_text_with_correction_first_success_calls_once() -> None:
-    client = make_client()
+def test_analyze_text_with_correction_first_success_returns_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(usage=fake_usage())
+    set_perf_counter(monkeypatch, [10.0, 10.5])
 
-    result = analyze_text_with_correction(
+    execution = service.analyze_text_with_correction(
         client,
         model="test-model",
         user_input="착석 감지 시스템",
     )
 
-    assert result.analysis == valid_analysis()
+    assert isinstance(execution, StructuredAnalysisExecution)
+    assert execution.result.analysis == valid_analysis()
+    assert execution.attempts == 1
+    assert execution.correction_attempted is False
+    assert execution.total_usage == token_usage()
+    assert execution.total_elapsed_seconds == 0.5
+    assert execution.response_ids == ("resp_structured",)
     assert len(client.responses.calls) == 1
 
 
-def test_analyze_text_with_correction_succeeds_after_validation_error() -> None:
-    client = make_client(outcomes=[make_validation_error(), make_response()])
+def test_analyze_text_with_correction_succeeds_after_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(
+        outcomes=[
+            make_validation_error(),
+            make_response(response_id="resp_corrected", usage=fake_usage()),
+        ]
+    )
+    set_perf_counter(monkeypatch, [1.0, 1.25, 2.0, 2.5])
 
-    result = analyze_text_with_correction(
+    execution = service.analyze_text_with_correction(
         client,
         model="test-model",
         user_input="착석 감지 시스템",
     )
 
-    assert result.analysis == valid_analysis()
+    assert execution.result.analysis == valid_analysis()
+    assert execution.attempts == 2
+    assert execution.correction_attempted is True
+    assert execution.total_elapsed_seconds == 0.75
+    assert execution.total_usage == token_usage()
+    assert execution.response_ids == ("resp_corrected",)
     assert len(client.responses.calls) == 2
 
 
 def test_correction_request_instructions_include_stable_rules() -> None:
     client = make_client(outcomes=[make_validation_error(), make_response()])
 
-    analyze_text_with_correction(
+    service.analyze_text_with_correction(
         client,
         model="test-model",
         user_input="착석 감지 시스템",
@@ -352,7 +450,7 @@ def test_correction_request_does_not_include_full_validation_error() -> None:
     validation_error = make_validation_error()
     client = make_client(outcomes=[validation_error, make_response()])
 
-    analyze_text_with_correction(
+    service.analyze_text_with_correction(
         client,
         model="test-model",
         user_input="착석 감지 시스템",
@@ -363,16 +461,25 @@ def test_correction_request_does_not_include_full_validation_error() -> None:
     assert str(validation_error) not in second_instructions
 
 
-def test_analyze_text_with_correction_reraises_second_validation_error() -> None:
+def test_analyze_text_with_correction_reraises_second_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     client = make_client(outcomes=[make_validation_error(), make_validation_error()])
+    set_perf_counter(monkeypatch, [1.0, 1.25, 2.0, 2.5])
 
-    with pytest.raises(StructuredResponseValidationError, match="schema validation"):
-        analyze_text_with_correction(
+    with pytest.raises(
+        StructuredResponseValidationError,
+        match="after correction",
+    ) as exc_info:
+        service.analyze_text_with_correction(
             client,
             model="test-model",
             user_input="착석 감지 시스템",
         )
 
+    assert exc_info.value.attempts == 2
+    assert exc_info.value.elapsed_seconds == 0.75
+    assert isinstance(exc_info.value.__cause__, StructuredResponseValidationError)
     assert len(client.responses.calls) == 2
 
 
@@ -381,7 +488,7 @@ def test_analyze_text_with_correction_does_not_retry_refusal() -> None:
     client = make_client(output=refusal_output)
 
     with pytest.raises(StructuredResponseRefusalError, match="refused"):
-        analyze_text_with_correction(
+        service.analyze_text_with_correction(
             client,
             model="test-model",
             user_input="착석 감지 시스템",
@@ -394,7 +501,7 @@ def test_analyze_text_with_correction_does_not_retry_incomplete() -> None:
     client = make_client(status="incomplete")
 
     with pytest.raises(StructuredResponseIncompleteError, match="incomplete"):
-        analyze_text_with_correction(
+        service.analyze_text_with_correction(
             client,
             model="test-model",
             user_input="착석 감지 시스템",
@@ -407,7 +514,7 @@ def test_analyze_text_with_correction_does_not_retry_parse_error() -> None:
     client = make_client(output_parsed=None)
 
     with pytest.raises(StructuredResponseParseError, match="response was empty"):
-        analyze_text_with_correction(
+        service.analyze_text_with_correction(
             client,
             model="test-model",
             user_input="착석 감지 시스템",
@@ -420,7 +527,7 @@ def test_analyze_text_with_correction_does_not_retry_api_connection_error() -> N
     client = make_client(outcomes=[make_api_connection_error()])
 
     with pytest.raises(openai.APIConnectionError):
-        analyze_text_with_correction(
+        service.analyze_text_with_correction(
             client,
             model="test-model",
             user_input="착석 감지 시스템",

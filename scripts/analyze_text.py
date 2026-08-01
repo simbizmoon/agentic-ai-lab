@@ -48,10 +48,10 @@ def print_recovery_decision(
 
 def print_usage(result_usage: object) -> None:
     if result_usage is None:
-        print("Usage: unavailable")
+        print("Recorded Usage: unavailable")
         return
 
-    print("Usage:")
+    print("Recorded Usage:")
     print(f"  Input Tokens: {result_usage.input_tokens}")
     print(f"  Cached Input Tokens: {result_usage.cached_input_tokens}")
     print(f"  Output Tokens: {result_usage.output_tokens}")
@@ -64,11 +64,12 @@ def main() -> int:
         settings = load_settings()
         client = create_openai_client(settings)
         try:
-            result = analyze_text_with_correction(
+            execution = analyze_text_with_correction(
                 client,
                 model=settings.openai_model,
                 user_input=ANALYSIS_INPUT,
             )
+            result = execution.result
         finally:
             client.close()
     except ValueError as exc:
@@ -96,8 +97,11 @@ def main() -> int:
     print(f"Model: {settings.openai_model}")
     print(f"Response ID: {result.response_id}")
     print(f"Request ID: {result.request_id or 'unavailable'}")
-    print_usage(result.usage)
-    print(f"Elapsed Seconds: {result.elapsed_seconds:.3f}")
+    print("Execution:")
+    print(f"  Attempts: {execution.attempts}")
+    print(f"  Correction Attempted: {str(execution.correction_attempted).lower()}")
+    print(f"  Total Elapsed Seconds: {execution.total_elapsed_seconds:.3f}")
+    print_usage(execution.total_usage)
     print("Analysis:")
     print(f"  Topic: {result.analysis.topic}")
     print(f"  Summary: {result.analysis.summary}")

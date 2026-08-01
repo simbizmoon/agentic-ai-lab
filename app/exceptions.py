@@ -27,3 +27,14 @@ class StructuredResponseStatusError(StructuredAnalysisError):
 
 class StructuredResponseValidationError(StructuredAnalysisError):
     """Raised when a structured response fails schema validation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        elapsed_seconds: float = 0.0,
+        attempts: int = 1,
+    ) -> None:
+        super().__init__(message)
+        self.elapsed_seconds = elapsed_seconds
+        self.attempts = attempts
