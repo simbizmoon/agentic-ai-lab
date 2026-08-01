@@ -11,6 +11,7 @@ from app.exceptions import (
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
+    StructuredResponseValidationError,
 )
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 
@@ -115,6 +116,11 @@ def test_recovery_decision_is_frozen() -> None:
             StructuredResponseRefusalError(SENSITIVE_TEXT),
             False,
             RecoveryAction.HUMAN_REVIEW,
+        ),
+        (
+            StructuredResponseValidationError(SENSITIVE_TEXT),
+            False,
+            RecoveryAction.MODIFY_REQUEST,
         ),
         (StructuredResponseParseError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (StructuredResponseStatusError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),

@@ -23,3 +23,7 @@ class StructuredResponseParseError(StructuredAnalysisError):
 
 class StructuredResponseStatusError(StructuredAnalysisError):
     """Raised when a structured response has an unexpected status."""
+
+
+class StructuredResponseValidationError(StructuredAnalysisError):
+    """Raised when a structured response fails schema validation."""

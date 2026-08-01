@@ -15,7 +15,7 @@ from app.config import load_settings
 from app.exceptions import StructuredAnalysisError
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 from app.services.openai_client import create_openai_client
-from app.services.structured_analysis import analyze_text
+from app.services.structured_analysis import analyze_text_with_correction
 
 ANALYSIS_INPUT = (
     "착석 상태를 자동으로 감지하고 장시간 착석 시 "
@@ -64,7 +64,7 @@ def main() -> int:
         settings = load_settings()
         client = create_openai_client(settings)
         try:
-            result = analyze_text(
+            result = analyze_text_with_correction(
                 client,
                 model=settings.openai_model,
                 user_input=ANALYSIS_INPUT,

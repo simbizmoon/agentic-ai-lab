@@ -12,6 +12,7 @@ from app.exceptions import (
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
+    StructuredResponseValidationError,
 )
 
 
@@ -101,6 +102,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.HUMAN_REVIEW,
             reason="The structured analysis refusal requires human review.",
+        )
+
+    if isinstance(error, StructuredResponseValidationError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.MODIFY_REQUEST,
+            reason="Structured analysis validation failed after correction.",
         )
 
     if isinstance(error, StructuredResponseParseError):

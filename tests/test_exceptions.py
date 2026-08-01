@@ -5,6 +5,7 @@ from app.exceptions import (
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
+    StructuredResponseValidationError,
 )
 
 
@@ -18,6 +19,7 @@ def test_concrete_structured_analysis_errors_inherit_from_base_error() -> None:
         StructuredResponseRefusalError,
         StructuredResponseParseError,
         StructuredResponseStatusError,
+        StructuredResponseValidationError,
     ):
         assert issubclass(exception_type, StructuredAnalysisError)
 
@@ -28,6 +30,7 @@ def test_concrete_structured_analysis_errors_are_distinct_classes() -> None:
         StructuredResponseRefusalError,
         StructuredResponseParseError,
         StructuredResponseStatusError,
+        StructuredResponseValidationError,
     }
 
-    assert len(exception_types) == 4
+    assert len(exception_types) == 5

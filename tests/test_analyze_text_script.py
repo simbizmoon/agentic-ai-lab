@@ -140,7 +140,7 @@ def test_main_returns_zero_and_closes_client_on_success(
         assert user_input == USER_INPUT_TEXT
         return make_success_result()
 
-    monkeypatch.setattr(script, "analyze_text", fake_analyze_text)
+    monkeypatch.setattr(script, "analyze_text_with_correction", fake_analyze_text)
 
     exit_code = script.main()
     output = capsys.readouterr().out
@@ -182,7 +182,7 @@ def test_main_returns_exit_code_for_recovery_action_and_closes_client(
         assert isinstance(error, ValueError)
         return RecoveryDecision(retryable=retryable, action=action, reason=reason)
 
-    monkeypatch.setattr(script, "analyze_text", fake_analyze_text)
+    monkeypatch.setattr(script, "analyze_text_with_correction", fake_analyze_text)
     monkeypatch.setattr(script, "decide_recovery", fake_decide_recovery)
 
     exit_code = script.main()
@@ -203,7 +203,7 @@ def test_main_success_keeps_analysis_output_fields(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     configure_common_dependencies(monkeypatch)
-    monkeypatch.setattr(script, "analyze_text", lambda *args, **kwargs: make_success_result())
+    monkeypatch.setattr(script, "analyze_text_with_correction", lambda *args, **kwargs: make_success_result())
 
     exit_code = script.main()
     output = capsys.readouterr().out
