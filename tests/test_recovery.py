@@ -8,6 +8,7 @@ import pytest
 
 from app.exceptions import (
     AttemptBudgetExceededError,
+    AuditLogError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -127,6 +128,7 @@ def test_recovery_decision_is_frozen() -> None:
         ),
         (StructuredResponseParseError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (StructuredResponseStatusError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (AuditLogError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (AttemptBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TokenBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TimeBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),

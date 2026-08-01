@@ -13,7 +13,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.budget import ExecutionBudget
 from app.config import load_settings
-from app.exceptions import ExecutionBudgetError, StructuredAnalysisError
+from app.exceptions import AuditLogError, ExecutionBudgetError, StructuredAnalysisError
+from app.observability import (
+    append_audit_event,
+    build_failure_event,
+    build_success_event,
+    current_utc_timestamp,
+)
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 from app.services.openai_client import create_openai_client
 from app.services.structured_analysis import analyze_text_with_correction
@@ -28,6 +34,8 @@ ANALYSIS_BUDGET = ExecutionBudget(
     max_recorded_tokens=2000,
     max_elapsed_seconds=30.0,
 )
+
+AUDIT_LOG_PATH = PROJECT_ROOT / "logs" / "structured_analysis.jsonl"
 
 
 def exit_code_for_recovery(
@@ -66,9 +74,31 @@ def print_usage(result_usage: object) -> None:
     print(f"  Total Tokens: {result_usage.total_tokens}")
 
 
+def handle_known_error(error: BaseException, *, model: str) -> int:
+    decision = decide_recovery(error)
+    try:
+        event = build_failure_event(
+            model=model,
+            error=error,
+            decision=decision,
+            budget=ANALYSIS_BUDGET,
+            timestamp_utc=current_utc_timestamp(),
+        )
+        append_audit_event(path=AUDIT_LOG_PATH, event=event)
+    except AuditLogError as audit_error:
+        audit_decision = decide_recovery(audit_error)
+        print_recovery_decision(audit_decision)
+        return exit_code_for_recovery(audit_decision)
+
+    print_recovery_decision(decision)
+    return exit_code_for_recovery(decision)
+
+
 def main() -> int:
+    model = "unavailable"
     try:
         settings = load_settings()
+        model = settings.openai_model
         client = create_openai_client(settings)
         try:
             execution = analyze_text_with_correction(
@@ -78,32 +108,31 @@ def main() -> int:
                 budget=ANALYSIS_BUDGET,
             )
             result = execution.result
+            success_event = build_success_event(
+                model=settings.openai_model,
+                execution=execution,
+                budget=ANALYSIS_BUDGET,
+                timestamp_utc=current_utc_timestamp(),
+            )
+            append_audit_event(path=AUDIT_LOG_PATH, event=success_event)
         finally:
             client.close()
+    except AuditLogError as exc:
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
     except ValueError as exc:
-        decision = decide_recovery(exc)
-        print_recovery_decision(decision)
-        return exit_code_for_recovery(decision)
+        return handle_known_error(exc, model=model)
     except ExecutionBudgetError as exc:
-        decision = decide_recovery(exc)
-        print_recovery_decision(decision)
-        return exit_code_for_recovery(decision)
+        return handle_known_error(exc, model=model)
     except StructuredAnalysisError as exc:
-        decision = decide_recovery(exc)
-        print_recovery_decision(decision)
-        return exit_code_for_recovery(decision)
+        return handle_known_error(exc, model=model)
     except openai.APITimeoutError as exc:
-        decision = decide_recovery(exc)
-        print_recovery_decision(decision)
-        return exit_code_for_recovery(decision)
+        return handle_known_error(exc, model=model)
     except openai.APIConnectionError as exc:
-        decision = decide_recovery(exc)
-        print_recovery_decision(decision)
-        return exit_code_for_recovery(decision)
+        return handle_known_error(exc, model=model)
     except openai.APIStatusError as exc:
-        decision = decide_recovery(exc)
-        print_recovery_decision(decision)
-        return exit_code_for_recovery(decision)
+        return handle_known_error(exc, model=model)
 
     recorded_tokens = 0
     if execution.total_usage is not None:

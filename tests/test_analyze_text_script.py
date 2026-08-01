@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 from app.budget import ExecutionBudget
-from app.exceptions import TokenBudgetExceededError
+from app.exceptions import AuditLogError, TokenBudgetExceededError
 from app.recovery import RecoveryAction, RecoveryDecision
 from app.schemas.text_analysis import Sentiment, TextAnalysis
 from app.services.structured_analysis import (
@@ -87,13 +89,21 @@ def make_success_execution_without_usage() -> StructuredAnalysisExecution:
     )
 
 
-def configure_common_dependencies(monkeypatch: pytest.MonkeyPatch) -> FakeClient:
+def configure_common_dependencies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> FakeClient:
     fake_client = FakeClient()
 
     monkeypatch.setattr(script, "load_settings", lambda: FakeSettings())
     monkeypatch.setattr(script, "create_openai_client", lambda settings: fake_client)
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", tmp_path / "audit.jsonl")
 
     return fake_client
+
+
+def read_audit_events(path: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 @pytest.mark.parametrize(
@@ -168,9 +178,10 @@ def test_print_recovery_decision_outputs_retryable_false(
 
 def test_main_returns_zero_and_closes_client_on_success(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    fake_client = configure_common_dependencies(monkeypatch)
+    fake_client = configure_common_dependencies(monkeypatch, tmp_path)
 
     def fake_analyze_text(
         client: FakeClient,
@@ -207,12 +218,13 @@ def test_main_returns_zero_and_closes_client_on_success(
 )
 def test_main_returns_exit_code_for_recovery_action_and_closes_client(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     action: RecoveryAction,
     retryable: bool,
     expected_code: int,
 ) -> None:
-    fake_client = configure_common_dependencies(monkeypatch)
+    fake_client = configure_common_dependencies(monkeypatch, tmp_path)
     reason = "Policy selected a safe recovery action."
 
     def fake_analyze_text(
@@ -246,9 +258,10 @@ def test_main_returns_exit_code_for_recovery_action_and_closes_client(
 
 def test_main_success_outputs_execution_and_recorded_usage(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    configure_common_dependencies(monkeypatch)
+    configure_common_dependencies(monkeypatch, tmp_path)
     monkeypatch.setattr(
         script,
         "analyze_text_with_correction",
@@ -278,9 +291,10 @@ def test_main_success_outputs_execution_and_recorded_usage(
 
 def test_main_success_outputs_recorded_usage_unavailable(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    configure_common_dependencies(monkeypatch)
+    configure_common_dependencies(monkeypatch, tmp_path)
     monkeypatch.setattr(
         script,
         "analyze_text_with_correction",
@@ -296,9 +310,10 @@ def test_main_success_outputs_recorded_usage_unavailable(
 
 def test_main_success_keeps_analysis_output_fields(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    configure_common_dependencies(monkeypatch)
+    configure_common_dependencies(monkeypatch, tmp_path)
     monkeypatch.setattr(
         script,
         "analyze_text_with_correction",
@@ -322,9 +337,10 @@ def test_main_success_keeps_analysis_output_fields(
 
 def test_main_routes_budget_error_through_recovery(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    fake_client = configure_common_dependencies(monkeypatch)
+    fake_client = configure_common_dependencies(monkeypatch, tmp_path)
 
     def fake_analyze_text(
         client: FakeClient,
@@ -346,3 +362,229 @@ def test_main_routes_budget_error_through_recovery(
     assert "Retryable: false" in output
     assert SECRET_TEXT not in output
     assert USER_INPUT_TEXT not in output
+
+
+def test_main_success_creates_jsonl_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    exit_code = script.main()
+    capsys.readouterr()
+
+    assert exit_code == 0
+    assert script.AUDIT_LOG_PATH.exists()
+
+
+def test_main_success_audit_event_status_success(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    script.main()
+    capsys.readouterr()
+
+    [event] = read_audit_events(script.AUDIT_LOG_PATH)
+    assert event["status"] == "success"
+
+
+def test_main_success_writes_audit_before_success_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    def fake_append_audit_event(**kwargs: object) -> None:
+        print("AUDIT_WRITTEN")
+
+    monkeypatch.setattr(script, "append_audit_event", fake_append_audit_event)
+
+    script.main()
+    output = capsys.readouterr().out
+
+    assert output.index("AUDIT_WRITTEN") < output.index("[OK]")
+
+
+def test_main_failure_writes_failure_event(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+
+    def fake_analyze_text(*args: object, **kwargs: object) -> StructuredAnalysisExecution:
+        raise ValueError(f"{SECRET_TEXT} {USER_INPUT_TEXT}")
+
+    monkeypatch.setattr(script, "analyze_text_with_correction", fake_analyze_text)
+
+    exit_code = script.main()
+    capsys.readouterr()
+
+    assert exit_code == 1
+    [event] = read_audit_events(script.AUDIT_LOG_PATH)
+    assert event["event_type"] == "structured_analysis_failed"
+
+
+def test_main_failure_audit_event_status_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError(SECRET_TEXT)),
+    )
+
+    script.main()
+    capsys.readouterr()
+
+    [event] = read_audit_events(script.AUDIT_LOG_PATH)
+    assert event["status"] == "failure"
+
+
+def test_main_audit_log_omits_api_key_like_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError(SECRET_TEXT)),
+    )
+
+    script.main()
+    capsys.readouterr()
+
+    assert SECRET_TEXT not in script.AUDIT_LOG_PATH.read_text(encoding="utf-8")
+
+
+def test_main_audit_log_omits_user_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    script.main()
+    capsys.readouterr()
+
+    assert USER_INPUT_TEXT not in script.AUDIT_LOG_PATH.read_text(encoding="utf-8")
+
+
+def test_main_audit_log_omits_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    script.main()
+    capsys.readouterr()
+
+    audit_text = script.AUDIT_LOG_PATH.read_text(encoding="utf-8")
+    assert "장시간 착석을 감지해 사용자에게 진동으로 알린다." not in audit_text
+
+
+def test_main_audit_log_omits_review_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+
+    script.main()
+    capsys.readouterr()
+
+    assert "unavailable" not in script.AUDIT_LOG_PATH.read_text(encoding="utf-8")
+
+
+def test_main_success_log_write_failure_returns_exit_code_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_client = configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: make_success_execution(),
+    )
+    monkeypatch.setattr(
+        script,
+        "append_audit_event",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AuditLogError(SECRET_TEXT)),
+    )
+
+    exit_code = script.main()
+    output = capsys.readouterr().out
+
+    assert exit_code == 5
+    assert fake_client.closed is True
+    assert "[OK]" not in output
+    assert SECRET_TEXT not in output
+
+
+def test_main_failure_log_write_failure_returns_abort(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_client = configure_common_dependencies(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        script,
+        "analyze_text_with_correction",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError(SECRET_TEXT)),
+    )
+    monkeypatch.setattr(
+        script,
+        "append_audit_event",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AuditLogError(SECRET_TEXT)),
+    )
+
+    exit_code = script.main()
+    output = capsys.readouterr().out
+
+    assert exit_code == 5
+    assert fake_client.closed is True
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert SECRET_TEXT not in output

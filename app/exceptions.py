@@ -54,3 +54,7 @@ class TokenBudgetExceededError(ExecutionBudgetError):
 
 class TimeBudgetExceededError(ExecutionBudgetError):
     """Raised when the execution time budget is exceeded."""
+
+
+class AuditLogError(AgenticAILabError):
+    """Raised when an audit log event cannot be written."""

@@ -1,6 +1,7 @@
 from app.exceptions import (
     AgenticAILabError,
     AttemptBudgetExceededError,
+    AuditLogError,
     ExecutionBudgetError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
@@ -83,3 +84,7 @@ def test_concrete_budget_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 3
+
+
+def test_audit_log_error_inherits_from_project_error() -> None:
+    assert issubclass(AuditLogError, AgenticAILabError)

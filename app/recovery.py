@@ -9,6 +9,7 @@ import openai
 
 from app.exceptions import (
     AttemptBudgetExceededError,
+    AuditLogError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -128,7 +129,6 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The structured analysis response ended with an unexpected status.",
         )
 
-
     if isinstance(error, AttemptBudgetExceededError):
         return RecoveryDecision(
             retryable=False,
@@ -148,6 +148,14 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="Execution elapsed time budget was exceeded.",
+        )
+
+
+    if isinstance(error, AuditLogError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="Structured analysis audit logging failed.",
         )
 
     if isinstance(error, ValueError):
