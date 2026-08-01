@@ -12,12 +12,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.config import load_settings
-from app.exceptions import (
-    StructuredResponseIncompleteError,
-    StructuredResponseParseError,
-    StructuredResponseRefusalError,
-    StructuredResponseStatusError,
-)
+from app.exceptions import StructuredAnalysisError
+from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 from app.services.openai_client import create_openai_client
 from app.services.structured_analysis import analyze_text
 
@@ -27,11 +23,27 @@ ANALYSIS_INPUT = (
 )
 
 
-def status_error_message(label: str, exc: openai.APIStatusError) -> str:
-    request_id = getattr(exc, "request_id", None)
-    if request_id:
-        return f"{label}. Request ID: {request_id}"
-    return label
+def exit_code_for_recovery(
+    decision: RecoveryDecision,
+) -> int:
+    if decision.action is RecoveryAction.MODIFY_REQUEST:
+        return 1
+    if decision.action is RecoveryAction.RETRY_LATER:
+        return 2
+    if decision.action is RecoveryAction.FIX_CONFIGURATION:
+        return 3
+    if decision.action is RecoveryAction.HUMAN_REVIEW:
+        return 4
+    return 5
+
+
+def print_recovery_decision(
+    decision: RecoveryDecision,
+) -> None:
+    print("[ERROR] Structured analysis failed")
+    print(f"Action: {decision.action.value}")
+    print(f"Retryable: {str(decision.retryable).lower()}")
+    print(f"Reason: {decision.reason}")
 
 
 def print_usage(result_usage: object) -> None:
@@ -60,50 +72,25 @@ def main() -> int:
         finally:
             client.close()
     except ValueError as exc:
-        print(f"[ERROR] Invalid input: {exc}")
-        return 1
-    except StructuredResponseIncompleteError:
-        print("[ERROR] Structured analysis response was incomplete")
-        return 1
-    except StructuredResponseRefusalError:
-        print("[ERROR] OpenAI refused the structured analysis request")
-        return 1
-    except StructuredResponseParseError:
-        print("[ERROR] Structured analysis response could not be parsed")
-        return 1
-    except StructuredResponseStatusError:
-        print("[ERROR] Structured analysis response had an unexpected status")
-        return 1
-    except RuntimeError as exc:
-        print(f"[ERROR] Structured analysis error: {exc}")
-        return 1
-    except openai.AuthenticationError as exc:
-        print(status_error_message("[ERROR] OpenAI authentication failed", exc))
-        return 1
-    except openai.PermissionDeniedError as exc:
-        print(status_error_message("[ERROR] OpenAI permission denied", exc))
-        return 1
-    except openai.BadRequestError as exc:
-        print(status_error_message("[ERROR] OpenAI request was invalid", exc))
-        return 1
-    except openai.NotFoundError as exc:
-        print(status_error_message("[ERROR] OpenAI resource was not found", exc))
-        return 1
-    except openai.RateLimitError as exc:
-        print(status_error_message("[ERROR] OpenAI rate limit reached", exc))
-        return 1
-    except openai.APITimeoutError:
-        print("[ERROR] OpenAI request timed out")
-        return 1
-    except openai.APIConnectionError:
-        print("[ERROR] Could not connect to OpenAI API")
-        return 1
-    except openai.InternalServerError as exc:
-        print(status_error_message("[ERROR] OpenAI server error", exc))
-        return 1
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
+    except StructuredAnalysisError as exc:
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
+    except openai.APITimeoutError as exc:
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
+    except openai.APIConnectionError as exc:
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
     except openai.APIStatusError as exc:
-        print(status_error_message("[ERROR] OpenAI API returned an error", exc))
-        return 1
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
 
     print("[OK] Structured analysis received")
     print(f"Model: {settings.openai_model}")
