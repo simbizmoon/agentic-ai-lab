@@ -10,6 +10,7 @@ import openai
 from app.exceptions import (
     AttemptBudgetExceededError,
     AuditLogError,
+    AuditReportValidationError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -148,6 +149,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="Execution elapsed time budget was exceeded.",
+        )
+
+    if isinstance(error, AuditReportValidationError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report output contract was invalid.",
         )
 
     if isinstance(error, AuditLogError):

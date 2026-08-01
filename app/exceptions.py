@@ -74,3 +74,7 @@ class UnsupportedAuditSchemaError(AuditLogError):
 
 class InvalidAuditEventError(AuditLogError):
     """Raised when an audit log event is structurally invalid."""
+
+
+class AuditReportValidationError(AuditLogError):
+    """Raised when an audit report output contract is invalid."""

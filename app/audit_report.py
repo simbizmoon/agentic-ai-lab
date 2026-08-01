@@ -7,16 +7,28 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from math import isclose
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Self
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from app.exceptions import (
     AuditLogParseError,
     AuditLogReadError,
+    AuditReportValidationError,
     InvalidAuditEventError,
     UnsupportedAuditSchemaError,
 )
 from app.observability import AUDIT_SCHEMA_VERSION
+from app.recovery import RecoveryAction
 
 AUDIT_REPORT_SCHEMA_VERSION = 1
 
@@ -108,6 +120,160 @@ class AuditReportFilter:
                 raise ValueError("model must not be empty")
             if self.model != self.model.strip():
                 raise ValueError("model must not include surrounding whitespace")
+
+
+class AuditPayloadModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class AuditReportFilterPayload(AuditPayloadModel):
+    since: str | None
+    until: str | None
+    model: str | None
+    status: AuditStatusFilter
+
+
+class AuditReportSummaryPayload(AuditPayloadModel):
+    total_events: int = Field(ge=0)
+    success_count: int = Field(ge=0)
+    failure_count: int = Field(ge=0)
+    success_rate: float = Field(ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_summary_counts(self) -> Self:
+        if self.total_events != self.success_count + self.failure_count:
+            raise ValueError("total_events must equal success_count plus failure_count")
+        expected_rate = _divide(self.success_count, self.total_events)
+        if not isclose(self.success_rate, expected_rate):
+            raise ValueError("success_rate must match success_count divided by total_events")
+        return self
+
+
+class AuditReportCorrectionPayload(AuditPayloadModel):
+    corrected_success_count: int = Field(ge=0)
+    correction_rate: float = Field(ge=0.0, le=1.0)
+    average_attempts: float = Field(ge=0.0)
+
+
+class AuditReportUsagePayload(AuditPayloadModel):
+    usage_event_count: int = Field(ge=0)
+    total_tokens: int = Field(ge=0)
+    average_tokens: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_average_tokens(self) -> Self:
+        expected_average = _divide(self.total_tokens, self.usage_event_count)
+        if not isclose(self.average_tokens, expected_average):
+            raise ValueError("average_tokens must match total_tokens divided by usage_event_count")
+        return self
+
+
+class AuditReportLatencyPayload(AuditPayloadModel):
+    average_success_elapsed_seconds: float = Field(ge=0.0)
+    maximum_success_elapsed_seconds: float = Field(ge=0.0)
+
+    @model_validator(mode="after")
+    def validate_latency_order(self) -> Self:
+        if self.average_success_elapsed_seconds > self.maximum_success_elapsed_seconds:
+            raise ValueError("average latency must not exceed maximum latency")
+        return self
+
+
+class AuditReportFailuresPayload(AuditPayloadModel):
+    retryable_count: int = Field(ge=0)
+    non_retryable_count: int = Field(ge=0)
+
+
+class AuditErrorCountPayload(AuditPayloadModel):
+    error_type: str = Field(min_length=1)
+    count: int = Field(ge=1)
+
+    @field_validator("error_type")
+    @classmethod
+    def reject_surrounding_error_type_whitespace(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("error_type must not include surrounding whitespace")
+        return value
+
+
+class AuditRecoveryActionCountPayload(AuditPayloadModel):
+    action: RecoveryAction
+    count: int = Field(ge=1)
+
+
+class AuditModelStatsPayload(AuditPayloadModel):
+    model: str = Field(min_length=1)
+    total_events: int = Field(ge=0)
+    success_count: int = Field(ge=0)
+    failure_count: int = Field(ge=0)
+    success_rate: float = Field(ge=0.0, le=1.0)
+    recorded_total_tokens: int = Field(ge=0)
+    average_success_elapsed_seconds: float = Field(ge=0.0)
+
+    @field_validator("model")
+    @classmethod
+    def reject_surrounding_model_whitespace(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("model must not include surrounding whitespace")
+        return value
+
+    @model_validator(mode="after")
+    def validate_model_stats(self) -> Self:
+        if self.total_events != self.success_count + self.failure_count:
+            raise ValueError("model total_events must equal success_count plus failure_count")
+        expected_rate = _divide(self.success_count, self.total_events)
+        if not isclose(self.success_rate, expected_rate):
+            raise ValueError("model success_rate must match success_count divided by total_events")
+        return self
+
+
+class AuditReportPayload(AuditPayloadModel):
+    schema_version: Literal[1]
+    report_type: Literal["structured_analysis_audit_report"]
+    filters: AuditReportFilterPayload
+    summary: AuditReportSummaryPayload
+    correction: AuditReportCorrectionPayload
+    recorded_usage: AuditReportUsagePayload
+    latency: AuditReportLatencyPayload
+    failures: AuditReportFailuresPayload
+    errors_by_type: list[AuditErrorCountPayload]
+    recovery_actions: list[AuditRecoveryActionCountPayload]
+    models: list[AuditModelStatsPayload]
+
+    @model_validator(mode="after")
+    def validate_report_invariants(self) -> Self:
+        if self.correction.corrected_success_count > self.summary.success_count:
+            raise ValueError("corrected_success_count must not exceed success_count")
+        if self.recorded_usage.usage_event_count > self.summary.success_count:
+            raise ValueError("usage_event_count must not exceed success_count")
+        failure_total = self.failures.retryable_count + self.failures.non_retryable_count
+        if failure_total != self.summary.failure_count:
+            raise ValueError("failure counts must equal failure_count")
+        if sum(item.count for item in self.errors_by_type) != self.summary.failure_count:
+            raise ValueError("error counts must equal failure_count")
+        if sum(item.count for item in self.recovery_actions) != self.summary.failure_count:
+            raise ValueError("recovery counts must equal failure_count")
+        if sum(model.total_events for model in self.models) != self.summary.total_events:
+            raise ValueError("model total_events must equal report total_events")
+        if sum(model.success_count for model in self.models) != self.summary.success_count:
+            raise ValueError("model success_count must equal report success_count")
+        if sum(model.failure_count for model in self.models) != self.summary.failure_count:
+            raise ValueError("model failure_count must equal report failure_count")
+        if sum(model.recorded_total_tokens for model in self.models) != self.recorded_usage.total_tokens:
+            raise ValueError("model tokens must equal report total_tokens")
+        _ensure_unique(
+            [item.error_type for item in self.errors_by_type],
+            "error_type values must be unique",
+        )
+        _ensure_unique(
+            [item.action for item in self.recovery_actions],
+            "recovery action values must be unique",
+        )
+        _ensure_unique(
+            [model.model for model in self.models],
+            "model values must be unique",
+        )
+        return self
 
 
 def read_audit_events(
@@ -203,64 +369,72 @@ def build_audit_report_payload(
     *,
     report: AuditReport,
     report_filter: AuditReportFilter | None = None,
-) -> dict[str, object]:
+) -> AuditReportPayload:
     if report_filter is None:
         report_filter = AuditReportFilter()
 
-    return {
-        "schema_version": AUDIT_REPORT_SCHEMA_VERSION,
-        "report_type": "structured_analysis_audit_report",
-        "filters": {
-            "since": _payload_filter_datetime(report_filter.since),
-            "until": _payload_filter_datetime(report_filter.until),
-            "model": report_filter.model,
-            "status": report_filter.status.value,
-        },
-        "summary": {
-            "total_events": report.total_events,
-            "success_count": report.success_count,
-            "failure_count": report.failure_count,
-            "success_rate": report.success_rate,
-        },
-        "correction": {
-            "corrected_success_count": report.corrected_success_count,
-            "correction_rate": report.correction_rate,
-            "average_attempts": report.average_attempts,
-        },
-        "recorded_usage": {
-            "usage_event_count": report.usage_event_count,
-            "total_tokens": report.recorded_total_tokens,
-            "average_tokens": report.average_recorded_tokens,
-        },
-        "latency": {
-            "average_success_elapsed_seconds": report.average_elapsed_seconds,
-            "maximum_success_elapsed_seconds": report.max_elapsed_seconds,
-        },
-        "failures": {
-            "retryable_count": report.retryable_failure_count,
-            "non_retryable_count": report.non_retryable_failure_count,
-        },
-        "errors_by_type": [
-            {"error_type": error_type, "count": count}
-            for error_type, count in report.errors_by_type
-        ],
-        "recovery_actions": [
-            {"action": action, "count": count}
-            for action, count in report.recovery_actions
-        ],
-        "models": [
-            {
-                "model": model.model,
-                "total_events": model.total_events,
-                "success_count": model.success_count,
-                "failure_count": model.failure_count,
-                "success_rate": model.success_rate,
-                "recorded_total_tokens": model.recorded_total_tokens,
-                "average_success_elapsed_seconds": model.average_success_elapsed_seconds,
-            }
-            for model in report.models
-        ],
-    }
+    try:
+        return AuditReportPayload(
+            schema_version=AUDIT_REPORT_SCHEMA_VERSION,
+            report_type="structured_analysis_audit_report",
+            filters=AuditReportFilterPayload(
+                since=_payload_filter_datetime(report_filter.since),
+                until=_payload_filter_datetime(report_filter.until),
+                model=report_filter.model,
+                status=report_filter.status,
+            ),
+            summary=AuditReportSummaryPayload(
+                total_events=report.total_events,
+                success_count=report.success_count,
+                failure_count=report.failure_count,
+                success_rate=report.success_rate,
+            ),
+            correction=AuditReportCorrectionPayload(
+                corrected_success_count=report.corrected_success_count,
+                correction_rate=report.correction_rate,
+                average_attempts=report.average_attempts,
+            ),
+            recorded_usage=AuditReportUsagePayload(
+                usage_event_count=report.usage_event_count,
+                total_tokens=report.recorded_total_tokens,
+                average_tokens=report.average_recorded_tokens,
+            ),
+            latency=AuditReportLatencyPayload(
+                average_success_elapsed_seconds=report.average_elapsed_seconds,
+                maximum_success_elapsed_seconds=report.max_elapsed_seconds,
+            ),
+            failures=AuditReportFailuresPayload(
+                retryable_count=report.retryable_failure_count,
+                non_retryable_count=report.non_retryable_failure_count,
+            ),
+            errors_by_type=[
+                AuditErrorCountPayload(error_type=error_type, count=count)
+                for error_type, count in report.errors_by_type
+            ],
+            recovery_actions=[
+                AuditRecoveryActionCountPayload(
+                    action=RecoveryAction(action),
+                    count=count,
+                )
+                for action, count in report.recovery_actions
+            ],
+            models=[
+                AuditModelStatsPayload(
+                    model=model.model,
+                    total_events=model.total_events,
+                    success_count=model.success_count,
+                    failure_count=model.failure_count,
+                    success_rate=model.success_rate,
+                    recorded_total_tokens=model.recorded_total_tokens,
+                    average_success_elapsed_seconds=model.average_success_elapsed_seconds,
+                )
+                for model in report.models
+            ],
+        )
+    except (ValidationError, ValueError) as error:
+        raise AuditReportValidationError(
+            "The audit report output failed validation."
+        ) from error
 
 
 def format_audit_report_json(
@@ -272,7 +446,23 @@ def format_audit_report_json(
         report=report,
         report_filter=report_filter,
     )
-    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False)
+    return json.dumps(
+        payload.model_dump(mode="json"),
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=False,
+    )
+
+
+def validate_audit_report_json(
+    json_text: str,
+) -> AuditReportPayload:
+    try:
+        return AuditReportPayload.model_validate_json(json_text)
+    except ValidationError as error:
+        raise AuditReportValidationError(
+            "The audit report JSON failed validation."
+        ) from error
 
 
 def render_audit_report(
@@ -651,6 +841,11 @@ def _payload_filter_datetime(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.astimezone(UTC).isoformat()
+
+
+def _ensure_unique(values: list[object], message: str) -> None:
+    if len(set(values)) != len(values):
+        raise ValueError(message)
 
 
 def _format_pairs(pairs: tuple[tuple[str, int], ...]) -> list[str]:

@@ -4,6 +4,7 @@ from app.exceptions import (
     AuditLogError,
     AuditLogParseError,
     AuditLogReadError,
+    AuditReportValidationError,
     ExecutionBudgetError,
     InvalidAuditEventError,
     StructuredAnalysisError,
@@ -97,9 +98,11 @@ def test_audit_log_error_inherits_from_project_error() -> None:
 def test_audit_log_read_errors_inherit_from_audit_log_error() -> None:
     for exception_type in (
         AuditLogReadError,
+    AuditReportValidationError,
         AuditLogParseError,
         UnsupportedAuditSchemaError,
         InvalidAuditEventError,
+        AuditReportValidationError,
     ):
         assert issubclass(exception_type, AuditLogError)
 
@@ -107,9 +110,11 @@ def test_audit_log_read_errors_inherit_from_audit_log_error() -> None:
 def test_concrete_audit_log_read_errors_are_distinct_classes() -> None:
     exception_types = {
         AuditLogReadError,
+    AuditReportValidationError,
         AuditLogParseError,
         UnsupportedAuditSchemaError,
         InvalidAuditEventError,
+        AuditReportValidationError,
     }
 
-    assert len(exception_types) == 4
+    assert len(exception_types) == 5

@@ -6,6 +6,8 @@ from pathlib import Path
 import pytest
 
 import scripts.audit_report as script
+from app.audit_report import validate_audit_report_json
+from app.exceptions import AuditReportValidationError
 from app.observability import AUDIT_SCHEMA_VERSION
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
@@ -750,3 +752,106 @@ def test_json_script_does_not_load_settings() -> None:
 
 def test_json_script_does_not_access_env() -> None:
     assert "dotenv" not in script.__dict__
+
+
+
+def test_script_json_payload_passes_contract_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    payload = validate_audit_report_json(capsys.readouterr().out)
+
+    assert payload.report_type == "structured_analysis_audit_report"
+
+
+def test_script_json_top_level_contract_is_stable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    payload = json.loads(capsys.readouterr().out)
+
+    assert list(payload) == [
+        "schema_version",
+        "report_type",
+        "filters",
+        "summary",
+        "correction",
+        "recorded_usage",
+        "latency",
+        "failures",
+        "errors_by_type",
+        "recovery_actions",
+        "models",
+    ]
+
+
+def test_script_payload_validation_failure_returns_exit_code_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def raise_validation_error(**kwargs: object) -> str:
+        raise AuditReportValidationError("PRIVATE-ERROR-MESSAGE")
+
+    monkeypatch.setattr(script, "render_audit_report", raise_validation_error)
+
+    assert script.main(["--format", "json"]) == 5
+
+
+def test_script_payload_validation_failure_outputs_abort(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def raise_validation_error(**kwargs: object) -> str:
+        raise AuditReportValidationError("PRIVATE-ERROR-MESSAGE")
+
+    monkeypatch.setattr(script, "render_audit_report", raise_validation_error)
+
+    script.main(["--format", "json"])
+    output = capsys.readouterr().out
+
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+
+
+def test_script_payload_validation_failure_omits_details(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def raise_validation_error(**kwargs: object) -> str:
+        raise AuditReportValidationError("PRIVATE-ERROR-MESSAGE")
+
+    monkeypatch.setattr(script, "render_audit_report", raise_validation_error)
+
+    script.main(["--format", "json"])
+
+    assert "PRIVATE-ERROR-MESSAGE" not in capsys.readouterr().out
+
+
+def test_script_payload_validation_failure_does_not_modify_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = configure_log(monkeypatch, tmp_path, success_event())
+    before = path.read_text(encoding="utf-8")
+
+    def raise_validation_error(**kwargs: object) -> str:
+        raise AuditReportValidationError("PRIVATE-ERROR-MESSAGE")
+
+    monkeypatch.setattr(script, "render_audit_report", raise_validation_error)
+    script.main(["--format", "json"])
+
+    assert path.read_text(encoding="utf-8") == before

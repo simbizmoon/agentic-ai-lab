@@ -7,12 +7,23 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from pydantic import ValidationError
 
 from app.audit_report import (
     AUDIT_REPORT_SCHEMA_VERSION,
+    AuditErrorCountPayload,
+    AuditModelStatsPayload,
+    AuditRecoveryActionCountPayload,
     AuditReport,
+    AuditReportCorrectionPayload,
+    AuditReportFailuresPayload,
     AuditReportFilter,
+    AuditReportFilterPayload,
     AuditReportFormat,
+    AuditReportLatencyPayload,
+    AuditReportPayload,
+    AuditReportSummaryPayload,
+    AuditReportUsagePayload,
     AuditStatusFilter,
     ModelAuditStats,
     ParsedAuditEvents,
@@ -25,14 +36,17 @@ from app.audit_report import (
     format_audit_report_json,
     read_audit_events,
     render_audit_report,
+    validate_audit_report_json,
 )
 from app.exceptions import (
     AuditLogParseError,
     AuditLogReadError,
+    AuditReportValidationError,
     InvalidAuditEventError,
     UnsupportedAuditSchemaError,
 )
 from app.observability import AUDIT_SCHEMA_VERSION
+from app.recovery import RecoveryAction
 
 SECRET_VALUES = (
     "sk-test-do-not-log",
@@ -945,6 +959,15 @@ def make_payload_filter() -> AuditReportFilter:
     )
 
 
+def payload_dict(
+    report_filter: AuditReportFilter | None = None,
+) -> dict[str, object]:
+    return build_audit_report_payload(
+        report=make_payload_report(),
+        report_filter=report_filter,
+    ).model_dump(mode="json")
+
+
 def payload_keys(value: object) -> set[str]:
     keys: set[str] = set()
     if isinstance(value, dict):
@@ -968,15 +991,15 @@ def test_audit_report_format_is_str_enum() -> None:
 
 
 def test_payload_schema_version() -> None:
-    assert build_audit_report_payload(report=make_payload_report())["schema_version"] == AUDIT_REPORT_SCHEMA_VERSION
+    assert payload_dict()["schema_version"] == AUDIT_REPORT_SCHEMA_VERSION
 
 
 def test_payload_report_type() -> None:
-    assert build_audit_report_payload(report=make_payload_report())["report_type"] == "structured_analysis_audit_report"
+    assert payload_dict()["report_type"] == "structured_analysis_audit_report"
 
 
 def test_payload_top_level_keys() -> None:
-    payload = build_audit_report_payload(report=make_payload_report())
+    payload = payload_dict()
 
     assert set(payload) == {
         "schema_version",
@@ -994,7 +1017,7 @@ def test_payload_top_level_keys() -> None:
 
 
 def test_payload_top_level_key_order() -> None:
-    payload = build_audit_report_payload(report=make_payload_report())
+    payload = payload_dict()
 
     assert list(payload) == [
         "schema_version",
@@ -1012,33 +1035,27 @@ def test_payload_top_level_key_order() -> None:
 
 
 def test_payload_default_filter_uses_none_and_all_status() -> None:
-    filters = build_audit_report_payload(report=make_payload_report())["filters"]
+    filters = payload_dict()["filters"]
 
     assert filters == {"since": None, "until": None, "model": None, "status": "all"}
 
 
 def test_payload_filter_timestamps_are_utc_iso() -> None:
-    filters = build_audit_report_payload(
-        report=make_payload_report(),
-        report_filter=make_payload_filter(),
-    )["filters"]
+    filters = payload_dict(make_payload_filter())["filters"]
 
     assert filters["since"] == "2026-08-02T00:00:00+00:00"
     assert filters["until"] == "2026-08-02T01:00:00+00:00"
 
 
 def test_payload_filter_model_and_status() -> None:
-    filters = build_audit_report_payload(
-        report=make_payload_report(),
-        report_filter=make_payload_filter(),
-    )["filters"]
+    filters = payload_dict(make_payload_filter())["filters"]
 
     assert filters["model"] == "gpt-a"
     assert filters["status"] == "success"
 
 
 def test_payload_summary_values() -> None:
-    summary = build_audit_report_payload(report=make_payload_report())["summary"]
+    summary = payload_dict()["summary"]
 
     assert summary == {
         "total_events": 6,
@@ -1049,7 +1066,7 @@ def test_payload_summary_values() -> None:
 
 
 def test_payload_correction_values() -> None:
-    correction = build_audit_report_payload(report=make_payload_report())["correction"]
+    correction = payload_dict()["correction"]
 
     assert correction["corrected_success_count"] == 1
     assert correction["correction_rate"] == pytest.approx(1 / 3)
@@ -1057,7 +1074,7 @@ def test_payload_correction_values() -> None:
 
 
 def test_payload_recorded_usage_values() -> None:
-    recorded_usage = build_audit_report_payload(report=make_payload_report())["recorded_usage"]
+    recorded_usage = payload_dict()["recorded_usage"]
 
     assert recorded_usage == {
         "usage_event_count": 2,
@@ -1067,34 +1084,34 @@ def test_payload_recorded_usage_values() -> None:
 
 
 def test_payload_latency_values() -> None:
-    latency = build_audit_report_payload(report=make_payload_report())["latency"]
+    latency = payload_dict()["latency"]
 
     assert latency["average_success_elapsed_seconds"] == pytest.approx(1.6 / 3)
     assert latency["maximum_success_elapsed_seconds"] == 1.0
 
 
 def test_payload_failure_values() -> None:
-    failures = build_audit_report_payload(report=make_payload_report())["failures"]
+    failures = payload_dict()["failures"]
 
     assert failures == {"retryable_count": 1, "non_retryable_count": 2}
 
 
 def test_payload_errors_by_type_structure_and_order() -> None:
-    assert build_audit_report_payload(report=make_payload_report())["errors_by_type"] == [
+    assert payload_dict()["errors_by_type"] == [
         {"error_type": "AError", "count": 2},
         {"error_type": "ZError", "count": 1},
     ]
 
 
 def test_payload_recovery_actions_structure_and_order() -> None:
-    assert build_audit_report_payload(report=make_payload_report())["recovery_actions"] == [
+    assert payload_dict()["recovery_actions"] == [
         {"action": "abort", "count": 2},
         {"action": "retry_later", "count": 1},
     ]
 
 
 def test_payload_models_structure_and_order() -> None:
-    models = build_audit_report_payload(report=make_payload_report())["models"]
+    models = payload_dict()["models"]
 
     assert models[0] == {
         "model": "gpt-a",
@@ -1109,21 +1126,23 @@ def test_payload_models_structure_and_order() -> None:
 
 
 def test_payload_ratios_are_float() -> None:
-    payload = build_audit_report_payload(report=make_payload_report())
+    payload = payload_dict()
 
     assert isinstance(payload["summary"]["success_rate"], float)
     assert isinstance(payload["correction"]["correction_rate"], float)
 
 
 def test_payload_tokens_are_int() -> None:
-    payload = build_audit_report_payload(report=make_payload_report())
+    payload = payload_dict()
 
     assert isinstance(payload["recorded_usage"]["total_tokens"], int)
     assert isinstance(payload["models"][0]["recorded_total_tokens"], int)
 
 
 def test_empty_report_payload() -> None:
-    payload = build_audit_report_payload(report=build_audit_report(ParsedAuditEvents((), ())))
+    payload = build_audit_report_payload(
+        report=build_audit_report(ParsedAuditEvents((), ()))
+    ).model_dump(mode="json")
 
     assert payload["summary"]["total_events"] == 0
     assert payload["errors_by_type"] == []
@@ -1145,7 +1164,7 @@ def test_empty_report_payload() -> None:
     ],
 )
 def test_payload_omits_sensitive_keys(forbidden_key: str) -> None:
-    payload = build_audit_report_payload(report=make_payload_report())
+    payload = payload_dict()
 
     assert forbidden_key not in payload_keys(payload)
 
@@ -1161,7 +1180,7 @@ def test_payload_omits_sensitive_keys(forbidden_key: str) -> None:
     ],
 )
 def test_payload_omits_sensitive_values(secret: str) -> None:
-    payload = build_audit_report_payload(report=make_payload_report())
+    payload = payload_dict()
 
     assert secret not in json.dumps(payload, ensure_ascii=False)
 
@@ -1254,7 +1273,7 @@ def test_render_rejects_unsupported_format() -> None:
 def test_text_and_json_total_events_match() -> None:
     report = make_payload_report()
     text = format_audit_report(report)
-    payload = build_audit_report_payload(report=report)
+    payload = build_audit_report_payload(report=report).model_dump(mode="json")
 
     assert f"Total Events: {payload['summary']['total_events']}" in text
 
@@ -1262,7 +1281,7 @@ def test_text_and_json_total_events_match() -> None:
 def test_text_and_json_success_failure_counts_match() -> None:
     report = make_payload_report()
     text = format_audit_report(report)
-    payload = build_audit_report_payload(report=report)
+    payload = build_audit_report_payload(report=report).model_dump(mode="json")
 
     assert f"Successes: {payload['summary']['success_count']}" in text
     assert f"Failures: {payload['summary']['failure_count']}" in text
@@ -1271,7 +1290,574 @@ def test_text_and_json_success_failure_counts_match() -> None:
 def test_text_percentage_matches_json_ratio() -> None:
     report = make_payload_report()
     text = format_audit_report(report)
-    payload = build_audit_report_payload(report=report)
+    payload = build_audit_report_payload(report=report).model_dump(mode="json")
     expected_percent = f"{payload['summary']['success_rate'] * 100:.2f}%"
 
     assert f"Success Rate: {expected_percent}" in text
+
+
+
+def valid_payload_model() -> AuditReportPayload:
+    return build_audit_report_payload(report=make_payload_report())
+
+
+def valid_payload_data() -> dict[str, object]:
+    return valid_payload_model().model_dump(mode="json")
+
+
+def test_payload_model_rejects_extra_field() -> None:
+    data = valid_payload_data()
+    data["extra_field"] = "not allowed"
+
+    with pytest.raises(ValidationError):
+        AuditReportPayload.model_validate_json(json.dumps(data))
+
+
+def test_payload_model_rejects_string_int() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportSummaryPayload(
+            total_events="1",
+            success_count=1,
+            failure_count=0,
+            success_rate=1.0,
+        )
+
+
+def test_payload_model_rejects_string_float() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportSummaryPayload(
+            total_events=1,
+            success_count=1,
+            failure_count=0,
+            success_rate="1.0",
+        )
+
+
+def test_payload_model_rejects_string_enum_value_in_python_mode() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportFilterPayload(
+            since=None,
+            until=None,
+            model=None,
+            status="all",
+        )
+
+
+def test_summary_payload_accepts_valid_values() -> None:
+    payload = AuditReportSummaryPayload(
+        total_events=2,
+        success_count=1,
+        failure_count=1,
+        success_rate=0.5,
+    )
+
+    assert payload.success_rate == 0.5
+
+
+def test_summary_payload_rejects_count_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportSummaryPayload(
+            total_events=3,
+            success_count=1,
+            failure_count=1,
+            success_rate=1 / 3,
+        )
+
+
+def test_summary_payload_rejects_success_rate_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportSummaryPayload(
+            total_events=2,
+            success_count=1,
+            failure_count=1,
+            success_rate=0.9,
+        )
+
+
+def test_summary_payload_allows_zero_events_and_zero_rate() -> None:
+    payload = AuditReportSummaryPayload(
+        total_events=0,
+        success_count=0,
+        failure_count=0,
+        success_rate=0.0,
+    )
+
+    assert payload.success_rate == 0.0
+
+
+def test_summary_payload_rejects_rate_out_of_range() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportSummaryPayload(
+            total_events=1,
+            success_count=1,
+            failure_count=0,
+            success_rate=1.1,
+        )
+
+
+def test_correction_payload_accepts_valid_values() -> None:
+    payload = AuditReportCorrectionPayload(
+        corrected_success_count=1,
+        correction_rate=0.5,
+        average_attempts=1.5,
+    )
+
+    assert payload.corrected_success_count == 1
+
+
+def test_correction_payload_rejects_negative_values() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportCorrectionPayload(
+            corrected_success_count=-1,
+            correction_rate=0.0,
+            average_attempts=0.0,
+        )
+
+
+def test_correction_payload_rejects_rate_out_of_range() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportCorrectionPayload(
+            corrected_success_count=0,
+            correction_rate=-0.1,
+            average_attempts=0.0,
+        )
+
+
+def test_usage_payload_accepts_valid_values() -> None:
+    payload = AuditReportUsagePayload(
+        usage_event_count=2,
+        total_tokens=10,
+        average_tokens=5.0,
+    )
+
+    assert payload.average_tokens == 5.0
+
+
+def test_usage_payload_allows_zero_values() -> None:
+    payload = AuditReportUsagePayload(
+        usage_event_count=0,
+        total_tokens=0,
+        average_tokens=0.0,
+    )
+
+    assert payload.total_tokens == 0
+
+
+def test_usage_payload_rejects_average_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportUsagePayload(
+            usage_event_count=2,
+            total_tokens=10,
+            average_tokens=6.0,
+        )
+
+
+def test_usage_payload_rejects_negative_tokens() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportUsagePayload(
+            usage_event_count=1,
+            total_tokens=-1,
+            average_tokens=0.0,
+        )
+
+
+def test_latency_payload_accepts_valid_values() -> None:
+    payload = AuditReportLatencyPayload(
+        average_success_elapsed_seconds=0.5,
+        maximum_success_elapsed_seconds=1.0,
+    )
+
+    assert payload.maximum_success_elapsed_seconds == 1.0
+
+
+def test_latency_payload_rejects_average_greater_than_maximum() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportLatencyPayload(
+            average_success_elapsed_seconds=2.0,
+            maximum_success_elapsed_seconds=1.0,
+        )
+
+
+def test_latency_payload_rejects_negative_value() -> None:
+    with pytest.raises(ValidationError):
+        AuditReportLatencyPayload(
+            average_success_elapsed_seconds=-1.0,
+            maximum_success_elapsed_seconds=1.0,
+        )
+
+
+def test_model_stats_payload_accepts_valid_values() -> None:
+    payload = AuditModelStatsPayload(
+        model="gpt-test",
+        total_events=2,
+        success_count=1,
+        failure_count=1,
+        success_rate=0.5,
+        recorded_total_tokens=10,
+        average_success_elapsed_seconds=0.5,
+    )
+
+    assert payload.model == "gpt-test"
+
+
+def test_model_stats_payload_rejects_count_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        AuditModelStatsPayload(
+            model="gpt-test",
+            total_events=3,
+            success_count=1,
+            failure_count=1,
+            success_rate=1 / 3,
+            recorded_total_tokens=10,
+            average_success_elapsed_seconds=0.5,
+        )
+
+
+def test_model_stats_payload_rejects_success_rate_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        AuditModelStatsPayload(
+            model="gpt-test",
+            total_events=2,
+            success_count=1,
+            failure_count=1,
+            success_rate=0.9,
+            recorded_total_tokens=10,
+            average_success_elapsed_seconds=0.5,
+        )
+
+
+def test_model_stats_payload_rejects_surrounding_whitespace() -> None:
+    with pytest.raises(ValidationError):
+        AuditModelStatsPayload(
+            model=" gpt-test ",
+            total_events=1,
+            success_count=1,
+            failure_count=0,
+            success_rate=1.0,
+            recorded_total_tokens=10,
+            average_success_elapsed_seconds=0.5,
+        )
+
+
+def test_failures_payload_accepts_valid_values() -> None:
+    payload = AuditReportFailuresPayload(retryable_count=1, non_retryable_count=2)
+
+    assert payload.retryable_count == 1
+
+
+def test_error_count_payload_rejects_surrounding_whitespace() -> None:
+    with pytest.raises(ValidationError):
+        AuditErrorCountPayload(error_type=" RuntimeError ", count=1)
+
+
+def test_recovery_action_payload_uses_recovery_action_enum() -> None:
+    payload = AuditRecoveryActionCountPayload(action=RecoveryAction.ABORT, count=1)
+
+    assert payload.action is RecoveryAction.ABORT
+
+
+def mutate_payload(**changes: object) -> dict[str, object]:
+    data = valid_payload_data()
+    data.update(changes)
+    return data
+
+
+def validate_payload_data(data: dict[str, object]) -> None:
+    AuditReportPayload.model_validate_json(json.dumps(data))
+
+
+def test_top_level_payload_accepts_valid_report() -> None:
+    assert isinstance(valid_payload_model(), AuditReportPayload)
+
+
+def test_top_level_payload_rejects_bad_schema_version() -> None:
+    data = mutate_payload(schema_version=999)
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_bad_report_type() -> None:
+    data = mutate_payload(report_type="other")
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_corrected_success_above_success() -> None:
+    data = valid_payload_data()
+    data["correction"]["corrected_success_count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_usage_events_above_success() -> None:
+    data = valid_payload_data()
+    data["recorded_usage"]["usage_event_count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_failure_classification_mismatch() -> None:
+    data = valid_payload_data()
+    data["failures"]["retryable_count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_error_count_mismatch() -> None:
+    data = valid_payload_data()
+    data["errors_by_type"][0]["count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_recovery_count_mismatch() -> None:
+    data = valid_payload_data()
+    data["recovery_actions"][0]["count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_model_total_mismatch() -> None:
+    data = valid_payload_data()
+    data["models"][0]["total_events"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_model_success_mismatch() -> None:
+    data = valid_payload_data()
+    data["models"][0]["success_count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_model_failure_mismatch() -> None:
+    data = valid_payload_data()
+    data["models"][0]["failure_count"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_model_token_mismatch() -> None:
+    data = valid_payload_data()
+    data["models"][0]["recorded_total_tokens"] = 99
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_duplicate_error_type() -> None:
+    data = valid_payload_data()
+    data["errors_by_type"] = [
+        {"error_type": "AError", "count": 1},
+        {"error_type": "AError", "count": 2},
+    ]
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_duplicate_recovery_action() -> None:
+    data = valid_payload_data()
+    data["recovery_actions"] = [
+        {"action": "abort", "count": 1},
+        {"action": "abort", "count": 2},
+    ]
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_rejects_duplicate_model() -> None:
+    data = valid_payload_data()
+    data["models"][1]["model"] = data["models"][0]["model"]
+
+    with pytest.raises(ValidationError):
+        validate_payload_data(data)
+
+
+def test_top_level_payload_allows_empty_report() -> None:
+    payload = build_audit_report_payload(report=build_audit_report(ParsedAuditEvents((), ())))
+
+    assert payload.summary.total_events == 0
+    assert payload.models == []
+
+
+def test_builder_returns_audit_report_payload() -> None:
+    assert isinstance(build_audit_report_payload(report=make_payload_report()), AuditReportPayload)
+
+
+def test_builder_keeps_json_top_level_keys() -> None:
+    assert list(valid_payload_model().model_dump(mode="json")) == [
+        "schema_version",
+        "report_type",
+        "filters",
+        "summary",
+        "correction",
+        "recorded_usage",
+        "latency",
+        "failures",
+        "errors_by_type",
+        "recovery_actions",
+        "models",
+    ]
+
+
+def test_builder_model_dump_json_mode_works() -> None:
+    assert valid_payload_model().model_dump(mode="json")["filters"]["status"] == "all"
+
+
+def test_builder_converts_validation_error_to_audit_report_validation_error() -> None:
+    report = AuditReport(
+        total_events=1,
+        success_count=1,
+        failure_count=0,
+        success_rate=0.0,
+        corrected_success_count=0,
+        correction_rate=0.0,
+        average_attempts=1.0,
+        usage_event_count=0,
+        recorded_total_tokens=0,
+        average_recorded_tokens=0.0,
+        average_elapsed_seconds=0.1,
+        max_elapsed_seconds=0.1,
+        retryable_failure_count=0,
+        non_retryable_failure_count=0,
+        errors_by_type=(),
+        recovery_actions=(),
+        models=(ModelAuditStats("gpt", 1, 1, 0, 1.0, 0, 0.1),),
+    )
+
+    with pytest.raises(AuditReportValidationError) as exc_info:
+        build_audit_report_payload(report=report)
+
+    assert str(exc_info.value) == "The audit report output failed validation."
+
+
+def test_builder_validation_error_message_omits_details() -> None:
+    report = AuditReport(
+        total_events=1,
+        success_count=1,
+        failure_count=0,
+        success_rate=0.0,
+        corrected_success_count=0,
+        correction_rate=0.0,
+        average_attempts=1.0,
+        usage_event_count=0,
+        recorded_total_tokens=0,
+        average_recorded_tokens=0.0,
+        average_elapsed_seconds=0.1,
+        max_elapsed_seconds=0.1,
+        retryable_failure_count=0,
+        non_retryable_failure_count=0,
+        errors_by_type=(),
+        recovery_actions=(),
+        models=(ModelAuditStats("PRIVATE-SUMMARY", 1, 1, 0, 1.0, 0, 0.1),),
+    )
+
+    with pytest.raises(AuditReportValidationError) as exc_info:
+        build_audit_report_payload(report=report)
+
+    assert "PRIVATE-SUMMARY" not in str(exc_info.value)
+
+
+def test_validate_audit_report_json_success() -> None:
+    payload = validate_audit_report_json(format_audit_report_json(make_payload_report()))
+
+    assert isinstance(payload, AuditReportPayload)
+
+
+def test_validate_audit_report_json_rejects_bad_structure() -> None:
+    with pytest.raises(AuditReportValidationError):
+        validate_audit_report_json(json.dumps({"schema_version": 1}))
+
+
+def test_validate_audit_report_json_rejects_bad_syntax() -> None:
+    with pytest.raises(AuditReportValidationError):
+        validate_audit_report_json("{PRIVATE-SUMMARY")
+
+
+def test_validate_audit_report_json_error_message_omits_raw_json() -> None:
+    with pytest.raises(AuditReportValidationError) as exc_info:
+        validate_audit_report_json("{PRIVATE-SUMMARY")
+
+    assert str(exc_info.value) == "The audit report JSON failed validation."
+    assert "PRIVATE-SUMMARY" not in str(exc_info.value)
+
+
+def test_text_formatter_result_is_unchanged_by_payload_validation() -> None:
+    report = make_payload_report()
+    before = format_audit_report(report)
+
+    build_audit_report_payload(report=report)
+
+    assert format_audit_report(report) == before
+
+
+def test_payload_json_schema_is_object() -> None:
+    schema = AuditReportPayload.model_json_schema()
+
+    assert schema["type"] == "object"
+
+
+def test_payload_json_schema_forbids_extra_properties() -> None:
+    schema = AuditReportPayload.model_json_schema()
+
+    assert schema["additionalProperties"] is False
+
+
+def test_payload_json_schema_required_top_level_fields() -> None:
+    schema = AuditReportPayload.model_json_schema()
+
+    assert set(schema["required"]) == set(valid_payload_data())
+
+
+def test_payload_json_schema_fixes_schema_version() -> None:
+    schema_text = json.dumps(AuditReportPayload.model_json_schema())
+
+    assert "const" in schema_text
+    assert str(AUDIT_REPORT_SCHEMA_VERSION) in schema_text
+
+
+def test_payload_json_schema_fixes_report_type() -> None:
+    schema_text = json.dumps(AuditReportPayload.model_json_schema())
+
+    assert "structured_analysis_audit_report" in schema_text
+
+
+def test_payload_json_schema_includes_success_rate_bounds() -> None:
+    schema_text = json.dumps(AuditReportSummaryPayload.model_json_schema())
+
+    assert "success_rate" in schema_text
+    assert "maximum" in schema_text
+    assert "minimum" in schema_text
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    [
+        "user_input",
+        "response_id",
+        "request_id",
+        "private_summary",
+        "keyword",
+        "review_reason",
+        "api_key",
+    ],
+)
+def test_payload_rejects_sensitive_extra_fields(field_name: str) -> None:
+    data = valid_payload_data()
+    data[field_name] = "sk-test-do-not-log"
+
+    with pytest.raises(ValidationError):
+        AuditReportPayload.model_validate_json(json.dumps(data))
