@@ -13,11 +13,12 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.audit_report import (
     AuditReportFilter,
+    AuditReportFormat,
     AuditStatusFilter,
     build_audit_report,
     filter_audit_events,
-    format_audit_report,
     read_audit_events,
+    render_audit_report,
 )
 from app.exceptions import AuditLogError
 from app.recovery import decide_recovery
@@ -56,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[status.value for status in AuditStatusFilter],
         default=AuditStatusFilter.ALL.value,
     )
+    parser.add_argument(
+        "--format",
+        choices=[report_format.value for report_format in AuditReportFormat],
+        default=AuditReportFormat.TEXT.value,
+    )
     return parser
 
 
@@ -79,7 +85,12 @@ def main(argv: list[str] | None = None) -> int:
             report_filter=report_filter,
         )
         report = build_audit_report(filtered_events)
-        print(format_audit_report(report, report_filter=report_filter))
+        rendered_report = render_audit_report(
+            report=report,
+            report_filter=report_filter,
+            report_format=AuditReportFormat(args.format),
+        )
+        print(rendered_report)
         return 0
     except AuditLogError as error:
         decision = decide_recovery(error)

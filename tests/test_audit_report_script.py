@@ -474,3 +474,279 @@ def test_script_does_not_load_settings() -> None:
 
 def test_script_does_not_access_env_helpers() -> None:
     assert "dotenv" not in script.__dict__
+
+
+
+def json_output(capsys: pytest.CaptureFixture[str]) -> dict[str, object]:
+    return json.loads(capsys.readouterr().out)
+
+
+def test_default_format_is_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, [])
+
+    assert "Structured Analysis Audit Report" in capsys.readouterr().out
+
+
+def test_format_text_outputs_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "text"])
+
+    assert "Structured Analysis Audit Report" in capsys.readouterr().out
+
+
+def test_format_json_outputs_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert run_main(monkeypatch, tmp_path, ["--format", "json"]) == 0
+
+    assert json_output(capsys)["report_type"] == "structured_analysis_audit_report"
+
+
+def test_json_stdout_is_entirely_loadable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    json.loads(capsys.readouterr().out)
+
+
+def test_json_stdout_schema_version(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    assert json_output(capsys)["schema_version"] == 1
+
+
+def test_json_stdout_report_type(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    assert json_output(capsys)["report_type"] == "structured_analysis_audit_report"
+
+
+def test_json_stdout_summary_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    summary = json_output(capsys)["summary"]
+    assert summary["total_events"] == 3
+    assert summary["success_count"] == 2
+    assert summary["failure_count"] == 1
+
+
+def test_json_status_success_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--status", "success"])
+
+    payload = json_output(capsys)
+    assert payload["filters"]["status"] == "success"
+    assert payload["summary"]["failure_count"] == 0
+
+
+def test_json_status_failure_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--status", "failure"])
+
+    payload = json_output(capsys)
+    assert payload["filters"]["status"] == "failure"
+    assert payload["summary"]["success_count"] == 0
+
+
+def test_json_model_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--model", "gpt-other"])
+
+    payload = json_output(capsys)
+    assert payload["filters"]["model"] == "gpt-other"
+    assert payload["summary"]["total_events"] == 1
+
+
+def test_json_period_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(
+        monkeypatch,
+        tmp_path,
+        [
+            "--format",
+            "json",
+            "--since",
+            "2026-08-02T00:01:00+00:00",
+            "--until",
+            "2026-08-02T00:03:00+00:00",
+        ],
+    )
+
+    payload = json_output(capsys)
+    assert payload["filters"]["since"] == "2026-08-02T00:01:00+00:00"
+    assert payload["filters"]["until"] == "2026-08-02T00:03:00+00:00"
+    assert payload["summary"]["total_events"] == 2
+
+
+def test_json_combined_filter(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(
+        monkeypatch,
+        tmp_path,
+        [
+            "--format",
+            "json",
+            "--since",
+            "2026-08-02T00:01:00+00:00",
+            "--model",
+            "gpt-test",
+            "--status",
+            "failure",
+        ],
+    )
+
+    payload = json_output(capsys)
+    assert payload["summary"]["total_events"] == 1
+    assert payload["summary"]["failure_count"] == 1
+
+
+def test_json_empty_result(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--model", "missing-model"])
+
+    assert json_output(capsys)["summary"]["total_events"] == 0
+
+
+def test_invalid_format_exits_with_code_two() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--format", "yaml"])
+
+    assert exc_info.value.code == 2
+
+
+def test_json_output_has_no_text_header(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    output = capsys.readouterr().out
+    assert "Structured Analysis Audit Report" not in output
+    assert output.lstrip().startswith("{")
+
+
+def test_json_output_has_no_ok_marker(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    assert "[OK]" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "forbidden",
+    [
+        "resp-private",
+        "req-private",
+        "PRIVATE-SUMMARY",
+        "PRIVATE-KEYWORD",
+        "PRIVATE-REVIEW-REASON",
+        "PRIVATE-ERROR-MESSAGE",
+        "sk-test-do-not-log",
+    ],
+)
+def test_json_output_omits_sensitive_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    forbidden: str,
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    assert forbidden not in capsys.readouterr().out
+
+
+def test_audit_log_error_keeps_exit_code_five_for_json_format(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "audit.jsonl"
+    path.write_text("PRIVATE-ERROR-MESSAGE\n", encoding="utf-8")
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", path)
+
+    assert script.main(["--format", "json"]) == 5
+
+
+def test_audit_log_error_output_stays_text_for_json_format(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / "audit.jsonl"
+    path.write_text("PRIVATE-ERROR-MESSAGE\n", encoding="utf-8")
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", path)
+
+    script.main(["--format", "json"])
+    output = capsys.readouterr().out
+
+    assert "[ERROR] Audit report generation failed" in output
+    assert "Action: abort" in output
+
+
+def test_json_format_does_not_modify_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = configure_log(monkeypatch, tmp_path, success_event(), failure_event())
+    before = path.read_text(encoding="utf-8")
+
+    script.main(["--format", "json"])
+
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_json_script_does_not_create_openai_client() -> None:
+    assert not hasattr(script, "create_openai_client")
+
+
+def test_json_script_does_not_load_settings() -> None:
+    assert not hasattr(script, "load_settings")
+
+
+def test_json_script_does_not_access_env() -> None:
+    assert "dotenv" not in script.__dict__

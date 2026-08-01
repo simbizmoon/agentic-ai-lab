@@ -18,6 +18,8 @@ from app.exceptions import (
 )
 from app.observability import AUDIT_SCHEMA_VERSION
 
+AUDIT_REPORT_SCHEMA_VERSION = 1
+
 
 @dataclass(frozen=True)
 class ParsedSuccessEvent:
@@ -74,6 +76,11 @@ class AuditReport:
     errors_by_type: tuple[tuple[str, int], ...]
     recovery_actions: tuple[tuple[str, int], ...]
     models: tuple[ModelAuditStats, ...]
+
+
+class AuditReportFormat(str, Enum):
+    TEXT = "text"
+    JSON = "json"
 
 
 class AuditStatusFilter(str, Enum):
@@ -190,6 +197,95 @@ def build_audit_report(
         recovery_actions=_sorted_counter(recovery_counter),
         models=_build_model_stats(successes, failures),
     )
+
+
+def build_audit_report_payload(
+    *,
+    report: AuditReport,
+    report_filter: AuditReportFilter | None = None,
+) -> dict[str, object]:
+    if report_filter is None:
+        report_filter = AuditReportFilter()
+
+    return {
+        "schema_version": AUDIT_REPORT_SCHEMA_VERSION,
+        "report_type": "structured_analysis_audit_report",
+        "filters": {
+            "since": _payload_filter_datetime(report_filter.since),
+            "until": _payload_filter_datetime(report_filter.until),
+            "model": report_filter.model,
+            "status": report_filter.status.value,
+        },
+        "summary": {
+            "total_events": report.total_events,
+            "success_count": report.success_count,
+            "failure_count": report.failure_count,
+            "success_rate": report.success_rate,
+        },
+        "correction": {
+            "corrected_success_count": report.corrected_success_count,
+            "correction_rate": report.correction_rate,
+            "average_attempts": report.average_attempts,
+        },
+        "recorded_usage": {
+            "usage_event_count": report.usage_event_count,
+            "total_tokens": report.recorded_total_tokens,
+            "average_tokens": report.average_recorded_tokens,
+        },
+        "latency": {
+            "average_success_elapsed_seconds": report.average_elapsed_seconds,
+            "maximum_success_elapsed_seconds": report.max_elapsed_seconds,
+        },
+        "failures": {
+            "retryable_count": report.retryable_failure_count,
+            "non_retryable_count": report.non_retryable_failure_count,
+        },
+        "errors_by_type": [
+            {"error_type": error_type, "count": count}
+            for error_type, count in report.errors_by_type
+        ],
+        "recovery_actions": [
+            {"action": action, "count": count}
+            for action, count in report.recovery_actions
+        ],
+        "models": [
+            {
+                "model": model.model,
+                "total_events": model.total_events,
+                "success_count": model.success_count,
+                "failure_count": model.failure_count,
+                "success_rate": model.success_rate,
+                "recorded_total_tokens": model.recorded_total_tokens,
+                "average_success_elapsed_seconds": model.average_success_elapsed_seconds,
+            }
+            for model in report.models
+        ],
+    }
+
+
+def format_audit_report_json(
+    report: AuditReport,
+    *,
+    report_filter: AuditReportFilter | None = None,
+) -> str:
+    payload = build_audit_report_payload(
+        report=report,
+        report_filter=report_filter,
+    )
+    return json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=False)
+
+
+def render_audit_report(
+    *,
+    report: AuditReport,
+    report_filter: AuditReportFilter,
+    report_format: AuditReportFormat,
+) -> str:
+    if report_format is AuditReportFormat.TEXT:
+        return format_audit_report(report, report_filter=report_filter)
+    if report_format is AuditReportFormat.JSON:
+        return format_audit_report_json(report, report_filter=report_filter)
+    raise ValueError("Unsupported audit report format")
 
 
 def format_audit_report(
@@ -548,6 +644,12 @@ def _format_percent(value: float) -> str:
 def _format_filter_datetime(value: datetime | None) -> str:
     if value is None:
         return "all"
+    return value.astimezone(UTC).isoformat()
+
+
+def _payload_filter_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
     return value.astimezone(UTC).isoformat()
 
 

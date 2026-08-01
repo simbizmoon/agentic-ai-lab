@@ -4,21 +4,27 @@ import json
 from dataclasses import FrozenInstanceError, asdict
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from app.audit_report import (
+    AUDIT_REPORT_SCHEMA_VERSION,
     AuditReport,
     AuditReportFilter,
+    AuditReportFormat,
     AuditStatusFilter,
     ModelAuditStats,
     ParsedAuditEvents,
     ParsedFailureEvent,
     ParsedSuccessEvent,
     build_audit_report,
+    build_audit_report_payload,
     filter_audit_events,
     format_audit_report,
+    format_audit_report_json,
     read_audit_events,
+    render_audit_report,
 )
 from app.exceptions import (
     AuditLogParseError,
@@ -923,3 +929,349 @@ def test_parsed_events_do_not_preserve_sensitive_fields(tmp_path: Path) -> None:
     write_events(path, event)
 
     assert_no_secret(asdict(read_audit_events(path)))
+
+
+
+def make_payload_report() -> AuditReport:
+    return build_audit_report(make_report_events())
+
+
+def make_payload_filter() -> AuditReportFilter:
+    return AuditReportFilter(
+        since=BASE_TIME,
+        until=BASE_TIME + timedelta(hours=1),
+        model="gpt-a",
+        status=AuditStatusFilter.SUCCESS,
+    )
+
+
+def payload_keys(value: object) -> set[str]:
+    keys: set[str] = set()
+    if isinstance(value, dict):
+        for key, nested_value in value.items():
+            if isinstance(key, str):
+                keys.add(key)
+            keys.update(payload_keys(nested_value))
+    elif isinstance(value, list):
+        for item in value:
+            keys.update(payload_keys(item))
+    return keys
+
+
+def test_audit_report_format_values() -> None:
+    assert AuditReportFormat.TEXT.value == "text"
+    assert AuditReportFormat.JSON.value == "json"
+
+
+def test_audit_report_format_is_str_enum() -> None:
+    assert isinstance(AuditReportFormat.TEXT, str)
+
+
+def test_payload_schema_version() -> None:
+    assert build_audit_report_payload(report=make_payload_report())["schema_version"] == AUDIT_REPORT_SCHEMA_VERSION
+
+
+def test_payload_report_type() -> None:
+    assert build_audit_report_payload(report=make_payload_report())["report_type"] == "structured_analysis_audit_report"
+
+
+def test_payload_top_level_keys() -> None:
+    payload = build_audit_report_payload(report=make_payload_report())
+
+    assert set(payload) == {
+        "schema_version",
+        "report_type",
+        "filters",
+        "summary",
+        "correction",
+        "recorded_usage",
+        "latency",
+        "failures",
+        "errors_by_type",
+        "recovery_actions",
+        "models",
+    }
+
+
+def test_payload_top_level_key_order() -> None:
+    payload = build_audit_report_payload(report=make_payload_report())
+
+    assert list(payload) == [
+        "schema_version",
+        "report_type",
+        "filters",
+        "summary",
+        "correction",
+        "recorded_usage",
+        "latency",
+        "failures",
+        "errors_by_type",
+        "recovery_actions",
+        "models",
+    ]
+
+
+def test_payload_default_filter_uses_none_and_all_status() -> None:
+    filters = build_audit_report_payload(report=make_payload_report())["filters"]
+
+    assert filters == {"since": None, "until": None, "model": None, "status": "all"}
+
+
+def test_payload_filter_timestamps_are_utc_iso() -> None:
+    filters = build_audit_report_payload(
+        report=make_payload_report(),
+        report_filter=make_payload_filter(),
+    )["filters"]
+
+    assert filters["since"] == "2026-08-02T00:00:00+00:00"
+    assert filters["until"] == "2026-08-02T01:00:00+00:00"
+
+
+def test_payload_filter_model_and_status() -> None:
+    filters = build_audit_report_payload(
+        report=make_payload_report(),
+        report_filter=make_payload_filter(),
+    )["filters"]
+
+    assert filters["model"] == "gpt-a"
+    assert filters["status"] == "success"
+
+
+def test_payload_summary_values() -> None:
+    summary = build_audit_report_payload(report=make_payload_report())["summary"]
+
+    assert summary == {
+        "total_events": 6,
+        "success_count": 3,
+        "failure_count": 3,
+        "success_rate": 0.5,
+    }
+
+
+def test_payload_correction_values() -> None:
+    correction = build_audit_report_payload(report=make_payload_report())["correction"]
+
+    assert correction["corrected_success_count"] == 1
+    assert correction["correction_rate"] == pytest.approx(1 / 3)
+    assert correction["average_attempts"] == pytest.approx(4 / 3)
+
+
+def test_payload_recorded_usage_values() -> None:
+    recorded_usage = build_audit_report_payload(report=make_payload_report())["recorded_usage"]
+
+    assert recorded_usage == {
+        "usage_event_count": 2,
+        "total_tokens": 60,
+        "average_tokens": 30.0,
+    }
+
+
+def test_payload_latency_values() -> None:
+    latency = build_audit_report_payload(report=make_payload_report())["latency"]
+
+    assert latency["average_success_elapsed_seconds"] == pytest.approx(1.6 / 3)
+    assert latency["maximum_success_elapsed_seconds"] == 1.0
+
+
+def test_payload_failure_values() -> None:
+    failures = build_audit_report_payload(report=make_payload_report())["failures"]
+
+    assert failures == {"retryable_count": 1, "non_retryable_count": 2}
+
+
+def test_payload_errors_by_type_structure_and_order() -> None:
+    assert build_audit_report_payload(report=make_payload_report())["errors_by_type"] == [
+        {"error_type": "AError", "count": 2},
+        {"error_type": "ZError", "count": 1},
+    ]
+
+
+def test_payload_recovery_actions_structure_and_order() -> None:
+    assert build_audit_report_payload(report=make_payload_report())["recovery_actions"] == [
+        {"action": "abort", "count": 2},
+        {"action": "retry_later", "count": 1},
+    ]
+
+
+def test_payload_models_structure_and_order() -> None:
+    models = build_audit_report_payload(report=make_payload_report())["models"]
+
+    assert models[0] == {
+        "model": "gpt-a",
+        "total_events": 3,
+        "success_count": 2,
+        "failure_count": 1,
+        "success_rate": 2 / 3,
+        "recorded_total_tokens": 40,
+        "average_success_elapsed_seconds": 0.7,
+    }
+    assert models[1]["model"] == "gpt-b"
+
+
+def test_payload_ratios_are_float() -> None:
+    payload = build_audit_report_payload(report=make_payload_report())
+
+    assert isinstance(payload["summary"]["success_rate"], float)
+    assert isinstance(payload["correction"]["correction_rate"], float)
+
+
+def test_payload_tokens_are_int() -> None:
+    payload = build_audit_report_payload(report=make_payload_report())
+
+    assert isinstance(payload["recorded_usage"]["total_tokens"], int)
+    assert isinstance(payload["models"][0]["recorded_total_tokens"], int)
+
+
+def test_empty_report_payload() -> None:
+    payload = build_audit_report_payload(report=build_audit_report(ParsedAuditEvents((), ())))
+
+    assert payload["summary"]["total_events"] == 0
+    assert payload["errors_by_type"] == []
+    assert payload["models"] == []
+
+
+@pytest.mark.parametrize(
+    "forbidden_key",
+    [
+        "response_id",
+        "request_id",
+        "user_input",
+        "prompt",
+        "instructions",
+        "topic",
+        "keyword",
+        "review_reason",
+        "error_message",
+    ],
+)
+def test_payload_omits_sensitive_keys(forbidden_key: str) -> None:
+    payload = build_audit_report_payload(report=make_payload_report())
+
+    assert forbidden_key not in payload_keys(payload)
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "sk-test-do-not-log",
+        "PRIVATE-SUMMARY",
+        "PRIVATE-KEYWORD",
+        "PRIVATE-REVIEW-REASON",
+        "PRIVATE-ERROR-MESSAGE",
+    ],
+)
+def test_payload_omits_sensitive_values(secret: str) -> None:
+    payload = build_audit_report_payload(report=make_payload_report())
+
+    assert secret not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_json_formatter_output_is_loadable() -> None:
+    output = format_audit_report_json(make_payload_report())
+
+    assert json.loads(output)["report_type"] == "structured_analysis_audit_report"
+
+
+def test_json_formatter_schema_version() -> None:
+    payload = json.loads(format_audit_report_json(make_payload_report()))
+
+    assert payload["schema_version"] == AUDIT_REPORT_SCHEMA_VERSION
+
+
+def test_json_formatter_preserves_unicode() -> None:
+    report = build_audit_report(
+        ParsedAuditEvents(
+            successes=(parsed_success(model="한국어-모델"),),
+            failures=(),
+        )
+    )
+
+    assert "한국어-모델" in format_audit_report_json(report)
+
+
+def test_json_formatter_uses_two_space_indent() -> None:
+    output = format_audit_report_json(make_payload_report())
+
+    assert "\n  \"schema_version\"" in output
+
+
+def test_json_formatter_outputs_only_json() -> None:
+    output = format_audit_report_json(make_payload_report())
+
+    assert output.startswith("{")
+    assert "Structured Analysis Audit Report" not in output
+
+
+def test_json_formatter_does_not_mutate_report() -> None:
+    report = make_payload_report()
+    before = report
+
+    format_audit_report_json(report)
+
+    assert report == before
+
+
+def test_json_formatter_does_not_mutate_filter() -> None:
+    report_filter = make_payload_filter()
+    before = report_filter
+
+    format_audit_report_json(make_payload_report(), report_filter=report_filter)
+
+    assert report_filter == before
+
+
+def test_render_text_matches_text_formatter() -> None:
+    report = make_payload_report()
+    report_filter = make_payload_filter()
+
+    assert render_audit_report(
+        report=report,
+        report_filter=report_filter,
+        report_format=AuditReportFormat.TEXT,
+    ) == format_audit_report(report, report_filter=report_filter)
+
+
+def test_render_json_matches_json_formatter() -> None:
+    report = make_payload_report()
+    report_filter = make_payload_filter()
+
+    assert render_audit_report(
+        report=report,
+        report_filter=report_filter,
+        report_format=AuditReportFormat.JSON,
+    ) == format_audit_report_json(report, report_filter=report_filter)
+
+
+def test_render_rejects_unsupported_format() -> None:
+    with pytest.raises(ValueError, match="Unsupported"):
+        render_audit_report(
+            report=make_payload_report(),
+            report_filter=AuditReportFilter(),
+            report_format=cast(AuditReportFormat, "xml"),
+        )
+
+
+def test_text_and_json_total_events_match() -> None:
+    report = make_payload_report()
+    text = format_audit_report(report)
+    payload = build_audit_report_payload(report=report)
+
+    assert f"Total Events: {payload['summary']['total_events']}" in text
+
+
+def test_text_and_json_success_failure_counts_match() -> None:
+    report = make_payload_report()
+    text = format_audit_report(report)
+    payload = build_audit_report_payload(report=report)
+
+    assert f"Successes: {payload['summary']['success_count']}" in text
+    assert f"Failures: {payload['summary']['failure_count']}" in text
+
+
+def test_text_percentage_matches_json_ratio() -> None:
+    report = make_payload_report()
+    text = format_audit_report(report)
+    payload = build_audit_report_payload(report=report)
+    expected_percent = f"{payload['summary']['success_rate'] * 100:.2f}%"
+
+    assert f"Success Rate: {expected_percent}" in text
