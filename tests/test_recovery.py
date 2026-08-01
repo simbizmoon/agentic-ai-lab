@@ -9,6 +9,9 @@ import pytest
 from app.exceptions import (
     AttemptBudgetExceededError,
     AuditLogError,
+    AuditLogParseError,
+    AuditLogReadError,
+    InvalidAuditEventError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -16,6 +19,7 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    UnsupportedAuditSchemaError,
 )
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 
@@ -129,6 +133,10 @@ def test_recovery_decision_is_frozen() -> None:
         (StructuredResponseParseError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (StructuredResponseStatusError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (AuditLogError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (AuditLogReadError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (AuditLogParseError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (UnsupportedAuditSchemaError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (InvalidAuditEventError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (AttemptBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TokenBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TimeBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),

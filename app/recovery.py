@@ -150,7 +150,6 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="Execution elapsed time budget was exceeded.",
         )
 
-
     if isinstance(error, AuditLogError):
         return RecoveryDecision(
             retryable=False,

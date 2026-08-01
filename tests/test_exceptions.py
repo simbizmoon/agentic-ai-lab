@@ -2,7 +2,10 @@ from app.exceptions import (
     AgenticAILabError,
     AttemptBudgetExceededError,
     AuditLogError,
+    AuditLogParseError,
+    AuditLogReadError,
     ExecutionBudgetError,
+    InvalidAuditEventError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
@@ -11,6 +14,7 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    UnsupportedAuditSchemaError,
 )
 
 
@@ -88,3 +92,24 @@ def test_concrete_budget_errors_are_distinct_classes() -> None:
 
 def test_audit_log_error_inherits_from_project_error() -> None:
     assert issubclass(AuditLogError, AgenticAILabError)
+
+
+def test_audit_log_read_errors_inherit_from_audit_log_error() -> None:
+    for exception_type in (
+        AuditLogReadError,
+        AuditLogParseError,
+        UnsupportedAuditSchemaError,
+        InvalidAuditEventError,
+    ):
+        assert issubclass(exception_type, AuditLogError)
+
+
+def test_concrete_audit_log_read_errors_are_distinct_classes() -> None:
+    exception_types = {
+        AuditLogReadError,
+        AuditLogParseError,
+        UnsupportedAuditSchemaError,
+        InvalidAuditEventError,
+    }
+
+    assert len(exception_types) == 4

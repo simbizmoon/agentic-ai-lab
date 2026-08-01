@@ -58,3 +58,19 @@ class TimeBudgetExceededError(ExecutionBudgetError):
 
 class AuditLogError(AgenticAILabError):
     """Raised when an audit log event cannot be written."""
+
+
+class AuditLogReadError(AuditLogError):
+    """Raised when an audit log cannot be read."""
+
+
+class AuditLogParseError(AuditLogError):
+    """Raised when an audit log line is not valid JSON."""
+
+
+class UnsupportedAuditSchemaError(AuditLogError):
+    """Raised when an audit log event uses an unsupported schema."""
+
+
+class InvalidAuditEventError(AuditLogError):
+    """Raised when an audit log event is structurally invalid."""
