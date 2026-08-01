@@ -12,6 +12,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.config import load_settings
+from app.exceptions import (
+    StructuredResponseIncompleteError,
+    StructuredResponseParseError,
+    StructuredResponseRefusalError,
+    StructuredResponseStatusError,
+)
 from app.services.openai_client import create_openai_client
 from app.services.structured_analysis import analyze_text
 
@@ -55,6 +61,18 @@ def main() -> int:
             client.close()
     except ValueError as exc:
         print(f"[ERROR] Invalid input: {exc}")
+        return 1
+    except StructuredResponseIncompleteError:
+        print("[ERROR] Structured analysis response was incomplete")
+        return 1
+    except StructuredResponseRefusalError:
+        print("[ERROR] OpenAI refused the structured analysis request")
+        return 1
+    except StructuredResponseParseError:
+        print("[ERROR] Structured analysis response could not be parsed")
+        return 1
+    except StructuredResponseStatusError:
+        print("[ERROR] Structured analysis response had an unexpected status")
         return 1
     except RuntimeError as exc:
         print(f"[ERROR] Structured analysis error: {exc}")

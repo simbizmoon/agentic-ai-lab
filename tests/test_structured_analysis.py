@@ -5,6 +5,12 @@ from typing import Any
 
 import pytest
 
+from app.exceptions import (
+    StructuredResponseIncompleteError,
+    StructuredResponseParseError,
+    StructuredResponseRefusalError,
+    StructuredResponseStatusError,
+)
 from app.schemas.text_analysis import Sentiment, TextAnalysis
 from app.services.structured_analysis import analyze_text
 from app.services.text_generation import TokenUsage
@@ -187,14 +193,14 @@ def test_analyze_text_rejects_empty_input_without_api_call() -> None:
 def test_analyze_text_rejects_incomplete_status() -> None:
     client = make_client(status="incomplete")
 
-    with pytest.raises(RuntimeError, match="incomplete"):
+    with pytest.raises(StructuredResponseIncompleteError, match="incomplete"):
         analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
 def test_analyze_text_rejects_other_non_completed_status() -> None:
     client = make_client(status="failed")
 
-    with pytest.raises(RuntimeError, match="not completed"):
+    with pytest.raises(StructuredResponseStatusError, match="not completed"):
         analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
@@ -202,14 +208,14 @@ def test_analyze_text_rejects_missing_output_parsed() -> None:
     response = FakeParsedResponse(output_parsed=None)
     client = FakeOpenAIClient(response)
 
-    with pytest.raises(RuntimeError, match="response was empty"):
+    with pytest.raises(StructuredResponseParseError, match="response was empty"):
         analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
 def test_analyze_text_rejects_output_parsed_with_wrong_type() -> None:
     client = make_client(output_parsed={"topic": "착석"})
 
-    with pytest.raises(RuntimeError, match="invalid type"):
+    with pytest.raises(StructuredResponseParseError, match="invalid type"):
         analyze_text(client, model="test-model", user_input="착석 감지 시스템")
 
 
@@ -227,5 +233,5 @@ def test_analyze_text_rejects_refusal_response() -> None:
     refusal_output = [FakeOutputMessage(content=[FakeRefusalContent("hidden")])]
     client = make_client(output=refusal_output)
 
-    with pytest.raises(RuntimeError, match="refused"):
+    with pytest.raises(StructuredResponseRefusalError, match="refused"):
         analyze_text(client, model="test-model", user_input="착석 감지 시스템")

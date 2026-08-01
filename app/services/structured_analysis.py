@@ -8,6 +8,12 @@ from typing import Any
 
 from openai import OpenAI
 
+from app.exceptions import (
+    StructuredResponseIncompleteError,
+    StructuredResponseParseError,
+    StructuredResponseRefusalError,
+    StructuredResponseStatusError,
+)
 from app.schemas.text_analysis import TextAnalysis
 from app.services.text_generation import TokenUsage, extract_token_usage
 
@@ -61,18 +67,28 @@ def analyze_text(
 
     status = getattr(response, "status", None)
     if status == "incomplete":
-        raise RuntimeError("OpenAI structured analysis response was incomplete")
+        raise StructuredResponseIncompleteError(
+            "OpenAI structured analysis response was incomplete"
+        )
     if status != "completed":
-        raise RuntimeError("OpenAI structured analysis response was not completed")
+        raise StructuredResponseStatusError(
+            "OpenAI structured analysis response was not completed"
+        )
 
     if has_refusal(response):
-        raise RuntimeError("OpenAI refused the structured analysis request.")
+        raise StructuredResponseRefusalError(
+            "OpenAI refused the structured analysis request."
+        )
 
     analysis = getattr(response, "output_parsed", None)
     if analysis is None:
-        raise RuntimeError("OpenAI structured analysis response was empty")
+        raise StructuredResponseParseError(
+            "OpenAI structured analysis response was empty"
+        )
     if not isinstance(analysis, TextAnalysis):
-        raise RuntimeError("OpenAI structured analysis response has invalid type")  # noqa: TRY004
+        raise StructuredResponseParseError(
+            "OpenAI structured analysis response has invalid type"
+        )
 
     return StructuredAnalysisResult(
         analysis=analysis,
