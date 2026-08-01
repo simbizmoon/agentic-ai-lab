@@ -7,12 +7,16 @@ import openai
 import pytest
 from pydantic import ValidationError
 
+from app.budget import ExecutionBudget
 from app.exceptions import (
+    AttemptBudgetExceededError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
     StructuredResponseValidationError,
+    TimeBudgetExceededError,
+    TokenBudgetExceededError,
 )
 from app.schemas.text_analysis import Sentiment, TextAnalysis
 from app.services import structured_analysis as service
@@ -531,6 +535,205 @@ def test_analyze_text_with_correction_does_not_retry_api_connection_error() -> N
             client,
             model="test-model",
             user_input="착석 감지 시스템",
+        )
+
+    assert len(client.responses.calls) == 1
+
+
+def test_analyze_text_with_correction_without_budget_keeps_success_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(usage=fake_usage())
+    set_perf_counter(monkeypatch, [1.0, 1.5])
+
+    execution = service.analyze_text_with_correction(
+        client,
+        model="test-model",
+        user_input="착석 감지 시스템",
+        budget=None,
+    )
+
+    assert execution.attempts == 1
+    assert execution.correction_attempted is False
+    assert execution.total_usage == token_usage()
+    assert execution.total_elapsed_seconds == 0.5
+    assert len(client.responses.calls) == 1
+
+
+def test_analyze_text_with_correction_budget_allows_first_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(usage=fake_usage())
+    set_perf_counter(monkeypatch, [1.0, 1.25])
+
+    execution = service.analyze_text_with_correction(
+        client,
+        model="test-model",
+        user_input="착석 감지 시스템",
+        budget=ExecutionBudget(
+            max_attempts=2,
+            max_recorded_tokens=100,
+            max_elapsed_seconds=1.0,
+        ),
+    )
+
+    assert execution.attempts == 1
+    assert execution.total_usage == token_usage()
+    assert execution.total_elapsed_seconds == 0.25
+    assert len(client.responses.calls) == 1
+
+
+def test_analyze_text_with_correction_budget_allows_max_attempts_one_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(usage=fake_usage())
+    set_perf_counter(monkeypatch, [1.0, 1.25])
+
+    execution = service.analyze_text_with_correction(
+        client,
+        model="test-model",
+        user_input="착석 감지 시스템",
+        budget=ExecutionBudget(
+            max_attempts=1,
+            max_recorded_tokens=100,
+            max_elapsed_seconds=1.0,
+        ),
+    )
+
+    assert execution.attempts == 1
+    assert len(client.responses.calls) == 1
+
+
+def test_budget_blocks_correction_after_validation_when_attempt_limit_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(outcomes=[make_validation_error(), make_response()])
+    set_perf_counter(monkeypatch, [1.0, 1.25])
+
+    with pytest.raises(AttemptBudgetExceededError):
+        service.analyze_text_with_correction(
+            client,
+            model="test-model",
+            user_input="착석 감지 시스템",
+            budget=ExecutionBudget(
+                max_attempts=1,
+                max_recorded_tokens=100,
+                max_elapsed_seconds=1.0,
+            ),
+        )
+
+    assert len(client.responses.calls) == 1
+
+
+def test_budget_rejects_success_when_recorded_tokens_exceed_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(usage=fake_usage(input_tokens=6, output_tokens=5))
+    set_perf_counter(monkeypatch, [1.0, 1.25])
+
+    with pytest.raises(TokenBudgetExceededError):
+        service.analyze_text_with_correction(
+            client,
+            model="test-model",
+            user_input="착석 감지 시스템",
+            budget=ExecutionBudget(
+                max_attempts=2,
+                max_recorded_tokens=10,
+                max_elapsed_seconds=1.0,
+            ),
+        )
+
+    assert len(client.responses.calls) == 1
+
+
+def test_budget_rejects_success_when_elapsed_exceeds_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(usage=fake_usage())
+    set_perf_counter(monkeypatch, [1.0, 1.6])
+
+    with pytest.raises(TimeBudgetExceededError):
+        service.analyze_text_with_correction(
+            client,
+            model="test-model",
+            user_input="착석 감지 시스템",
+            budget=ExecutionBudget(
+                max_attempts=2,
+                max_recorded_tokens=100,
+                max_elapsed_seconds=0.5,
+            ),
+        )
+
+    assert len(client.responses.calls) == 1
+
+
+def test_budget_blocks_correction_when_validation_elapsed_reaches_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(outcomes=[make_validation_error(), make_response()])
+    set_perf_counter(monkeypatch, [1.0, 1.5])
+
+    with pytest.raises(TimeBudgetExceededError):
+        service.analyze_text_with_correction(
+            client,
+            model="test-model",
+            user_input="착석 감지 시스템",
+            budget=ExecutionBudget(
+                max_attempts=2,
+                max_recorded_tokens=100,
+                max_elapsed_seconds=0.5,
+            ),
+        )
+
+    assert len(client.responses.calls) == 1
+
+
+def test_budget_allows_validation_failure_then_correction_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(
+        outcomes=[
+            make_validation_error(),
+            make_response(response_id="resp_corrected", usage=fake_usage()),
+        ]
+    )
+    set_perf_counter(monkeypatch, [1.0, 1.25, 2.0, 2.5])
+
+    execution = service.analyze_text_with_correction(
+        client,
+        model="test-model",
+        user_input="착석 감지 시스템",
+        budget=ExecutionBudget(
+            max_attempts=2,
+            max_recorded_tokens=100,
+            max_elapsed_seconds=1.0,
+        ),
+    )
+
+    assert execution.attempts == 2
+    assert execution.correction_attempted is True
+    assert execution.total_elapsed_seconds == 0.75
+    assert execution.total_usage == token_usage()
+    assert execution.response_ids == ("resp_corrected",)
+    assert len(client.responses.calls) == 2
+
+
+def test_budget_exceeded_after_validation_prevents_extra_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = make_client(outcomes=[make_validation_error(), make_response()])
+    set_perf_counter(monkeypatch, [1.0, 1.25])
+
+    with pytest.raises(AttemptBudgetExceededError):
+        service.analyze_text_with_correction(
+            client,
+            model="test-model",
+            user_input="착석 감지 시스템",
+            budget=ExecutionBudget(
+                max_attempts=1,
+                max_recorded_tokens=100,
+                max_elapsed_seconds=1.0,
+            ),
         )
 
     assert len(client.responses.calls) == 1

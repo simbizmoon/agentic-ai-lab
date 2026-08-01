@@ -9,6 +9,13 @@ from typing import Any
 from openai import OpenAI
 from pydantic import ValidationError
 
+from app.budget import (
+    BudgetUsage,
+    ExecutionBudget,
+    ensure_can_start_attempt,
+    ensure_within_budget,
+    record_attempt,
+)
 from app.exceptions import (
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
@@ -86,6 +93,42 @@ def build_instructions(correction_instruction: str | None) -> str:
     if correction_instruction is None:
         return BASE_ANALYSIS_INSTRUCTIONS
     return f"{BASE_ANALYSIS_INSTRUCTIONS} {correction_instruction}"
+
+
+def recorded_tokens_for_result(result: StructuredAnalysisResult) -> int:
+    if result.usage is None:
+        return 0
+    return result.usage.total_tokens
+
+
+def record_result_attempt(
+    *,
+    budget: ExecutionBudget,
+    usage: BudgetUsage,
+    result: StructuredAnalysisResult,
+) -> BudgetUsage:
+    updated_usage = record_attempt(
+        usage=usage,
+        recorded_tokens=recorded_tokens_for_result(result),
+        elapsed_seconds=result.elapsed_seconds,
+    )
+    ensure_within_budget(budget=budget, usage=updated_usage)
+    return updated_usage
+
+
+def record_validation_attempt(
+    *,
+    budget: ExecutionBudget,
+    usage: BudgetUsage,
+    error: StructuredResponseValidationError,
+) -> BudgetUsage:
+    updated_usage = record_attempt(
+        usage=usage,
+        recorded_tokens=0,
+        elapsed_seconds=error.elapsed_seconds,
+    )
+    ensure_within_budget(budget=budget, usage=updated_usage)
+    return updated_usage
 
 
 def _analyze_text_once(
@@ -168,12 +211,26 @@ def analyze_text_with_correction(
     *,
     model: str,
     user_input: str,
+    budget: ExecutionBudget | None = None,
 ) -> StructuredAnalysisExecution:
     """Analyze text and retry once only for schema validation failures."""
+
+    budget_usage = BudgetUsage()
+
+    if budget is not None:
+        ensure_can_start_attempt(budget=budget, usage=budget_usage)
 
     try:
         first_result = _analyze_text_once(client, model=model, user_input=user_input)
     except StructuredResponseValidationError as first_error:
+        if budget is not None:
+            budget_usage = record_validation_attempt(
+                budget=budget,
+                usage=budget_usage,
+                error=first_error,
+            )
+            ensure_can_start_attempt(budget=budget, usage=budget_usage)
+
         try:
             corrected_result = _analyze_text_once(
                 client,
@@ -182,30 +239,66 @@ def analyze_text_with_correction(
                 correction_instruction=CORRECTION_INSTRUCTION,
             )
         except StructuredResponseValidationError as second_error:
+            if budget is not None:
+                budget_usage = record_validation_attempt(
+                    budget=budget,
+                    usage=budget_usage,
+                    error=second_error,
+                )
+                attempts = budget_usage.attempts
+                elapsed_seconds = budget_usage.elapsed_seconds
+            else:
+                attempts = 2
+                elapsed_seconds = (
+                    first_error.elapsed_seconds + second_error.elapsed_seconds
+                )
+
             raise StructuredResponseValidationError(
                 "OpenAI structured analysis response failed schema validation after correction",
-                elapsed_seconds=(
-                    first_error.elapsed_seconds + second_error.elapsed_seconds
-                ),
-                attempts=2,
+                elapsed_seconds=elapsed_seconds,
+                attempts=attempts,
             ) from second_error
+
+        if budget is not None:
+            budget_usage = record_result_attempt(
+                budget=budget,
+                usage=budget_usage,
+                result=corrected_result,
+            )
+            attempts = budget_usage.attempts
+            total_elapsed_seconds = budget_usage.elapsed_seconds
+        else:
+            attempts = 2
+            total_elapsed_seconds = (
+                first_error.elapsed_seconds + corrected_result.elapsed_seconds
+            )
 
         return StructuredAnalysisExecution(
             result=corrected_result,
-            attempts=2,
+            attempts=attempts,
             correction_attempted=True,
             total_usage=combine_token_usage((corrected_result.usage,)),
-            total_elapsed_seconds=(
-                first_error.elapsed_seconds + corrected_result.elapsed_seconds
-            ),
+            total_elapsed_seconds=total_elapsed_seconds,
             response_ids=(corrected_result.response_id,),
         )
 
+    if budget is not None:
+        budget_usage = record_result_attempt(
+            budget=budget,
+            usage=budget_usage,
+            result=first_result,
+        )
+        attempts = budget_usage.attempts
+        total_elapsed_seconds = budget_usage.elapsed_seconds
+    else:
+        attempts = 1
+        total_elapsed_seconds = first_result.elapsed_seconds
+
     return StructuredAnalysisExecution(
         result=first_result,
-        attempts=1,
+        attempts=attempts,
         correction_attempted=False,
         total_usage=combine_token_usage((first_result.usage,)),
-        total_elapsed_seconds=first_result.elapsed_seconds,
+        total_elapsed_seconds=total_elapsed_seconds,
         response_ids=(first_result.response_id,),
     )

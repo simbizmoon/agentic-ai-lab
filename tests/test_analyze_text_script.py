@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 import pytest
 
+from app.budget import ExecutionBudget
+from app.exceptions import TokenBudgetExceededError
 from app.recovery import RecoveryAction, RecoveryDecision
 from app.schemas.text_analysis import Sentiment, TextAnalysis
 from app.services.structured_analysis import (
@@ -175,10 +177,12 @@ def test_main_returns_zero_and_closes_client_on_success(
         *,
         model: str,
         user_input: str,
+        budget: ExecutionBudget | None,
     ) -> StructuredAnalysisExecution:
         assert client is fake_client
         assert model == "test-model"
         assert user_input == USER_INPUT_TEXT
+        assert budget == script.ANALYSIS_BUDGET
         return make_success_execution()
 
     monkeypatch.setattr(script, "analyze_text_with_correction", fake_analyze_text)
@@ -216,6 +220,7 @@ def test_main_returns_exit_code_for_recovery_action_and_closes_client(
         *,
         model: str,
         user_input: str,
+        budget: ExecutionBudget | None,
     ) -> StructuredAnalysisExecution:
         raise ValueError(f"{SECRET_TEXT} {user_input}")
 
@@ -254,9 +259,14 @@ def test_main_success_outputs_execution_and_recorded_usage(
     output = capsys.readouterr().out
 
     assert exit_code == 0
+    assert "Budget:" in output
+    assert "  Max Attempts: 2" in output
+    assert "  Max Recorded Tokens: 2000" in output
+    assert "  Max Elapsed Seconds: 30.000" in output
     assert "Execution:" in output
     assert "  Attempts: 2" in output
     assert "  Correction Attempted: true" in output
+    assert "  Recorded Tokens: 30" in output
     assert "  Total Elapsed Seconds: 0.750" in output
     assert "Recorded Usage:" in output
     assert "  Input Tokens: 10" in output
@@ -308,3 +318,31 @@ def test_main_success_keeps_analysis_output_fields(
     assert "    - 진동" in output
     assert "  Requires Review: false" in output
     assert "  Review Reason: unavailable" in output
+
+
+def test_main_routes_budget_error_through_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_client = configure_common_dependencies(monkeypatch)
+
+    def fake_analyze_text(
+        client: FakeClient,
+        *,
+        model: str,
+        user_input: str,
+        budget: ExecutionBudget | None,
+    ) -> StructuredAnalysisExecution:
+        raise TokenBudgetExceededError(SECRET_TEXT)
+
+    monkeypatch.setattr(script, "analyze_text_with_correction", fake_analyze_text)
+
+    exit_code = script.main()
+    output = capsys.readouterr().out
+
+    assert exit_code == 5
+    assert fake_client.closed is True
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert SECRET_TEXT not in output
+    assert USER_INPUT_TEXT not in output

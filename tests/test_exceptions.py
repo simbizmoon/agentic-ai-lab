@@ -1,11 +1,15 @@
 from app.exceptions import (
     AgenticAILabError,
+    AttemptBudgetExceededError,
+    ExecutionBudgetError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
     StructuredResponseValidationError,
+    TimeBudgetExceededError,
+    TokenBudgetExceededError,
 )
 
 
@@ -56,3 +60,26 @@ def test_structured_response_validation_error_stores_attempt_count() -> None:
 
     assert error.elapsed_seconds == 0.75
     assert error.attempts == 2
+
+
+def test_execution_budget_error_inherits_from_project_error() -> None:
+    assert issubclass(ExecutionBudgetError, AgenticAILabError)
+
+
+def test_concrete_budget_errors_inherit_from_budget_error() -> None:
+    for exception_type in (
+        AttemptBudgetExceededError,
+        TokenBudgetExceededError,
+        TimeBudgetExceededError,
+    ):
+        assert issubclass(exception_type, ExecutionBudgetError)
+
+
+def test_concrete_budget_errors_are_distinct_classes() -> None:
+    exception_types = {
+        AttemptBudgetExceededError,
+        TokenBudgetExceededError,
+        TimeBudgetExceededError,
+    }
+
+    assert len(exception_types) == 3

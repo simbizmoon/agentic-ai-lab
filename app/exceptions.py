@@ -38,3 +38,19 @@ class StructuredResponseValidationError(StructuredAnalysisError):
         super().__init__(message)
         self.elapsed_seconds = elapsed_seconds
         self.attempts = attempts
+
+
+class ExecutionBudgetError(AgenticAILabError):
+    """Base exception for execution budget errors."""
+
+
+class AttemptBudgetExceededError(ExecutionBudgetError):
+    """Raised when the execution attempt budget is exceeded."""
+
+
+class TokenBudgetExceededError(ExecutionBudgetError):
+    """Raised when the recorded token budget is exceeded."""
+
+
+class TimeBudgetExceededError(ExecutionBudgetError):
+    """Raised when the execution time budget is exceeded."""

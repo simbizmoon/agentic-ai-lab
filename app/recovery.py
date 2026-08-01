@@ -8,11 +8,14 @@ from enum import Enum
 import openai
 
 from app.exceptions import (
+    AttemptBudgetExceededError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
     StructuredResponseValidationError,
+    TimeBudgetExceededError,
+    TokenBudgetExceededError,
 )
 
 
@@ -123,6 +126,28 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The structured analysis response ended with an unexpected status.",
+        )
+
+
+    if isinstance(error, AttemptBudgetExceededError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="Execution attempt budget was exceeded.",
+        )
+
+    if isinstance(error, TokenBudgetExceededError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="Execution recorded token budget was exceeded.",
+        )
+
+    if isinstance(error, TimeBudgetExceededError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="Execution elapsed time budget was exceeded.",
         )
 
     if isinstance(error, ValueError):

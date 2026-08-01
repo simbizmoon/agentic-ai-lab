@@ -11,8 +11,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.budget import ExecutionBudget
 from app.config import load_settings
-from app.exceptions import StructuredAnalysisError
+from app.exceptions import ExecutionBudgetError, StructuredAnalysisError
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 from app.services.openai_client import create_openai_client
 from app.services.structured_analysis import analyze_text_with_correction
@@ -20,6 +21,12 @@ from app.services.structured_analysis import analyze_text_with_correction
 ANALYSIS_INPUT = (
     "착석 상태를 자동으로 감지하고 장시간 착석 시 "
     "사용자에게 진동 알림을 제공하는 시스템이다."
+)
+
+ANALYSIS_BUDGET = ExecutionBudget(
+    max_attempts=2,
+    max_recorded_tokens=2000,
+    max_elapsed_seconds=30.0,
 )
 
 
@@ -68,11 +75,16 @@ def main() -> int:
                 client,
                 model=settings.openai_model,
                 user_input=ANALYSIS_INPUT,
+                budget=ANALYSIS_BUDGET,
             )
             result = execution.result
         finally:
             client.close()
     except ValueError as exc:
+        decision = decide_recovery(exc)
+        print_recovery_decision(decision)
+        return exit_code_for_recovery(decision)
+    except ExecutionBudgetError as exc:
         decision = decide_recovery(exc)
         print_recovery_decision(decision)
         return exit_code_for_recovery(decision)
@@ -93,13 +105,22 @@ def main() -> int:
         print_recovery_decision(decision)
         return exit_code_for_recovery(decision)
 
+    recorded_tokens = 0
+    if execution.total_usage is not None:
+        recorded_tokens = execution.total_usage.total_tokens
+
     print("[OK] Structured analysis received")
     print(f"Model: {settings.openai_model}")
     print(f"Response ID: {result.response_id}")
     print(f"Request ID: {result.request_id or 'unavailable'}")
+    print("Budget:")
+    print(f"  Max Attempts: {ANALYSIS_BUDGET.max_attempts}")
+    print(f"  Max Recorded Tokens: {ANALYSIS_BUDGET.max_recorded_tokens}")
+    print(f"  Max Elapsed Seconds: {ANALYSIS_BUDGET.max_elapsed_seconds:.3f}")
     print("Execution:")
     print(f"  Attempts: {execution.attempts}")
     print(f"  Correction Attempted: {str(execution.correction_attempted).lower()}")
+    print(f"  Recorded Tokens: {recorded_tokens}")
     print(f"  Total Elapsed Seconds: {execution.total_elapsed_seconds:.3f}")
     print_usage(execution.total_usage)
     print("Analysis:")

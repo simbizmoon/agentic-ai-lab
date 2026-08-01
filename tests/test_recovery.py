@@ -7,11 +7,14 @@ import openai
 import pytest
 
 from app.exceptions import (
+    AttemptBudgetExceededError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
     StructuredResponseStatusError,
     StructuredResponseValidationError,
+    TimeBudgetExceededError,
+    TokenBudgetExceededError,
 )
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 
@@ -124,6 +127,9 @@ def test_recovery_decision_is_frozen() -> None:
         ),
         (StructuredResponseParseError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (StructuredResponseStatusError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (AttemptBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (TokenBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (TimeBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (RuntimeError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
     ],
 )
