@@ -16,6 +16,12 @@ from app.report_authenticity import (
     build_report_authentication,
     export_authentication_file,
 )
+from app.report_bundle import (
+    AuditReportBundleManifest,
+    build_report_bundle_manifest,
+    export_report_bundle_manifest,
+    manifest_path_for,
+)
 from app.report_integrity import (
     ReportChecksum,
     build_report_checksum,
@@ -115,3 +121,24 @@ def export_json_report_with_authentication(
         authentication=authentication,
     )
     return checksum, authentication
+
+
+def export_json_report_bundle(
+    *,
+    path: Path,
+    json_text: str,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+) -> tuple[ReportChecksum, ReportAuthentication, AuditReportBundleManifest]:
+    checksum, authentication = export_json_report_with_authentication(
+        path=path,
+        json_text=json_text,
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+    )
+    manifest = build_report_bundle_manifest(report_path=path)
+    export_report_bundle_manifest(
+        path=manifest_path_for(path),
+        manifest=manifest,
+    )
+    return checksum, authentication, manifest

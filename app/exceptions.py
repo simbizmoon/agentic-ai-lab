@@ -236,3 +236,35 @@ class ReportAuthenticityMismatchError(ReportAuthenticityError):
 
 class AuthenticationExportError(ReportAuthenticityError):
     """Raised when an authentication sidecar cannot be written safely."""
+
+
+class ReportBundleError(AgenticAILabError):
+    """Base exception for audit report bundle errors."""
+
+
+class ReportBundleManifestValidationError(ReportBundleError):
+    """Raised when a bundle manifest contract is invalid."""
+
+
+class ReportBundleReadError(ReportBundleError):
+    """Raised when a bundle manifest cannot be read."""
+
+
+class ReportBundleExportError(ReportBundleError):
+    """Raised when a bundle manifest cannot be written safely."""
+
+
+class IncompleteReportBundleError(ReportBundleError):
+    """Raised when a required bundle file is missing."""
+
+
+class BundleReportFilenameMismatchError(ReportBundleError):
+    """Raised when a manifest references a different report filename."""
+
+
+class ReportBundleDigestMismatchError(ReportBundleError):
+    """Raised when a bundle file digest does not match the manifest."""
+
+
+class ReportBundleMetadataMismatchError(ReportBundleError):
+    """Raised when bundle metadata is inconsistent with verified files."""

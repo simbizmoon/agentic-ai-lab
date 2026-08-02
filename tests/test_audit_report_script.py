@@ -21,6 +21,7 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
     ChecksumExportError,
+    ReportBundleExportError,
     ReportExportWriteError,
 )
 from app.observability import AUDIT_SCHEMA_VERSION
@@ -28,6 +29,7 @@ from app.report_authenticity import (
     authentication_path_for,
     verify_report_authenticity,
 )
+from app.report_bundle import manifest_path_for
 from app.report_integrity import checksum_path_for, verify_report_integrity
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
@@ -1582,7 +1584,7 @@ def test_hmac_export_failure_keeps_json_and_checksum(
         )
         raise AuthenticationExportError("PRIVATE-HMAC-SECRET")
 
-    monkeypatch.setattr(script, "export_json_report_with_authentication", fail_export)
+    monkeypatch.setattr(script, "export_json_report_bundle", fail_export)
 
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate"]) == 5
     assert output_path.exists()
@@ -1600,7 +1602,7 @@ def test_hmac_export_failure_outputs_abort_without_success(
     def fail_export(**kwargs: object) -> None:
         raise AuthenticationExportError("PRIVATE-HMAC-SECRET")
 
-    monkeypatch.setattr(script, "export_json_report_with_authentication", fail_export)
+    monkeypatch.setattr(script, "export_json_report_bundle", fail_export)
     script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json"), "--authenticate"])
     output = capsys.readouterr().out
 
@@ -2179,3 +2181,246 @@ def test_verify_authenticity_future_authentication_returns_five(
     monkeypatch.setattr(script, "datetime", PresentDateTime)
 
     assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+
+def test_authenticate_export_creates_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    ) == 0
+
+    assert manifest_path_for(output_path).is_file()
+
+
+def test_authenticate_export_outputs_manifest_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    output = capsys.readouterr().out
+
+    assert f"Manifest: {manifest_path_for(output_path)}" in output
+    assert "Manifest Version: 1" in output
+
+
+def test_non_authenticated_export_does_not_create_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)]) == 0
+
+    assert not manifest_path_for(output_path).exists()
+
+
+def test_manifest_export_failure_returns_five_and_keeps_three_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    configure_log(monkeypatch, tmp_path, success_event())
+    output_path = tmp_path / "audit-report.json"
+
+    def fail_bundle_export(**kwargs: object) -> None:
+        path = Path(kwargs["path"])
+        path.write_text(valid_json_for_script(), encoding="utf-8")
+        checksum_path_for(path).write_text(f"{'a' * 64}  {path.name}\n", encoding="utf-8")
+        authentication_path_for(path).write_text("PRIVATE-HMAC-SIDECAR", encoding="utf-8")
+        raise ReportBundleExportError("PRIVATE-BUNDLE-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report_bundle", fail_bundle_export)
+
+    assert script.main(["--format", "json", "--output", str(output_path), "--authenticate"]) == 5
+    output = capsys.readouterr().out
+
+    assert output_path.exists()
+    assert checksum_path_for(output_path).exists()
+    assert authentication_path_for(output_path).exists()
+    assert not manifest_path_for(output_path).exists()
+    assert "Audit report exported successfully." not in output
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert "PRIVATE-BUNDLE-ERROR" not in output
+
+
+def test_verify_bundle_success_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+
+    assert script.main(["--verify-bundle", str(output_path)]) == 0
+
+
+def test_verify_bundle_outputs_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+    capsys.readouterr()
+
+    script.main(["--verify-bundle", str(output_path)])
+    output = capsys.readouterr().out
+
+    assert "Audit report bundle verified." in output
+    assert f"Manifest: {manifest_path_for(output_path)}" in output
+    assert "Manifest Version: 1" in output
+    assert "Report Schema Version: 1" in output
+    assert "Authentication Protocol Version: 2" in output
+    assert "Algorithm: hmac-sha256-v2" in output
+    assert f"Key ID: {HMAC_KEY_ID}" in output
+    assert "Authenticated At:" in output
+
+
+def test_verify_bundle_succeeds_without_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", tmp_path / "missing.jsonl")
+
+    assert script.main(["--verify-bundle", str(output_path)]) == 0
+
+
+def test_verify_bundle_does_not_read_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+
+    def fail_read(*args: object, **kwargs: object) -> object:
+        raise AssertionError("read_audit_events must not be called")
+
+    monkeypatch.setattr(script, "read_audit_events", fail_read)
+
+    assert script.main(["--verify-bundle", str(output_path)]) == 0
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    ["json", "checksum", "hmac", "manifest"],
+)
+def test_verify_bundle_detects_tampering(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mutate: str,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+    if mutate == "json":
+        output_path.write_text(output_path.read_text(encoding="utf-8").replace("gpt-test", "gpt-x"), encoding="utf-8")
+    elif mutate == "checksum":
+        checksum_path_for(output_path).write_text(f"{'0' * 64}  {output_path.name}\n", encoding="utf-8")
+    elif mutate == "hmac":
+        authentication_path_for(output_path).write_text("invalid", encoding="utf-8")
+    else:
+        manifest_path_for(output_path).write_text("invalid", encoding="utf-8")
+
+    assert script.main(["--verify-bundle", str(output_path)]) == 5
+
+
+def test_verify_bundle_missing_manifest_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+    manifest_path_for(output_path).unlink()
+
+    assert script.main(["--verify-bundle", str(output_path)]) == 5
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--verify", "report.json", "--verify-bundle", "report.json"],
+        ["--verify-authenticity", "report.json", "--verify-bundle", "report.json"],
+        ["--verify-bundle", "report.json", "--output", "out.json"],
+        ["--verify-bundle", "report.json", "--authenticate"],
+        ["--verify-bundle", "report.json", "--since", "2026-08-02T00:00:00+00:00"],
+        ["--verify-bundle", "report.json", "--until", "2026-08-02T00:00:00+00:00"],
+        ["--verify-bundle", "report.json", "--model", "gpt-5"],
+        ["--verify-bundle", "report.json", "--status", "success"],
+        ["--verify-bundle", "report.json", "--format", "json"],
+    ],
+)
+def test_verify_bundle_rejects_invalid_combinations(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_verify_bundle_passes_revoked_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+    sidecar_text = authentication_path_for(output_path).read_text(encoding="utf-8")
+    authenticated_at = sidecar_text.split("  ")[2]
+    monkeypatch.setenv(
+        AUTHENTICATION_TRUST_STORE_ENV_NAME,
+        revoked_trust_store_json(revoked_at="2100-01-01T00:00:00+00:00"),
+    )
+
+    assert script.main(
+        [
+            "--verify-bundle",
+            str(output_path),
+            "--revoked-key-policy",
+            "allow_pre_revocation",
+        ]
+    ) == 0
+    assert authenticated_at in authentication_path_for(output_path).read_text(encoding="utf-8")
+
+
+def test_verify_bundle_failure_header_and_secret_omission(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path), "--authenticate"])
+    manifest_path_for(output_path).write_text("PRIVATE-BUNDLE-ERROR", encoding="utf-8")
+    capsys.readouterr()
+
+    script.main(["--verify-bundle", str(output_path)])
+    output = capsys.readouterr().out
+
+    assert "[ERROR] Audit report bundle verification failed" in output
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert "PRIVATE-BUNDLE-ERROR" not in output
+    assert HMAC_SECRET_B64 not in output

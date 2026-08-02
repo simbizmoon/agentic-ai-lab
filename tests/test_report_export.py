@@ -22,6 +22,7 @@ from app.exceptions import (
     InvalidReportExportPathError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
+    ReportBundleExportError,
     ReportExportWriteError,
 )
 from app.report_authenticity import (
@@ -29,9 +30,15 @@ from app.report_authenticity import (
     authentication_path_for,
     verify_report_authenticity,
 )
+from app.report_bundle import (
+    AuditReportBundleManifest,
+    manifest_path_for,
+    verify_report_bundle,
+)
 from app.report_export import (
     _validate_export_path,
     export_json_report,
+    export_json_report_bundle,
     export_json_report_with_authentication,
     export_json_report_with_checksum,
 )
@@ -856,3 +863,153 @@ def test_export_with_authentication_rejects_multiple_active_keys(tmp_path: Path)
             ),
             authenticated_at=AUTHENTICATED_AT,
         )
+
+
+
+def test_export_json_report_bundle_succeeds(tmp_path: Path) -> None:
+    checksum, authentication, manifest = export_json_report_bundle(
+        path=tmp_path / "report.json",
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert checksum.digest
+    assert authentication.digest
+    assert isinstance(manifest, AuditReportBundleManifest)
+
+
+def test_export_json_report_bundle_creates_four_files(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_bundle(
+        path=target,
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert target.is_file()
+    assert checksum_path_for(target).is_file()
+    assert authentication_path_for(target).is_file()
+    assert manifest_path_for(target).is_file()
+
+
+def test_export_json_report_bundle_verifies(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_bundle(
+        path=target,
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    verify_report_bundle(
+        report_path=target,
+        trust_store=trust_store(),
+        verification_time=VERIFICATION_TIME,
+    )
+
+
+def test_export_json_report_bundle_order(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def record_auth(**kwargs: object) -> tuple[ReportChecksum, ReportAuthentication]:
+        calls.append("auth")
+        path = Path(kwargs["path"])
+        path.write_text(valid_json_text(), encoding="utf-8")
+        checksum_path_for(path).write_text(f"{'a' * 64}  {path.name}\n", encoding="utf-8")
+        authentication_path_for(path).write_text("auth", encoding="utf-8")
+        return (
+            ReportChecksum("sha256", "a" * 64, path.name),
+            ReportAuthentication("hmac-sha256-v2", 2, "key-1", AUTHENTICATED_AT, "b" * 64, path.name),
+        )
+
+    def record_build_manifest(**kwargs: object) -> AuditReportBundleManifest:
+        calls.append("manifest-build")
+        return AuditReportBundleManifest(
+            manifest_version=1,
+            bundle_type="structured_analysis_audit_report_bundle",
+            report={"filename": "report.json", "schema_version": 1, "sha256": "a" * 64},
+            checksum={"filename": "report.json.sha256", "sha256": "b" * 64},
+            authentication={
+                "filename": "report.json.hmac",
+                "sha256": "c" * 64,
+                "algorithm": "hmac-sha256-v2",
+                "protocol_version": 2,
+                "key_id": "key-1",
+                "authenticated_at": AUTHENTICATED_AT,
+            },
+        )
+
+    def record_manifest_path(path: Path) -> Path:
+        calls.append("manifest-path")
+        return path.parent / f"{path.name}.manifest"
+
+    def record_manifest_export(**kwargs: object) -> None:
+        calls.append("manifest-export")
+
+    monkeypatch.setattr(report_export, "export_json_report_with_authentication", record_auth)
+    monkeypatch.setattr(report_export, "build_report_bundle_manifest", record_build_manifest)
+    monkeypatch.setattr(report_export, "manifest_path_for", record_manifest_path)
+    monkeypatch.setattr(report_export, "export_report_bundle_manifest", record_manifest_export)
+
+    export_json_report_bundle(
+        path=tmp_path / "report.json",
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert calls == ["auth", "manifest-build", "manifest-path", "manifest-export"]
+
+
+def test_manifest_failure_keeps_json_checksum_and_hmac(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "report.json"
+
+    def fail_manifest_export(**kwargs: object) -> None:
+        raise ReportBundleExportError("PRIVATE-BUNDLE-ERROR")
+
+    monkeypatch.setattr(report_export, "export_report_bundle_manifest", fail_manifest_export)
+
+    with pytest.raises(ReportBundleExportError):
+        export_json_report_bundle(
+            path=target,
+            json_text=valid_json_text(),
+            trust_store=trust_store(),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+
+    assert target.exists()
+    assert checksum_path_for(target).exists()
+    assert authentication_path_for(target).exists()
+
+
+def test_existing_non_authenticated_export_still_skips_manifest(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_checksum(path=target, json_text=valid_json_text())
+
+    assert not authentication_path_for(target).exists()
+    assert not manifest_path_for(target).exists()
+
+
+def test_existing_authenticated_export_still_skips_manifest(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(
+        path=target,
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert authentication_path_for(target).exists()
+    assert not manifest_path_for(target).exists()

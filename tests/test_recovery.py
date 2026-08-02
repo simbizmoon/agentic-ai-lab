@@ -19,9 +19,11 @@ from app.exceptions import (
     AuthenticationKeyNotValidAtSigningTimeError,
     AuthenticationKeyringError,
     AuthenticationTrustError,
+    BundleReportFilenameMismatchError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     DuplicateAuthenticationKeyIdError,
+    IncompleteReportBundleError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
@@ -40,6 +42,12 @@ from app.exceptions import (
     RejectedAuthenticationKeyError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
+    ReportBundleDigestMismatchError,
+    ReportBundleError,
+    ReportBundleExportError,
+    ReportBundleManifestValidationError,
+    ReportBundleMetadataMismatchError,
+    ReportBundleReadError,
     ReportExportWriteError,
     ReportIntegrityMismatchError,
     ReportIntegrityReadError,
@@ -63,6 +71,7 @@ SENSITIVE_TEXT = "sk-test-sensitive-user-input"
 PRIVATE_HMAC_SECRET = "PRIVATE-HMAC-SECRET"
 PRIVATE_KEYRING_SECRET = "PRIVATE-KEYRING-SECRET"
 PRIVATE_TRUST_SECRET = "PRIVATE-TRUST-ERROR"
+PRIVATE_BUNDLE_SECRET = "PRIVATE-BUNDLE-ERROR"
 
 
 def make_request() -> httpx.Request:
@@ -96,6 +105,7 @@ def assert_decision(
     assert PRIVATE_HMAC_SECRET not in decision.reason
     assert PRIVATE_KEYRING_SECRET not in decision.reason
     assert PRIVATE_TRUST_SECRET not in decision.reason
+    assert PRIVATE_BUNDLE_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -194,6 +204,14 @@ def test_recovery_decision_is_frozen() -> None:
         (ChecksumFilenameMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ReportIntegrityMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ChecksumExportError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (ReportBundleError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (ReportBundleManifestValidationError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (ReportBundleReadError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (ReportBundleExportError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (IncompleteReportBundleError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (BundleReportFilenameMismatchError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (ReportBundleDigestMismatchError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
+        (ReportBundleMetadataMismatchError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
         (AuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
         (MissingAuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
         (InvalidAuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),

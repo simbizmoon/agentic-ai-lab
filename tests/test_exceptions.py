@@ -12,10 +12,12 @@ from app.exceptions import (
     AuthenticationKeyNotValidAtSigningTimeError,
     AuthenticationKeyringError,
     AuthenticationTrustError,
+    BundleReportFilenameMismatchError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     DuplicateAuthenticationKeyIdError,
     ExecutionBudgetError,
+    IncompleteReportBundleError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
@@ -35,6 +37,12 @@ from app.exceptions import (
     ReportAuthenticationReadError,
     ReportAuthenticityError,
     ReportAuthenticityMismatchError,
+    ReportBundleDigestMismatchError,
+    ReportBundleError,
+    ReportBundleExportError,
+    ReportBundleManifestValidationError,
+    ReportBundleMetadataMismatchError,
+    ReportBundleReadError,
     ReportExportError,
     ReportExportWriteError,
     ReportIntegrityError,
@@ -350,3 +358,36 @@ def test_concrete_authentication_trust_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 9
+
+
+
+def test_report_bundle_error_inherits_from_project_error() -> None:
+    assert issubclass(ReportBundleError, AgenticAILabError)
+
+
+def test_concrete_report_bundle_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        ReportBundleManifestValidationError,
+        ReportBundleReadError,
+        ReportBundleExportError,
+        IncompleteReportBundleError,
+        BundleReportFilenameMismatchError,
+        ReportBundleDigestMismatchError,
+        ReportBundleMetadataMismatchError,
+    ):
+        assert issubclass(exception_type, ReportBundleError)
+
+
+def test_concrete_report_bundle_errors_are_distinct_classes() -> None:
+    exception_types = {
+        ReportBundleError,
+        ReportBundleManifestValidationError,
+        ReportBundleReadError,
+        ReportBundleExportError,
+        IncompleteReportBundleError,
+        BundleReportFilenameMismatchError,
+        ReportBundleDigestMismatchError,
+        ReportBundleMetadataMismatchError,
+    }
+
+    assert len(exception_types) == 8
