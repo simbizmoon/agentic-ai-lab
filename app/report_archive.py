@@ -52,6 +52,7 @@ from app.exceptions import (
     UnexpectedReportArchiveMemberError,
     UnsafeReportArchiveMemberError,
 )
+from app.manifest_trust_state import ManifestTrustStateDecision, ManifestTrustStateMode
 from app.report_authenticity import (
     HMAC_ALGORITHM,
     HMAC_PROTOCOL_VERSION,
@@ -83,6 +84,7 @@ from app.signature_trust import (
 from app.signing_key_manifest import (
     VerifiedSigningKeyManifest,
     verify_signing_key_manifest,
+    verify_signing_key_manifest_with_state,
 )
 
 ZIP_MEMBER_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
@@ -617,6 +619,45 @@ def verify_signed_authenticated_report_archive_with_manifest(
         maximum_signature_clock_skew=maximum_signature_clock_skew,
     )
     return result, verified_manifest
+
+
+def verify_signed_authenticated_report_archive_with_manifest_state(
+    *,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    manifest_path: Path,
+    root_public_key: TrustedRootSigningPublicKey,
+    verification_time: datetime,
+    state_path: Path | None,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    revoked_signature_key_policy: RevokedSignatureKeyPolicy = RevokedSignatureKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+    maximum_signature_clock_skew: timedelta = MAX_SIGNATURE_CLOCK_SKEW,
+) -> tuple[SignedAuthenticatedReportArchiveResult, VerifiedSigningKeyManifest, ManifestTrustStateDecision]:
+    verified_manifest, state_decision = verify_signing_key_manifest_with_state(
+        manifest_path=manifest_path,
+        root_public_key=root_public_key,
+        verification_time=verification_time,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+        maximum_clock_skew=maximum_signature_clock_skew,
+    )
+    result = verify_signed_authenticated_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store,
+        signature_trust_store=verified_manifest.trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_key_policy,
+        revoked_signature_key_policy=revoked_signature_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+        maximum_signature_clock_skew=maximum_signature_clock_skew,
+    )
+    return result, verified_manifest, state_decision
 
 
 def _validate_archive_output_path(path: Path) -> None:

@@ -41,6 +41,11 @@ from app.exceptions import (
     SigningKeyManifestSignatureVerificationError,
     SigningKeyManifestValidationError,
 )
+from app.manifest_trust_state import (
+    ManifestTrustStateDecision,
+    ManifestTrustStateMode,
+    apply_manifest_trust_state,
+)
 from app.report_integrity import is_valid_sha256_digest
 from app.root_signature_trust import RootSigningPrivateKey, TrustedRootSigningPublicKey
 from app.signature_trust import (
@@ -526,6 +531,37 @@ def verify_signing_key_manifest(
         ),
         trust_store=trust_store,
     )
+
+
+def verify_signing_key_manifest_with_state(
+    *,
+    manifest_path: Path,
+    root_public_key: TrustedRootSigningPublicKey,
+    verification_time: datetime,
+    state_path: Path | None,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    signature_path: Path | None = None,
+    maximum_clock_skew: timedelta = MAX_KEY_MANIFEST_CLOCK_SKEW,
+) -> tuple[VerifiedSigningKeyManifest, ManifestTrustStateDecision]:
+    verified_manifest = verify_signing_key_manifest(
+        manifest_path=manifest_path,
+        root_public_key=root_public_key,
+        verification_time=verification_time,
+        minimum_generation=minimum_generation,
+        signature_path=signature_path,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    state_decision = apply_manifest_trust_state(
+        verified_manifest=verified_manifest,
+        state_path=state_path,
+        verified_at=verification_time,
+        configured_minimum_generation=minimum_generation,
+        mode=state_mode,
+        require_existing_state=require_existing_state,
+    )
+    return verified_manifest, state_decision
 
 
 def _entry_from_trusted_key(key: TrustedArchiveSigningPublicKey) -> SigningKeyManifestEntry:

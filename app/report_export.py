@@ -16,6 +16,7 @@ from app.exceptions import (
     InvalidReportExportPathError,
     ReportExportWriteError,
 )
+from app.manifest_trust_state import ManifestTrustStateDecision, ManifestTrustStateMode
 from app.report_archive import (
     ReportArchiveExportResult,
     archive_path_for,
@@ -41,8 +42,12 @@ from app.report_integrity import (
     checksum_path_for,
     export_checksum_file,
 )
+from app.root_signature_trust import TrustedRootSigningPublicKey
 from app.signature_trust import ArchiveSignatureTrustStore, ArchiveSigningPrivateKey
-from app.signing_key_manifest import VerifiedSigningKeyManifest
+from app.signing_key_manifest import (
+    VerifiedSigningKeyManifest,
+    verify_signing_key_manifest_with_state,
+)
 
 
 def _validate_export_path(path: Path) -> None:
@@ -282,3 +287,59 @@ def export_json_report_signed_archive_with_manifest(
             "The audit report archive authentication metadata is inconsistent."
         )
     return checksum, authentication, manifest, archive, archive_authentication, signature
+
+
+def export_json_report_signed_archive_with_manifest_state(
+    *,
+    path: Path,
+    json_text: str,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    signing_key: ArchiveSigningPrivateKey,
+    manifest_path: Path,
+    root_public_key: TrustedRootSigningPublicKey,
+    state_path: Path | None,
+    signed_at: datetime,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    archive_path: Path | None = None,
+) -> tuple[
+    ReportChecksum,
+    ReportAuthentication,
+    AuditReportBundleManifest,
+    ReportArchiveExportResult,
+    ArchiveAuthentication,
+    ArchiveSignaturePayload,
+    ManifestTrustStateDecision,
+]:
+    verified_manifest, state_decision = verify_signing_key_manifest_with_state(
+        manifest_path=manifest_path,
+        root_public_key=root_public_key,
+        verification_time=signed_at,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+    )
+    checksum, authentication, manifest, archive, archive_authentication, signature = (
+        export_json_report_signed_archive_with_manifest(
+            path=path,
+            json_text=json_text,
+            trust_store=trust_store,
+            authenticated_at=authenticated_at,
+            signing_key=signing_key,
+            verified_manifest=verified_manifest,
+            signed_at=signed_at,
+            archive_path=archive_path,
+        )
+    )
+    return (
+        checksum,
+        authentication,
+        manifest,
+        archive,
+        archive_authentication,
+        signature,
+        state_decision,
+    )

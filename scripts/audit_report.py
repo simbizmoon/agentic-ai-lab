@@ -38,6 +38,8 @@ from app.exceptions import (
     ArchiveAuthenticityError,
     ArchiveSignatureError,
     AuditLogError,
+    ManifestTrustStateError,
+    ManifestTrustStateValidationError,
     ReportArchiveError,
     ReportAuthenticityError,
     ReportBundleError,
@@ -48,11 +50,18 @@ from app.exceptions import (
     SigningKeyManifestReadError,
     SigningKeyManifestValidationError,
 )
+from app.manifest_trust_state import (
+    MANIFEST_TRUST_STATE_ENV_NAME,
+    ManifestTrustStateDecision,
+    ManifestTrustStateMode,
+    apply_manifest_trust_state,
+    load_manifest_trust_state,
+)
 from app.recovery import decide_recovery
 from app.report_archive import (
     archive_path_for,
     verify_authenticated_report_archive,
-    verify_signed_authenticated_report_archive_with_manifest,
+    verify_signed_authenticated_report_archive_with_manifest_state,
 )
 from app.report_authenticity import (
     authentication_path_for,
@@ -62,7 +71,7 @@ from app.report_bundle import manifest_path_for, verify_report_bundle
 from app.report_export import (
     export_json_report_archive,
     export_json_report_bundle,
-    export_json_report_signed_archive_with_manifest,
+    export_json_report_signed_archive_with_manifest_state,
     export_json_report_with_checksum,
 )
 from app.report_integrity import (
@@ -88,6 +97,7 @@ from app.signing_key_manifest import (
     sign_signing_key_manifest,
     signing_key_manifest_signature_path_for,
     verify_signing_key_manifest,
+    verify_signing_key_manifest_with_state,
 )
 
 _MONKEYPATCH_COMPATIBILITY_EXPORTS = (
@@ -148,6 +158,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest-valid-from", type=parse_cli_datetime)
     parser.add_argument("--manifest-valid-until", type=parse_cli_datetime)
     parser.add_argument("--minimum-manifest-generation", type=int)
+    parser.add_argument("--manifest-state", type=Path)
+    parser.add_argument("--no-update-manifest-state", action="store_true")
+    parser.add_argument("--require-existing-manifest-state", action="store_true")
+    parser.add_argument("--show-manifest-state", type=Path)
+    parser.add_argument("--initialize-manifest-state", type=Path)
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -166,6 +181,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _validate_mode_args(parser, args)
 
+    if args.show_manifest_state is not None:
+        return _run_show_manifest_state(args.show_manifest_state)
+    if args.initialize_manifest_state is not None:
+        return _run_initialize_manifest_state(args, parser)
     if args.create_signing_key_manifest is not None:
         return _run_create_signing_key_manifest(args, parser)
     if args.verify_signing_key_manifest is not None:
@@ -193,6 +212,9 @@ def main(argv: list[str] | None = None) -> int:
             args.verify_archive_signature,
             manifest_path=_resolve_signing_key_manifest_path(args, parser),
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+            state_path=_resolve_manifest_state_path(args),
+            state_mode=_resolve_manifest_state_mode(args),
+            require_existing_state=args.require_existing_manifest_state,
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
                 args.revoked_signature_key_policy
             ),
@@ -202,6 +224,9 @@ def main(argv: list[str] | None = None) -> int:
             args.verify_archive,
             manifest_path=_resolve_signing_key_manifest_path(args, parser),
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+            state_path=_resolve_manifest_state_path(args),
+            state_mode=_resolve_manifest_state_mode(args),
+            require_existing_state=args.require_existing_manifest_state,
             revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
                 args.revoked_signature_key_policy
@@ -220,6 +245,8 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.verify_archive_signature,
         args.verify_signing_key_manifest,
         args.create_signing_key_manifest,
+        args.show_manifest_state,
+        args.initialize_manifest_state,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
@@ -229,7 +256,36 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     signature_policy_used = (
         args.revoked_signature_key_policy != RevokedSignatureKeyPolicy.REJECT.value
     )
+    if args.show_manifest_state is not None:
+        if any(value is not None for value in (args.verify, args.verify_authenticity, args.verify_bundle, args.verify_archive_authenticity, args.verify_archive_signature, args.verify_archive, args.create_signing_key_manifest, args.verify_signing_key_manifest, args.since, args.until, args.model, args.signing_key_manifest, args.minimum_manifest_generation)):
+            parser.error("--show-manifest-state cannot be combined with report or verify options")
+        if args.output is not None or args.authenticate or args.archive:
+            parser.error("--show-manifest-state cannot be used with report export options")
+        if args.status != AuditStatusFilter.ALL.value or args.format == AuditReportFormat.JSON.value:
+            parser.error("--show-manifest-state cannot be used with report filters")
+        if args.manifest_state is not None or args.no_update_manifest_state or args.require_existing_manifest_state:
+            parser.error("--show-manifest-state cannot be used with manifest state options")
+        if hmac_policy_used or signature_policy_used:
+            parser.error("--show-manifest-state cannot be used with revoked key policies")
+        return
+    if args.initialize_manifest_state is not None:
+        if args.signing_key_manifest is None:
+            parser.error("--initialize-manifest-state requires --signing-key-manifest")
+        if args.output is not None or args.authenticate or args.archive:
+            parser.error("--initialize-manifest-state cannot be used with report export options")
+        if any(value is not None for value in (args.verify, args.verify_authenticity, args.verify_bundle, args.verify_archive_authenticity, args.verify_archive_signature, args.verify_archive, args.create_signing_key_manifest, args.verify_signing_key_manifest, args.since, args.until, args.model)):
+            parser.error("--initialize-manifest-state cannot be combined with report or verify options")
+        if args.status != AuditStatusFilter.ALL.value or args.format == AuditReportFormat.JSON.value:
+            parser.error("--initialize-manifest-state cannot be used with report filters")
+        if args.manifest_state is not None or args.no_update_manifest_state or args.require_existing_manifest_state:
+            parser.error("--initialize-manifest-state cannot be used with manifest state options")
+        if hmac_policy_used or signature_policy_used:
+            parser.error("--initialize-manifest-state cannot be used with revoked key policies")
+        _validate_manifest_creation_options_absent(parser, args, "--initialize-manifest-state")
+        return
     if args.create_signing_key_manifest is not None:
+        if args.manifest_state is not None or args.no_update_manifest_state or args.require_existing_manifest_state:
+            parser.error("--create-signing-key-manifest cannot be used with manifest state options")
         if args.output is not None or args.authenticate or args.archive:
             parser.error("--create-signing-key-manifest cannot be used with report export options")
         if any(value is not None for value in (args.verify, args.verify_authenticity, args.verify_bundle, args.verify_archive_authenticity, args.verify_archive_signature, args.verify_archive, args.since, args.until, args.model, args.signing_key_manifest)):
@@ -294,6 +350,20 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         parser.error("--revoked-key-policy can only be used with verify modes")
     elif signature_policy_used:
         parser.error("--revoked-signature-key-policy can only be used with signature verify modes")
+
+    state_options_used = (
+        args.manifest_state is not None
+        or args.no_update_manifest_state
+        or args.require_existing_manifest_state
+    )
+    state_capable_mode = (
+        args.verify_signing_key_manifest is not None
+        or args.verify_archive_signature is not None
+        or args.verify_archive is not None
+        or (args.archive and args.authenticate and args.output is not None)
+    )
+    if state_options_used and not state_capable_mode:
+        parser.error("manifest state options require a signing manifest mode")
 
     if not args.archive and (args.signing_key_manifest is not None or args.minimum_manifest_generation is not None):
         parser.error("signing key manifest options require --archive")
@@ -380,6 +450,8 @@ def _run_report_generation(args: argparse.Namespace, parser: argparse.ArgumentPa
         ArchiveAuthenticityError,
         ArchiveSignatureError,
         AuditLogError,
+    ManifestTrustStateError,
+    ManifestTrustStateValidationError,
         ReportArchiveError,
         ReportAuthenticityError,
         ReportBundleError,
@@ -398,22 +470,27 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
     if args.archive:
         signing_key = load_archive_signing_private_key(environ=os.environ)
         root_public_key = load_trusted_root_public_key(environ=os.environ)
-        verified_manifest = verify_signing_key_manifest(
+        (
+            checksum,
+            authentication,
+            manifest,
+            archive,
+            archive_authentication,
+            signature,
+            state_decision,
+        ) = export_json_report_signed_archive_with_manifest_state(
+            path=args.output,
+            json_text=rendered_report,
+            trust_store=trust_store,
+            authenticated_at=exported_at,
+            signing_key=signing_key,
             manifest_path=_resolve_signing_key_manifest_path(args, None),
             root_public_key=root_public_key,
-            verification_time=exported_at,
+            state_path=_resolve_manifest_state_path(args),
+            signed_at=exported_at,
             minimum_generation=_resolve_minimum_manifest_generation(args, None),
-        )
-        checksum, authentication, manifest, archive, archive_authentication, signature = (
-            export_json_report_signed_archive_with_manifest(
-                path=args.output,
-                json_text=rendered_report,
-                trust_store=trust_store,
-                authenticated_at=exported_at,
-                signing_key=signing_key,
-                verified_manifest=verified_manifest,
-                signed_at=exported_at,
-            )
+            state_mode=_resolve_manifest_state_mode(args),
+            require_existing_state=args.require_existing_manifest_state,
         )
     else:
         checksum, authentication, manifest = export_json_report_bundle(
@@ -425,6 +502,7 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
         archive = None
         archive_authentication = None
         signature = None
+        state_decision = None
 
     print("Audit report exported successfully.")
     print(f"Output: {args.output}")
@@ -452,6 +530,8 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
         print(f"Archive Authentication Key ID: {archive_authentication.key_id}")
         print(f"Archive Authenticated At: {archive_authentication.authenticated_at.isoformat()}")
         print(f"Archive HMAC: {archive_authentication.digest}")
+        if state_decision is not None:
+            _print_manifest_state_decision(args, state_decision)
         print(f"Signature: {archive_signature_path_for(archive_path)}")
         print(f"Signature Algorithm: {signature.algorithm}")
         print(f"Signature Protocol Version: {signature.signature_version}")
@@ -501,6 +581,117 @@ def _resolve_minimum_manifest_generation(
     return value
 
 
+def _resolve_manifest_state_path(args: argparse.Namespace) -> Path | None:
+    if args.manifest_state is not None:
+        return args.manifest_state
+    env_value = os.environ.get(MANIFEST_TRUST_STATE_ENV_NAME)
+    if env_value:
+        return Path(env_value)
+    return None
+
+
+def _resolve_manifest_state_mode(args: argparse.Namespace) -> ManifestTrustStateMode:
+    if args.no_update_manifest_state:
+        return ManifestTrustStateMode.READ_ONLY
+    return ManifestTrustStateMode.UPDATE
+
+
+def _print_manifest_state_decision(
+    args: argparse.Namespace,
+    decision: ManifestTrustStateDecision,
+) -> None:
+    _print_manifest_state_decision_for_values(
+        state_path=_resolve_manifest_state_path(args),
+        state_mode=_resolve_manifest_state_mode(args),
+        decision=decision,
+    )
+
+
+def _print_manifest_state_decision_for_values(
+    *,
+    state_path: Path | None,
+    state_mode: ManifestTrustStateMode,
+    decision: ManifestTrustStateDecision,
+) -> None:
+    stored_generation = (
+        str(decision.stored_state.highest_generation)
+        if decision.stored_state is not None
+        else "none"
+    )
+    print(f"Manifest State: {state_path if state_path is not None else 'unavailable'}")
+    print(f"Manifest State Mode: {state_mode.value}")
+    print(f"Stored Generation: {stored_generation}")
+    print(f"Effective Minimum Generation: {decision.effective_minimum_generation}")
+    print(f"State Updated: {str(decision.state_updated).lower()}")
+
+
+def _run_show_manifest_state(state_path: Path) -> int:
+    try:
+        state = load_manifest_trust_state(path=state_path)
+    except ManifestTrustStateError as error:
+        _print_recovery_error(
+            header="[ERROR] Signing key manifest trust state inspection failed",
+            error=error,
+        )
+        return 5
+    if state is None:
+        print("Signing key manifest trust state is missing.")
+        print(f"State: {state_path}")
+        return 0
+    print("Signing key manifest trust state.")
+    print(f"State: {state_path}")
+    print(f"State Version: {state.state_version}")
+    print(f"Root Key ID: {state.root_key_id}")
+    print(f"Highest Generation: {state.highest_generation}")
+    print(f"Manifest SHA-256: {state.manifest_sha256}")
+    print(f"Manifest Issued At: {state.manifest_issued_at.isoformat()}")
+    print(f"Verified At: {state.verified_at.isoformat()}")
+    return 0
+
+
+def _run_initialize_manifest_state(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    if args.initialize_manifest_state.exists():
+        _print_recovery_error(
+            header="[ERROR] Signing key manifest trust state initialization failed",
+            error=ManifestTrustStateValidationError(
+                "The signing key manifest trust state is invalid."
+            ),
+        )
+        return 5
+    try:
+        verification_time = datetime.now(UTC)
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        verified = verify_signing_key_manifest(
+            manifest_path=_resolve_signing_key_manifest_path(args, parser),
+            root_public_key=root_public_key,
+            verification_time=verification_time,
+            minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+        )
+        decision = apply_manifest_trust_state(
+            verified_manifest=verified,
+            state_path=args.initialize_manifest_state,
+            verified_at=verification_time,
+            configured_minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+            mode=ManifestTrustStateMode.UPDATE,
+            require_existing_state=False,
+        )
+    except (ManifestTrustStateError, RootSignatureTrustError, SigningKeyManifestError) as error:
+        _print_recovery_error(
+            header="[ERROR] Signing key manifest trust state initialization failed",
+            error=error,
+        )
+        return 5
+    print("Signing key manifest trust state initialized.")
+    print(f"State: {args.initialize_manifest_state}")
+    print(f"Generation: {verified.result.generation}")
+    print(f"Root Key ID: {verified.result.root_key_id}")
+    print(f"State Updated: {str(decision.state_updated).lower()}")
+    return 0
+
+
 def _run_create_signing_key_manifest(
     args: argparse.Namespace,
     parser: argparse.ArgumentParser,
@@ -534,7 +725,7 @@ def _run_create_signing_key_manifest(
         export_signing_key_manifest(path=args.create_signing_key_manifest, manifest=manifest)
         signature_path = signing_key_manifest_signature_path_for(args.create_signing_key_manifest)
         export_signing_key_manifest_signature(path=signature_path, signature=signature)
-    except (ArchiveSignatureError, RootSignatureTrustError, SigningKeyManifestError) as error:
+    except (ArchiveSignatureError, ManifestTrustStateError, RootSignatureTrustError, SigningKeyManifestError) as error:
         _print_recovery_error(
             header="[ERROR] Archive signing key manifest generation failed",
             error=error,
@@ -555,14 +746,18 @@ def _run_verify_signing_key_manifest(
     parser: argparse.ArgumentParser,
 ) -> int:
     try:
+        verification_time = datetime.now(UTC)
         root_public_key = load_trusted_root_public_key(environ=os.environ)
-        verified = verify_signing_key_manifest(
+        verified, state_decision = verify_signing_key_manifest_with_state(
             manifest_path=args.verify_signing_key_manifest,
             root_public_key=root_public_key,
-            verification_time=datetime.now(UTC),
+            verification_time=verification_time,
+            state_path=_resolve_manifest_state_path(args),
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+            state_mode=_resolve_manifest_state_mode(args),
+            require_existing_state=args.require_existing_manifest_state,
         )
-    except (RootSignatureTrustError, SigningKeyManifestError) as error:
+    except (ManifestTrustStateError, RootSignatureTrustError, SigningKeyManifestError) as error:
         _print_recovery_error(
             header="[ERROR] Archive signing key manifest verification failed",
             error=error,
@@ -576,6 +771,7 @@ def _run_verify_signing_key_manifest(
     print(f"Root Key ID: {verified.result.root_key_id}")
     print(f"Active Key ID: {verified.result.active_key_id}")
     print(f"Key Count: {verified.result.key_count}")
+    _print_manifest_state_decision(args, state_decision)
     return 0
 
 
@@ -681,16 +877,22 @@ def _run_verify_archive_signature(
     *,
     manifest_path: Path,
     minimum_generation: int,
+    state_path: Path | None,
+    state_mode: ManifestTrustStateMode,
+    require_existing_state: bool,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
 ) -> int:
     try:
         verification_time = datetime.now(UTC)
         root_public_key = load_trusted_root_public_key(environ=os.environ)
-        verified_manifest = verify_signing_key_manifest(
+        verified_manifest, state_decision = verify_signing_key_manifest_with_state(
             manifest_path=manifest_path,
             root_public_key=root_public_key,
             verification_time=verification_time,
+            state_path=state_path,
             minimum_generation=minimum_generation,
+            state_mode=state_mode,
+            require_existing_state=require_existing_state,
         )
         result = verify_archive_signature(
             archive_path=verify_path,
@@ -714,6 +916,11 @@ def _run_verify_archive_signature(
     print(f"Public Key Fingerprint: {result.public_key_fingerprint}")
     print(f"Signed At: {result.signed_at.isoformat()}")
     print(f"Archive SHA-256: {result.archive_sha256}")
+    _print_manifest_state_decision_for_values(
+        state_path=state_path,
+        state_mode=state_mode,
+        decision=state_decision,
+    )
     return 0
 
 
@@ -722,6 +929,9 @@ def _run_verify_archive(
     *,
     manifest_path: Path,
     minimum_generation: int,
+    state_path: Path | None,
+    state_mode: ManifestTrustStateMode,
+    require_existing_state: bool,
     revoked_key_policy: RevokedKeyPolicy,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
 ) -> int:
@@ -729,13 +939,16 @@ def _run_verify_archive(
         verification_time = datetime.now(UTC)
         trust_store = load_authentication_trust_store(environ=os.environ)
         root_public_key = load_trusted_root_public_key(environ=os.environ)
-        result, verified_manifest = verify_signed_authenticated_report_archive_with_manifest(
+        result, verified_manifest, state_decision = verify_signed_authenticated_report_archive_with_manifest_state(
             archive_path=verify_path,
             trust_store=trust_store,
             manifest_path=manifest_path,
             root_public_key=root_public_key,
             verification_time=verification_time,
+            state_path=state_path,
             minimum_generation=minimum_generation,
+            state_mode=state_mode,
+            require_existing_state=require_existing_state,
             revoked_key_policy=revoked_key_policy,
             revoked_signature_key_policy=revoked_signature_key_policy,
         )
@@ -743,6 +956,8 @@ def _run_verify_archive(
         ArchiveAuthenticityError,
         ArchiveSignatureError,
         AuditLogError,
+    ManifestTrustStateError,
+    ManifestTrustStateValidationError,
         ReportArchiveError,
         ReportAuthenticityError,
         ReportBundleError,
@@ -761,6 +976,11 @@ def _run_verify_archive(
     print(f"Signed At: {result.signature_signed_at.isoformat()}")
     print(f"Signature Archive SHA-256: {result.signature_archive_sha256}")
     print(f"Signing Key Manifest Generation: {verified_manifest.result.generation}")
+    _print_manifest_state_decision_for_values(
+        state_path=state_path,
+        state_mode=state_mode,
+        decision=state_decision,
+    )
     print(f"Archive Format Version: {result.archive_format_version}")
     print(f"Archive SHA-256: {result.archive_sha256}")
     print(f"Members: {result.member_count}")

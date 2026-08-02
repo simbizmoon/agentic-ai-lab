@@ -453,6 +453,42 @@ class RootSigningKeyMismatchError(RootSignatureTrustError):
     """Raised when root private and public keys do not match."""
 
 
+class ManifestTrustStateError(AgenticAILabError):
+    """Base exception for signing key manifest trust state errors."""
+
+
+class ManifestTrustStateReadError(ManifestTrustStateError):
+    """Raised when signing key manifest trust state cannot be read."""
+
+
+class ManifestTrustStateValidationError(ManifestTrustStateError):
+    """Raised when signing key manifest trust state is invalid."""
+
+
+class ManifestTrustStateExportError(ManifestTrustStateError):
+    """Raised when signing key manifest trust state cannot be written safely."""
+
+
+class ManifestTrustStateLockError(ManifestTrustStateError):
+    """Raised when signing key manifest trust state cannot be locked safely."""
+
+
+class MissingManifestTrustStateError(ManifestTrustStateError):
+    """Raised when required signing key manifest trust state is missing."""
+
+
+class ManifestTrustStateRootMismatchError(ManifestTrustStateError):
+    """Raised when trust state belongs to another root trust domain."""
+
+
+class ManifestTrustStateGenerationConflictError(ManifestTrustStateError):
+    """Raised when the same generation has a different manifest digest."""
+
+
+class ManifestTrustStatePathError(ManifestTrustStateError):
+    """Raised when a trust state path is required but unavailable."""
+
+
 class SigningKeyManifestError(AgenticAILabError):
     """Base exception for archive signing key manifest errors."""
 

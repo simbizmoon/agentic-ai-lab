@@ -15,6 +15,7 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationKeyringError,
     AuthenticationTrustError,
+    ManifestTrustStateError,
     ReportArchiveError,
     ReportAuthenticityError,
     ReportBundleError,
@@ -204,6 +205,14 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The exported audit report failed an integrity check.",
+        )
+
+
+    if isinstance(error, ManifestTrustStateError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The signing key manifest trust state could not be verified or updated safely.",
         )
 
     if isinstance(error, SigningKeyManifestError):

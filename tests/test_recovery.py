@@ -62,9 +62,17 @@ from app.exceptions import (
     InvalidRootSigningPrivateKeyError,
     InvalidRootSigningPublicKeyError,
     InvalidSchemaVersionError,
+    ManifestTrustStateExportError,
+    ManifestTrustStateGenerationConflictError,
+    ManifestTrustStateLockError,
+    ManifestTrustStatePathError,
+    ManifestTrustStateReadError,
+    ManifestTrustStateRootMismatchError,
+    ManifestTrustStateValidationError,
     MissingArchiveSigningPrivateKeyError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
+    MissingManifestTrustStateError,
     MissingReportArchiveMemberError,
     MissingRootSigningPrivateKeyError,
     MissingRootSigningPublicKeyError,
@@ -132,6 +140,7 @@ PRIVATE_ARCHIVE_SECRET = "PRIVATE-ARCHIVE-ERROR"
 PRIVATE_SIGNATURE_SECRET = "PRIVATE-ARCHIVE-SECRET"
 PRIVATE_ROOT_SECRET = "PRIVATE-ROOT-SECRET"
 PRIVATE_MANIFEST_SECRET = "PRIVATE-MANIFEST-SECRET"
+PRIVATE_MANIFEST_STATE_SECRET = "PRIVATE-MANIFEST-STATE-SECRET"
 
 
 def make_request() -> httpx.Request:
@@ -426,3 +435,25 @@ def test_signing_key_manifest_errors_are_abort_without_secret(error: BaseExcepti
     assert decision.action is RecoveryAction.ABORT
     assert decision.reason
     assert PRIVATE_MANIFEST_SECRET not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ManifestTrustStateReadError(PRIVATE_MANIFEST_STATE_SECRET),
+        ManifestTrustStateValidationError(PRIVATE_MANIFEST_STATE_SECRET),
+        ManifestTrustStateExportError(PRIVATE_MANIFEST_STATE_SECRET),
+        ManifestTrustStateLockError(PRIVATE_MANIFEST_STATE_SECRET),
+        MissingManifestTrustStateError(PRIVATE_MANIFEST_STATE_SECRET),
+        ManifestTrustStateRootMismatchError(PRIVATE_MANIFEST_STATE_SECRET),
+        ManifestTrustStateGenerationConflictError(PRIVATE_MANIFEST_STATE_SECRET),
+        ManifestTrustStatePathError(PRIVATE_MANIFEST_STATE_SECRET),
+    ],
+)
+def test_manifest_trust_state_errors_are_abort_without_secret(error: BaseException) -> None:
+    decision = decide_recovery(error)
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert PRIVATE_MANIFEST_STATE_SECRET not in decision.reason

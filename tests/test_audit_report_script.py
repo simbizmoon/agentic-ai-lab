@@ -34,6 +34,9 @@ from app.exceptions import (
     ReportBundleExportError,
     ReportExportWriteError,
 )
+from app.manifest_trust_state import (
+    MANIFEST_TRUST_STATE_ENV_NAME,
+)
 from app.observability import AUDIT_SCHEMA_VERSION
 from app.report_archive import archive_path_for, verify_report_archive
 from app.report_authenticity import (
@@ -284,6 +287,10 @@ def write_signing_key_manifest(
         signature=signature,
     )
     monkeypatch.setenv(SIGNING_KEY_MANIFEST_PATH_ENV_NAME, str(manifest_path))
+    monkeypatch.setenv(
+        MANIFEST_TRUST_STATE_ENV_NAME,
+        str(tmp_path / "signing-key-manifest-state.json"),
+    )
     return manifest_path
 
 
@@ -2664,7 +2671,7 @@ def test_archive_export_failure_keeps_bundle_files(
         )
         raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report_signed_archive_with_manifest", fail_archive)
+    monkeypatch.setattr(script, "export_json_report_signed_archive_with_manifest_state", fail_archive)
 
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 5
     output = capsys.readouterr().out

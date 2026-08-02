@@ -17,6 +17,7 @@ from app.exceptions import (
     SigningKeyManifestSignatureVerificationError,
     SigningKeyManifestValidationError,
 )
+from app.manifest_trust_state import ManifestTrustStateMode, load_manifest_trust_state
 from app.root_signature_trust import (
     RootSigningPrivateKey,
     TrustedRootSigningPublicKey,
@@ -46,6 +47,7 @@ from app.signing_key_manifest import (
     signing_key_manifest_signature_path_for,
     validate_signing_key_manifest_json,
     verify_signing_key_manifest,
+    verify_signing_key_manifest_with_state,
 )
 
 ISSUED_AT = datetime(2026, 8, 2, 0, 0, tzinfo=UTC)
@@ -328,3 +330,66 @@ def test_canonical_bytes_have_no_trailing_newline() -> None:
     canonical = canonicalize_signing_key_manifest(manifest_for(root_public, signing_key()))
 
     assert not canonical.endswith(b"\n")
+
+
+def test_verify_manifest_with_state_updates_state_file(tmp_path: Path) -> None:
+    root_private, root_public = root_pair()
+    manifest_path = write_manifest_bundle(
+        tmp_path,
+        manifest=manifest_for(root_public, signing_key(), generation=3),
+        root_private=root_private,
+    )
+    state_path = tmp_path / "manifest-state.json"
+
+    verified, decision = verify_signing_key_manifest_with_state(
+        manifest_path=manifest_path,
+        root_public_key=root_public,
+        verification_time=VERIFY_TIME,
+        state_path=state_path,
+    )
+
+    assert verified.result.generation == 3
+    assert decision.state_updated is True
+    assert load_manifest_trust_state(path=state_path).highest_generation == 3  # type: ignore[union-attr]
+
+
+def test_verify_manifest_with_state_read_only_does_not_write(tmp_path: Path) -> None:
+    root_private, root_public = root_pair()
+    manifest_path = write_manifest_bundle(
+        tmp_path,
+        manifest=manifest_for(root_public, signing_key(), generation=3),
+        root_private=root_private,
+    )
+    state_path = tmp_path / "manifest-state.json"
+
+    _verified, decision = verify_signing_key_manifest_with_state(
+        manifest_path=manifest_path,
+        root_public_key=root_public,
+        verification_time=VERIFY_TIME,
+        state_path=state_path,
+        state_mode=ManifestTrustStateMode.READ_ONLY,
+    )
+
+    assert decision.state_updated is False
+    assert not state_path.exists()
+
+
+def test_verify_manifest_with_state_failure_does_not_write_state(tmp_path: Path) -> None:
+    root_private, root_public = root_pair()
+    manifest_path = write_manifest_bundle(
+        tmp_path,
+        manifest=manifest_for(root_public, signing_key(), generation=1),
+        root_private=root_private,
+    )
+    state_path = tmp_path / "manifest-state.json"
+
+    with pytest.raises(SigningKeyManifestRollbackError):
+        verify_signing_key_manifest_with_state(
+            manifest_path=manifest_path,
+            root_public_key=root_public,
+            verification_time=VERIFY_TIME,
+            state_path=state_path,
+            minimum_generation=2,
+        )
+
+    assert not state_path.exists()

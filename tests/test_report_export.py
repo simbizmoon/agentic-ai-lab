@@ -36,6 +36,7 @@ from app.exceptions import (
     ReportBundleExportError,
     ReportExportWriteError,
 )
+from app.manifest_trust_state import load_manifest_trust_state
 from app.report_archive import (
     ReportArchiveExportResult,
     archive_path_for,
@@ -59,6 +60,7 @@ from app.report_export import (
     export_json_report_bundle,
     export_json_report_signed_archive,
     export_json_report_signed_archive_with_manifest,
+    export_json_report_signed_archive_with_manifest_state,
     export_json_report_with_authentication,
     export_json_report_with_checksum,
 )
@@ -85,6 +87,7 @@ from app.signing_key_manifest import (
     VerifiedSigningKeyManifest,
     build_signing_key_manifest,
     sign_signing_key_manifest,
+    signing_key_manifest_signature_path_for,
     validate_signing_key_manifest_json,
     verify_signing_key_manifest,
 )
@@ -1432,3 +1435,67 @@ def test_export_json_report_signed_archive_with_manifest_creates_signature_from_
     assert archive_authentication.key_id == authentication.key_id
     assert signature.key_id == verified_manifest.result.active_key_id
     assert validate_signing_key_manifest_json((tmp_path / "signing-keys.json").read_text(encoding="utf-8"))
+
+
+def manifest_files_for_export_state(
+    tmp_path: Path,
+    signing_key: ArchiveSigningPrivateKey,
+) -> tuple[Path, TrustedRootSigningPublicKey]:
+    root_private, root_public = root_pair_for_manifest()
+    manifest = build_signing_key_manifest(
+        generation=2,
+        issued_at=AUTHENTICATED_AT,
+        valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+        valid_until=datetime(2030, 1, 1, tzinfo=UTC),
+        root_public_key=root_public,
+        keys=signature_store(signing_key).keys,
+    )
+    manifest_path = tmp_path / "signing-keys-state.json"
+    signature = sign_signing_key_manifest(
+        manifest=manifest,
+        root_private_key=root_private,
+        signed_at=AUTHENTICATED_AT,
+        filename=manifest_path.name,
+    )
+    manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
+    signing_key_manifest_signature_path_for(manifest_path).write_text(
+        signature.model_dump_json(),
+        encoding="utf-8",
+    )
+    return manifest_path, root_public
+
+
+def test_export_json_report_signed_archive_with_manifest_state_updates_before_export(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "report-state.json"
+    signing_key = signature_key()
+    manifest_path, root_public = manifest_files_for_export_state(tmp_path, signing_key)
+    state_path = tmp_path / "manifest-state.json"
+
+    *results, state_decision = export_json_report_signed_archive_with_manifest_state(
+        path=target,
+        json_text=valid_json_text(),
+        trust_store=AuthenticationTrustStore(
+            keys=(
+                TrustedAuthenticationKey(
+                    "key-1",
+                    b"s" * 32,
+                    AuthenticationKeyStatus.ACTIVE,
+                    datetime(2026, 8, 1, tzinfo=UTC),
+                ),
+            )
+        ),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        manifest_path=manifest_path,
+        root_public_key=root_public,
+        state_path=state_path,
+        signed_at=AUTHENTICATED_AT,
+        minimum_generation=1,
+    )
+
+    assert len(results) == 6
+    assert state_decision.state_updated is True
+    assert archive_path_for(target).exists()
+    assert load_manifest_trust_state(path=state_path).highest_generation == 2  # type: ignore[union-attr]

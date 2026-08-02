@@ -41,6 +41,7 @@ from app.exceptions import (
     UnexpectedReportArchiveMemberError,
     UnsafeReportArchiveMemberError,
 )
+from app.manifest_trust_state import ManifestTrustStateMode, load_manifest_trust_state
 from app.report_archive import (
     MAX_ARCHIVE_MEMBER_COUNT,
     REPORT_ARCHIVE_FORMAT_VERSION,
@@ -61,6 +62,7 @@ from app.report_archive import (
     verify_report_archive,
     verify_signed_authenticated_report_archive,
     verify_signed_authenticated_report_archive_with_manifest,
+    verify_signed_authenticated_report_archive_with_manifest_state,
 )
 from app.report_authenticity import HMAC_ALGORITHM, HMAC_PROTOCOL_VERSION
 from app.report_bundle import manifest_path_for
@@ -950,4 +952,70 @@ def test_verify_signed_authenticated_report_archive_with_manifest_blocks_before_
             manifest_path=manifest_path,
             root_public_key=root_public,
             verification_time=VERIFICATION_TIME,
+        )
+
+
+def test_verify_signed_authenticated_report_archive_with_manifest_state_updates_before_signature(
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+    verified_manifest, manifest_path, root_public = verified_manifest_for_archive(tmp_path, signing_key)
+    export_signed_authenticated_report_archive_with_manifest(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        verified_manifest=verified_manifest,
+        signed_at=AUTHENTICATED_AT,
+    )
+    state_path = tmp_path / "manifest-state.json"
+
+    result, verified, decision = verify_signed_authenticated_report_archive_with_manifest_state(
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        manifest_path=manifest_path,
+        root_public_key=root_public,
+        verification_time=VERIFICATION_TIME,
+        state_path=state_path,
+    )
+
+    assert isinstance(result, SignedAuthenticatedReportArchiveResult)
+    assert verified.result.generation == 1
+    assert decision.state_updated is True
+    assert load_manifest_trust_state(path=state_path).highest_generation == 1  # type: ignore[union-attr]
+
+
+def test_verify_signed_authenticated_report_archive_with_manifest_state_read_only_blocks_rollback(
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+    verified_manifest, manifest_path, root_public = verified_manifest_for_archive(tmp_path, signing_key)
+    export_signed_authenticated_report_archive_with_manifest(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        verified_manifest=verified_manifest,
+        signed_at=AUTHENTICATED_AT,
+    )
+
+    with pytest.raises(SigningKeyManifestDigestMismatchError):
+        manifest_path.write_text(
+            manifest_path.read_text(encoding="utf-8").replace('"generation":1', '"generation":2'),
+            encoding="utf-8",
+        )
+        verify_signed_authenticated_report_archive_with_manifest_state(
+            archive_path=archive_path,
+            trust_store=trust_store(),
+            manifest_path=manifest_path,
+            root_public_key=root_public,
+            verification_time=VERIFICATION_TIME,
+            state_path=None,
+            state_mode=ManifestTrustStateMode.READ_ONLY,
         )

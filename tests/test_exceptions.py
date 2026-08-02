@@ -57,9 +57,18 @@ from app.exceptions import (
     InvalidRootSigningPrivateKeyError,
     InvalidRootSigningPublicKeyError,
     InvalidSchemaVersionError,
+    ManifestTrustStateError,
+    ManifestTrustStateExportError,
+    ManifestTrustStateGenerationConflictError,
+    ManifestTrustStateLockError,
+    ManifestTrustStatePathError,
+    ManifestTrustStateReadError,
+    ManifestTrustStateRootMismatchError,
+    ManifestTrustStateValidationError,
     MissingArchiveSigningPrivateKeyError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
+    MissingManifestTrustStateError,
     MissingReportArchiveMemberError,
     MissingRootSigningPrivateKeyError,
     MissingRootSigningPublicKeyError,
@@ -531,7 +540,7 @@ def test_archive_signature_error_inherits_from_project_error() -> None:
 
 def test_concrete_archive_signature_errors_inherit_from_base_error() -> None:
     for exception_type in (
-        MissingArchiveSigningPrivateKeyError,
+    MissingArchiveSigningPrivateKeyError,
         InvalidArchiveSigningPrivateKeyError,
         InvalidArchiveSigningKeyIdError,
         InvalidArchiveSignatureTrustStoreError,
@@ -554,7 +563,7 @@ def test_concrete_archive_signature_errors_inherit_from_base_error() -> None:
 
 def test_concrete_archive_signature_errors_are_distinct_classes() -> None:
     exception_types = {
-        MissingArchiveSigningPrivateKeyError,
+    MissingArchiveSigningPrivateKeyError,
         InvalidArchiveSigningPrivateKeyError,
         InvalidArchiveSigningKeyIdError,
         InvalidArchiveSignatureTrustStoreError,
@@ -642,3 +651,37 @@ def test_concrete_signing_key_manifest_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 11
+
+
+def test_manifest_trust_state_error_inherits_from_project_error() -> None:
+    assert issubclass(ManifestTrustStateError, AgenticAILabError)
+
+
+def test_concrete_manifest_trust_state_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        ManifestTrustStateReadError,
+        ManifestTrustStateValidationError,
+        ManifestTrustStateExportError,
+        ManifestTrustStateLockError,
+        MissingManifestTrustStateError,
+        ManifestTrustStateRootMismatchError,
+        ManifestTrustStateGenerationConflictError,
+        ManifestTrustStatePathError,
+    ):
+        assert issubclass(exception_type, ManifestTrustStateError)
+
+
+def test_concrete_manifest_trust_state_errors_are_distinct_classes() -> None:
+    exception_types = {
+        ManifestTrustStateError,
+        ManifestTrustStateReadError,
+        ManifestTrustStateValidationError,
+        ManifestTrustStateExportError,
+        ManifestTrustStateLockError,
+        MissingManifestTrustStateError,
+        ManifestTrustStateRootMismatchError,
+        ManifestTrustStateGenerationConflictError,
+        ManifestTrustStatePathError,
+    }
+
+    assert len(exception_types) == 9
