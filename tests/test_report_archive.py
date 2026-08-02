@@ -37,6 +37,7 @@ from app.exceptions import (
     ReportArchiveReadError,
     ReportArchiveSizeLimitError,
     ReportBundleManifestValidationError,
+    SigningKeyManifestDigestMismatchError,
     UnexpectedReportArchiveMemberError,
     UnsafeReportArchiveMemberError,
 )
@@ -54,21 +55,37 @@ from app.report_archive import (
     export_authenticated_report_archive,
     export_report_archive,
     export_signed_authenticated_report_archive,
+    export_signed_authenticated_report_archive_with_manifest,
     validate_archive_member_name,
     verify_authenticated_report_archive,
     verify_report_archive,
     verify_signed_authenticated_report_archive,
+    verify_signed_authenticated_report_archive_with_manifest,
 )
 from app.report_authenticity import HMAC_ALGORITHM, HMAC_PROTOCOL_VERSION
 from app.report_bundle import manifest_path_for
 from app.report_export import export_json_report_bundle
 from app.report_integrity import checksum_path_for, is_valid_sha256_digest
+from app.root_signature_trust import (
+    RootSigningPrivateKey,
+    TrustedRootSigningPublicKey,
+)
+from app.root_signature_trust import (
+    fingerprint_public_key as root_fingerprint_public_key,
+)
 from app.signature_trust import (
     ArchiveSignatureTrustStore,
     ArchiveSigningPrivateKey,
     SignatureKeyStatus,
     TrustedArchiveSigningPublicKey,
     fingerprint_public_key,
+)
+from app.signing_key_manifest import (
+    VerifiedSigningKeyManifest,
+    build_signing_key_manifest,
+    sign_signing_key_manifest,
+    signing_key_manifest_signature_path_for,
+    verify_signing_key_manifest,
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "audit_report_v1.json"
@@ -831,3 +848,106 @@ def test_signed_archive_signature_export_failure_keeps_zip_and_bundle(
     assert checksum_path_for(report_path).exists()
     assert archive_authentication_path_for(archive_path).exists()
     assert archive_path.exists()
+
+
+def root_pair_for_manifest() -> tuple[RootSigningPrivateKey, TrustedRootSigningPublicKey]:
+    secret = signature_private_bytes()
+    public = signature_public_bytes(secret)
+    return (
+        RootSigningPrivateKey("root-key", secret, public, root_fingerprint_public_key(public)),
+        TrustedRootSigningPublicKey("root-key", public, root_fingerprint_public_key(public)),
+    )
+
+
+def verified_manifest_for_archive(
+    tmp_path: Path,
+    signing_key: ArchiveSigningPrivateKey,
+) -> tuple[VerifiedSigningKeyManifest, Path, TrustedRootSigningPublicKey]:
+    root_private, root_public = root_pair_for_manifest()
+    manifest = build_signing_key_manifest(
+        generation=1,
+        issued_at=AUTHENTICATED_AT,
+        valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+        valid_until=datetime(2030, 1, 1, tzinfo=UTC),
+        root_public_key=root_public,
+        keys=signature_store(signing_key).keys,
+    )
+    manifest_path = tmp_path / "signing-keys.json"
+    manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
+    signature = sign_signing_key_manifest(
+        manifest=manifest,
+        root_private_key=root_private,
+        signed_at=AUTHENTICATED_AT,
+        filename=manifest_path.name,
+    )
+    signing_key_manifest_signature_path_for(manifest_path).write_text(
+        signature.model_dump_json(),
+        encoding="utf-8",
+    )
+    return (
+        verify_signing_key_manifest(
+            manifest_path=manifest_path,
+            root_public_key=root_public,
+            verification_time=VERIFICATION_TIME,
+        ),
+        manifest_path,
+        root_public,
+    )
+
+
+def test_export_signed_authenticated_report_archive_with_manifest_uses_verified_manifest(
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+    verified_manifest, _manifest_path, _root_public = verified_manifest_for_archive(tmp_path, signing_key)
+
+    archive, archive_authentication, signature = export_signed_authenticated_report_archive_with_manifest(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        verified_manifest=verified_manifest,
+        signed_at=AUTHENTICATED_AT,
+    )
+
+    assert isinstance(archive, ReportArchiveExportResult)
+    assert archive_authentication.key_id == "key-1"
+    assert signature.key_id == verified_manifest.result.active_key_id
+    assert archive_signature_path_for(archive_path).exists()
+
+
+def test_verify_signed_authenticated_report_archive_with_manifest_blocks_before_signature(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+    verified_manifest, manifest_path, root_public = verified_manifest_for_archive(tmp_path, signing_key)
+    export_signed_authenticated_report_archive_with_manifest(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        verified_manifest=verified_manifest,
+        signed_at=AUTHENTICATED_AT,
+    )
+    manifest_path.write_text(manifest_path.read_text(encoding="utf-8").replace('"generation":1', '"generation":2'), encoding="utf-8")
+
+    def fail_signature(*args: object, **kwargs: object) -> None:
+        raise AssertionError("archive signature verification must not run")
+
+    monkeypatch.setattr("app.report_archive.verify_signed_authenticated_report_archive", fail_signature)
+
+    with pytest.raises(SigningKeyManifestDigestMismatchError):
+        verify_signed_authenticated_report_archive_with_manifest(
+            archive_path=archive_path,
+            trust_store=trust_store(),
+            manifest_path=manifest_path,
+            root_public_key=root_public,
+            verification_time=VERIFICATION_TIME,
+        )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -41,10 +42,26 @@ from app.report_authenticity import (
 )
 from app.report_bundle import manifest_path_for
 from app.report_integrity import checksum_path_for, verify_report_integrity
+from app.root_signature_trust import (
+    ROOT_ED25519_KEY_ID_ENV_NAME,
+    ROOT_ED25519_PRIVATE_KEY_ENV_NAME,
+    ROOT_ED25519_PUBLIC_KEY_ENV_NAME,
+    load_root_signing_private_key,
+    load_trusted_root_public_key,
+)
 from app.signature_trust import (
     ED25519_PRIVATE_KEY_ENV_NAME,
     ED25519_PUBLIC_TRUST_STORE_ENV_NAME,
     ED25519_SIGNING_KEY_ID_ENV_NAME,
+    load_archive_signature_trust_store,
+)
+from app.signing_key_manifest import (
+    SIGNING_KEY_MANIFEST_PATH_ENV_NAME,
+    build_signing_key_manifest,
+    export_signing_key_manifest,
+    export_signing_key_manifest_signature,
+    sign_signing_key_manifest,
+    signing_key_manifest_signature_path_for,
 )
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
@@ -52,6 +69,19 @@ HMAC_SECRET = b"s" * 32
 HMAC_SECRET_B64 = base64.b64encode(HMAC_SECRET).decode("ascii")
 HMAC_KEY_ID = "key-1"
 SIGNATURE_KEY_ID = "sig-key-1"
+ROOT_KEY_ID = "root-key-1"
+_ROOT_PRIVATE = Ed25519PrivateKey.generate()
+ROOT_PRIVATE_KEY_BYTES = _ROOT_PRIVATE.private_bytes(
+    encoding=serialization.Encoding.Raw,
+    format=serialization.PrivateFormat.Raw,
+    encryption_algorithm=serialization.NoEncryption(),
+)
+ROOT_PUBLIC_KEY_BYTES = _ROOT_PRIVATE.public_key().public_bytes(
+    encoding=serialization.Encoding.Raw,
+    format=serialization.PublicFormat.Raw,
+)
+ROOT_PRIVATE_KEY_B64 = base64.b64encode(ROOT_PRIVATE_KEY_BYTES).decode("ascii")
+ROOT_PUBLIC_KEY_B64 = base64.b64encode(ROOT_PUBLIC_KEY_BYTES).decode("ascii")
 _SIGNATURE_PRIVATE = Ed25519PrivateKey.generate()
 SIGNATURE_PRIVATE_KEY_BYTES = _SIGNATURE_PRIVATE.private_bytes(
     encoding=serialization.Encoding.Raw,
@@ -208,13 +238,53 @@ def signature_trust_store_json(
     )
 
 
+def configure_root_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ROOT_ED25519_PRIVATE_KEY_ENV_NAME, ROOT_PRIVATE_KEY_B64)
+    monkeypatch.setenv(ROOT_ED25519_PUBLIC_KEY_ENV_NAME, ROOT_PUBLIC_KEY_B64)
+    monkeypatch.setenv(ROOT_ED25519_KEY_ID_ENV_NAME, ROOT_KEY_ID)
+
+
 def configure_signature_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    configure_root_key(monkeypatch)
     monkeypatch.setenv(ED25519_PRIVATE_KEY_ENV_NAME, SIGNATURE_PRIVATE_KEY_B64)
     monkeypatch.setenv(ED25519_SIGNING_KEY_ID_ENV_NAME, SIGNATURE_KEY_ID)
     monkeypatch.setenv(
         ED25519_PUBLIC_TRUST_STORE_ENV_NAME,
         signature_trust_store_json(),
     )
+
+
+def write_signing_key_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    generation: int = 1,
+) -> Path:
+    manifest_path = tmp_path / "signing-keys.json"
+    root_private_key = load_root_signing_private_key(environ=os.environ)
+    root_public_key = load_trusted_root_public_key(environ=os.environ)
+    signature_store = load_archive_signature_trust_store(environ=os.environ)
+    manifest = build_signing_key_manifest(
+        generation=generation,
+        issued_at=AUTHENTICATED_AT,
+        valid_from=datetime.fromisoformat(VALID_FROM),
+        valid_until=datetime(2030, 1, 1, tzinfo=UTC),
+        root_public_key=root_public_key,
+        keys=signature_store.keys,
+    )
+    signature = sign_signing_key_manifest(
+        manifest=manifest,
+        root_private_key=root_private_key,
+        signed_at=AUTHENTICATED_AT,
+        filename=manifest_path.name,
+    )
+    export_signing_key_manifest(path=manifest_path, manifest=manifest)
+    export_signing_key_manifest_signature(
+        path=signing_key_manifest_signature_path_for(manifest_path),
+        signature=signature,
+    )
+    monkeypatch.setenv(SIGNING_KEY_MANIFEST_PATH_ENV_NAME, str(manifest_path))
+    return manifest_path
 
 
 def configure_authentication_keyring(
@@ -264,6 +334,12 @@ def configure_log(
     tmp_path: Path,
     *events: dict[str, object],
 ) -> Path:
+    if (
+        ED25519_PUBLIC_TRUST_STORE_ENV_NAME in os.environ
+        and ROOT_ED25519_PUBLIC_KEY_ENV_NAME in os.environ
+        and SIGNING_KEY_MANIFEST_PATH_ENV_NAME not in os.environ
+    ):
+        write_signing_key_manifest(monkeypatch, tmp_path)
     path = tmp_path / "audit.jsonl"
     write_jsonl(path, *events)
     monkeypatch.setattr(script, "AUDIT_LOG_PATH", path)
@@ -2588,7 +2664,7 @@ def test_archive_export_failure_keeps_bundle_files(
         )
         raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report_signed_archive", fail_archive)
+    monkeypatch.setattr(script, "export_json_report_signed_archive_with_manifest", fail_archive)
 
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 5
     output = capsys.readouterr().out
@@ -2720,6 +2796,7 @@ def test_verify_archive_failure_header_and_secret_omission(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     configure_authentication_key(monkeypatch)
+    write_signing_key_manifest(monkeypatch, tmp_path)
     archive_path = tmp_path / "audit-report.bundle.zip"
     archive_path.write_bytes(b"PRIVATE-ARCHIVE-ERROR")
 
@@ -2811,6 +2888,7 @@ def test_archive_export_creates_signature_sidecar(
 ) -> None:
     configure_log(monkeypatch, tmp_path, success_event())
     configure_authentication_key(monkeypatch)
+    write_signing_key_manifest(monkeypatch, tmp_path)
     output_path = tmp_path / "report.json"
 
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 0
@@ -2832,12 +2910,15 @@ def test_verify_archive_signature_success_uses_public_trust_only(
 ) -> None:
     configure_log(monkeypatch, tmp_path, success_event())
     configure_authentication_key(monkeypatch)
+    write_signing_key_manifest(monkeypatch, tmp_path)
     output_path = tmp_path / "report.json"
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 0
     capsys.readouterr()
     archive_path = archive_path_for(output_path)
     monkeypatch.delenv(ED25519_PRIVATE_KEY_ENV_NAME)
     monkeypatch.delenv(ED25519_SIGNING_KEY_ID_ENV_NAME)
+    monkeypatch.delenv(ED25519_PUBLIC_TRUST_STORE_ENV_NAME)
+    monkeypatch.delenv(ROOT_ED25519_PRIVATE_KEY_ENV_NAME)
     monkeypatch.delenv(AUTHENTICATION_TRUST_STORE_ENV_NAME, raising=False)
     monkeypatch.delenv(HMAC_KEY_ENV_NAME, raising=False)
     monkeypatch.delenv(HMAC_KEY_ID_ENV_NAME, raising=False)
@@ -2857,6 +2938,7 @@ def test_verify_archive_signature_tamper_returns_five(
 ) -> None:
     configure_log(monkeypatch, tmp_path, success_event())
     configure_authentication_key(monkeypatch)
+    write_signing_key_manifest(monkeypatch, tmp_path)
     output_path = tmp_path / "report.json"
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 0
     capsys.readouterr()
@@ -2878,6 +2960,7 @@ def test_full_archive_verify_requires_signature_first(
 ) -> None:
     configure_log(monkeypatch, tmp_path, success_event())
     configure_authentication_key(monkeypatch)
+    write_signing_key_manifest(monkeypatch, tmp_path)
     output_path = tmp_path / "report.json"
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 0
     capsys.readouterr()
@@ -2888,3 +2971,97 @@ def test_full_archive_verify_requires_signature_first(
     output = capsys.readouterr().out
 
     assert "[ERROR] Audit report archive verification failed" in output
+
+
+def test_create_signing_key_manifest_mode_writes_manifest_and_signature(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_signature_key(monkeypatch)
+    manifest_path = tmp_path / "created-signing-keys.json"
+
+    assert script.main([
+        "--create-signing-key-manifest",
+        str(manifest_path),
+        "--manifest-generation",
+        "3",
+        "--manifest-valid-from",
+        "2026-08-01T00:00:00+00:00",
+        "--manifest-valid-until",
+        "2030-01-01T00:00:00+00:00",
+    ]) == 0
+    output = capsys.readouterr().out
+
+    assert manifest_path.is_file()
+    assert signing_key_manifest_signature_path_for(manifest_path).is_file()
+    assert "Archive signing key manifest created." in output
+    assert "Generation: 3" in output
+    assert ROOT_PRIVATE_KEY_B64 not in output
+    assert SIGNATURE_PUBLIC_KEY_B64 not in output
+
+
+def test_verify_signing_key_manifest_mode_uses_root_public_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_signature_key(monkeypatch)
+    manifest_path = write_signing_key_manifest(monkeypatch, tmp_path, generation=2)
+    monkeypatch.delenv(ROOT_ED25519_PRIVATE_KEY_ENV_NAME)
+    monkeypatch.delenv(ED25519_PRIVATE_KEY_ENV_NAME)
+
+    assert script.main(["--verify-signing-key-manifest", str(manifest_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Archive signing key manifest verified." in output
+    assert "Generation: 2" in output
+    assert ROOT_PRIVATE_KEY_B64 not in output
+    assert SIGNATURE_PRIVATE_KEY_B64 not in output
+
+
+def test_archive_signature_verify_has_no_raw_trust_store_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+    configure_authentication_key(monkeypatch)
+    write_signing_key_manifest(monkeypatch, tmp_path)
+    output_path = tmp_path / "report.json"
+    assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 0
+    capsys.readouterr()
+    archive_path = archive_path_for(output_path)
+    monkeypatch.delenv(ED25519_PUBLIC_TRUST_STORE_ENV_NAME)
+
+    assert script.main(["--verify-archive-signature", str(archive_path)]) == 0
+    output = capsys.readouterr().out
+
+    assert "Audit report archive signature verified." in output
+    assert SIGNATURE_PUBLIC_KEY_B64 not in output
+
+
+def test_manifest_failure_blocks_archive_signature_verify(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+    configure_authentication_key(monkeypatch)
+    manifest_path = write_signing_key_manifest(monkeypatch, tmp_path)
+    output_path = tmp_path / "report.json"
+    assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 0
+    capsys.readouterr()
+    manifest_path.write_text(manifest_path.read_text(encoding="utf-8").replace('"generation": 1', '"generation": 2'), encoding="utf-8")
+
+    def fail_archive_signature(*args: object, **kwargs: object) -> None:
+        raise AssertionError("archive signature verification must not run")
+
+    monkeypatch.setattr(script, "verify_archive_signature", fail_archive_signature)
+
+    assert script.main(["--verify-archive-signature", str(archive_path_for(output_path))]) == 5
+    output = capsys.readouterr().out
+
+    assert "[ERROR] Audit report archive signature verification failed" in output
+    assert "Action: abort" in output
+    assert SIGNATURE_PUBLIC_KEY_B64 not in output

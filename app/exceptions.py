@@ -423,3 +423,75 @@ class ArchiveSignatureVerificationError(ArchiveSignatureError):
 
 class ArchiveSignatureExportError(ArchiveSignatureError):
     """Raised when an archive signature sidecar cannot be written safely."""
+
+
+class RootSignatureTrustError(AgenticAILabError):
+    """Base exception for archive signing root key trust errors."""
+
+
+class MissingRootSigningPrivateKeyError(RootSignatureTrustError):
+    """Raised when the root signing private key is missing."""
+
+
+class InvalidRootSigningPrivateKeyError(RootSignatureTrustError):
+    """Raised when the root signing private key is invalid."""
+
+
+class MissingRootSigningPublicKeyError(RootSignatureTrustError):
+    """Raised when the trusted root public key is missing."""
+
+
+class InvalidRootSigningPublicKeyError(RootSignatureTrustError):
+    """Raised when the trusted root public key is invalid."""
+
+
+class RootSigningKeyIdError(RootSignatureTrustError):
+    """Raised when a root signing key ID is invalid."""
+
+
+class RootSigningKeyMismatchError(RootSignatureTrustError):
+    """Raised when root private and public keys do not match."""
+
+
+class SigningKeyManifestError(AgenticAILabError):
+    """Base exception for archive signing key manifest errors."""
+
+
+class SigningKeyManifestReadError(SigningKeyManifestError):
+    """Raised when a signing key manifest cannot be read."""
+
+
+class SigningKeyManifestValidationError(SigningKeyManifestError):
+    """Raised when a signing key manifest contract is invalid."""
+
+
+class SigningKeyManifestExportError(SigningKeyManifestError):
+    """Raised when a signing key manifest cannot be written safely."""
+
+
+class SigningKeyManifestSignatureVerificationError(SigningKeyManifestError):
+    """Raised when a signing key manifest root signature cannot be verified."""
+
+
+class SigningKeyManifestDigestMismatchError(SigningKeyManifestError):
+    """Raised when a signing key manifest digest does not match."""
+
+
+class SigningKeyManifestMetadataMismatchError(SigningKeyManifestError):
+    """Raised when signing key manifest metadata is inconsistent."""
+
+
+class SigningKeyManifestRollbackError(SigningKeyManifestError):
+    """Raised when a signing key manifest generation is too old."""
+
+
+class SigningKeyManifestExpiredError(SigningKeyManifestError):
+    """Raised when a signing key manifest is expired."""
+
+
+class SigningKeyManifestNotYetValidError(SigningKeyManifestError):
+    """Raised when a signing key manifest is not yet valid."""
+
+
+class SigningKeyManifestFromFutureError(SigningKeyManifestError):
+    """Raised when a signing key manifest time is too far in the future."""

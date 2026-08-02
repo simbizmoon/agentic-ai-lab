@@ -58,6 +58,7 @@ from app.report_export import (
     export_json_report_archive,
     export_json_report_bundle,
     export_json_report_signed_archive,
+    export_json_report_signed_archive_with_manifest,
     export_json_report_with_authentication,
     export_json_report_with_checksum,
 )
@@ -66,12 +67,26 @@ from app.report_integrity import (
     checksum_path_for,
     verify_report_integrity,
 )
+from app.root_signature_trust import (
+    RootSigningPrivateKey,
+    TrustedRootSigningPublicKey,
+)
+from app.root_signature_trust import (
+    fingerprint_public_key as root_fingerprint_public_key,
+)
 from app.signature_trust import (
     ArchiveSignatureTrustStore,
     ArchiveSigningPrivateKey,
     SignatureKeyStatus,
     TrustedArchiveSigningPublicKey,
     fingerprint_public_key,
+)
+from app.signing_key_manifest import (
+    VerifiedSigningKeyManifest,
+    build_signing_key_manifest,
+    sign_signing_key_manifest,
+    validate_signing_key_manifest_json,
+    verify_signing_key_manifest,
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "audit_report_v1.json"
@@ -1331,3 +1346,89 @@ def test_signed_archive_export_failure_keeps_existing_files(
     assert authentication_path_for(target).exists()
     assert manifest_path_for(target).exists()
     assert archive_path_for(target).exists()
+
+
+def root_pair_for_manifest() -> tuple[RootSigningPrivateKey, TrustedRootSigningPublicKey]:
+    secret = Ed25519PrivateKey.generate().private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public = Ed25519PrivateKey.from_private_bytes(secret).public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return (
+        RootSigningPrivateKey("root-key", secret, public, root_fingerprint_public_key(public)),
+        TrustedRootSigningPublicKey("root-key", public, root_fingerprint_public_key(public)),
+    )
+
+
+def verified_manifest_for_export(
+    tmp_path: Path,
+    signing_key: ArchiveSigningPrivateKey,
+) -> VerifiedSigningKeyManifest:
+    root_private, root_public = root_pair_for_manifest()
+    manifest = build_signing_key_manifest(
+        generation=1,
+        issued_at=AUTHENTICATED_AT,
+        valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+        valid_until=datetime(2030, 1, 1, tzinfo=UTC),
+        root_public_key=root_public,
+        keys=signature_store(signing_key).keys,
+    )
+    manifest_path = tmp_path / "signing-keys.json"
+    signature = sign_signing_key_manifest(
+        manifest=manifest,
+        root_private_key=root_private,
+        signed_at=AUTHENTICATED_AT,
+        filename=manifest_path.name,
+    )
+    manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
+    (tmp_path / "signing-keys.json.sig").write_text(signature.model_dump_json(), encoding="utf-8")
+    return verify_signing_key_manifest(
+        manifest_path=manifest_path,
+        root_public_key=root_public,
+        verification_time=VERIFICATION_TIME,
+    )
+
+
+def test_export_json_report_signed_archive_with_manifest_creates_signature_from_verified_manifest(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "report.json"
+    signing_key = signature_key()
+    verified_manifest = verified_manifest_for_export(tmp_path, signing_key)
+
+    checksum, authentication, manifest, archive, archive_authentication, signature = (
+        export_json_report_signed_archive_with_manifest(
+            path=target,
+            json_text=valid_json_text(),
+            trust_store=AuthenticationTrustStore(
+                keys=(
+                    TrustedAuthenticationKey(
+                        "key-1",
+                        b"s" * 32,
+                        AuthenticationKeyStatus.ACTIVE,
+                        datetime(2026, 8, 1, tzinfo=UTC),
+                    ),
+                )
+            ),
+            authenticated_at=AUTHENTICATED_AT,
+            signing_key=signing_key,
+            verified_manifest=verified_manifest,
+            signed_at=AUTHENTICATED_AT,
+        )
+    )
+
+    archive_path = archive_path_for(target)
+    assert target.exists()
+    assert archive_path.exists()
+    assert archive_signature_path_for(archive_path).exists()
+    assert isinstance(checksum, ReportChecksum)
+    assert isinstance(authentication, ReportAuthentication)
+    assert isinstance(manifest, AuditReportBundleManifest)
+    assert isinstance(archive, ReportArchiveExportResult)
+    assert archive_authentication.key_id == authentication.key_id
+    assert signature.key_id == verified_manifest.result.active_key_id
+    assert validate_signing_key_manifest_json((tmp_path / "signing-keys.json").read_text(encoding="utf-8"))

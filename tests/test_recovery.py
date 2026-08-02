@@ -59,11 +59,15 @@ from app.exceptions import (
     InvalidReportArchiveMemberError,
     InvalidReportArchivePathError,
     InvalidReportExportPathError,
+    InvalidRootSigningPrivateKeyError,
+    InvalidRootSigningPublicKeyError,
     InvalidSchemaVersionError,
     MissingArchiveSigningPrivateKeyError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
     MissingReportArchiveMemberError,
+    MissingRootSigningPrivateKeyError,
+    MissingRootSigningPublicKeyError,
     MissingSchemaMigrationError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
@@ -86,9 +90,23 @@ from app.exceptions import (
     ReportExportWriteError,
     ReportIntegrityMismatchError,
     ReportIntegrityReadError,
+    RootSignatureTrustError,
+    RootSigningKeyIdError,
+    RootSigningKeyMismatchError,
     SchemaCompatibilityError,
     SchemaDowngradeError,
     SchemaMigrationStepError,
+    SigningKeyManifestDigestMismatchError,
+    SigningKeyManifestError,
+    SigningKeyManifestExpiredError,
+    SigningKeyManifestExportError,
+    SigningKeyManifestFromFutureError,
+    SigningKeyManifestMetadataMismatchError,
+    SigningKeyManifestNotYetValidError,
+    SigningKeyManifestReadError,
+    SigningKeyManifestRollbackError,
+    SigningKeyManifestSignatureVerificationError,
+    SigningKeyManifestValidationError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -112,6 +130,8 @@ PRIVATE_TRUST_SECRET = "PRIVATE-TRUST-ERROR"
 PRIVATE_BUNDLE_SECRET = "PRIVATE-BUNDLE-ERROR"
 PRIVATE_ARCHIVE_SECRET = "PRIVATE-ARCHIVE-ERROR"
 PRIVATE_SIGNATURE_SECRET = "PRIVATE-ARCHIVE-SECRET"
+PRIVATE_ROOT_SECRET = "PRIVATE-ROOT-SECRET"
+PRIVATE_MANIFEST_SECRET = "PRIVATE-MANIFEST-SECRET"
 
 
 def make_request() -> httpx.Request:
@@ -148,6 +168,8 @@ def assert_decision(
     assert PRIVATE_BUNDLE_SECRET not in decision.reason
     assert PRIVATE_ARCHIVE_SECRET not in decision.reason
     assert PRIVATE_SIGNATURE_SECRET not in decision.reason
+    assert PRIVATE_ROOT_SECRET not in decision.reason
+    assert PRIVATE_MANIFEST_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -265,6 +287,24 @@ def test_recovery_decision_is_frozen() -> None:
         (ArchiveSignatureArchiveDigestMismatchError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
         (ArchiveSignatureVerificationError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
         (ArchiveSignatureExportError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (RootSignatureTrustError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (MissingRootSigningPrivateKeyError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (InvalidRootSigningPrivateKeyError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (MissingRootSigningPublicKeyError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (InvalidRootSigningPublicKeyError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (RootSigningKeyIdError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (RootSigningKeyMismatchError(PRIVATE_ROOT_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestReadError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestValidationError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestExportError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestSignatureVerificationError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestDigestMismatchError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestMetadataMismatchError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestRollbackError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestExpiredError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestNotYetValidError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
+        (SigningKeyManifestFromFutureError(PRIVATE_MANIFEST_SECRET), False, RecoveryAction.ABORT),
         (ReportArchiveError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
         (InvalidReportArchivePathError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
         (ReportArchiveExportError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
@@ -342,3 +382,47 @@ def test_archive_authenticity_errors_are_abort_without_secret(error: BaseExcepti
     assert decision.reason
     assert "PRIVATE-ARCHIVE-SECRET" not in decision.reason
     assert "key-1" not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        MissingRootSigningPrivateKeyError(PRIVATE_ROOT_SECRET),
+        InvalidRootSigningPrivateKeyError(PRIVATE_ROOT_SECRET),
+        MissingRootSigningPublicKeyError(PRIVATE_ROOT_SECRET),
+        InvalidRootSigningPublicKeyError(PRIVATE_ROOT_SECRET),
+        RootSigningKeyIdError(PRIVATE_ROOT_SECRET),
+        RootSigningKeyMismatchError(PRIVATE_ROOT_SECRET),
+    ],
+)
+def test_root_signature_trust_errors_are_abort_without_secret(error: BaseException) -> None:
+    decision = decide_recovery(error)
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert PRIVATE_ROOT_SECRET not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        SigningKeyManifestReadError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestValidationError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestExportError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestSignatureVerificationError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestDigestMismatchError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestMetadataMismatchError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestRollbackError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestExpiredError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestNotYetValidError(PRIVATE_MANIFEST_SECRET),
+        SigningKeyManifestFromFutureError(PRIVATE_MANIFEST_SECRET),
+    ],
+)
+def test_signing_key_manifest_errors_are_abort_without_secret(error: BaseException) -> None:
+    decision = decide_recovery(error)
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert PRIVATE_MANIFEST_SECRET not in decision.reason

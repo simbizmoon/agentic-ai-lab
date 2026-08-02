@@ -33,6 +33,7 @@ from app.signature_trust import (
     RevokedSignatureKeyPolicy,
     SignatureKeyStatus,
     TrustedArchiveSigningPublicKey,
+    build_archive_signature_trust_store,
     ensure_private_key_trusted_for_signing,
     ensure_public_key_trusted_for_verification,
     fingerprint_public_key,
@@ -353,3 +354,14 @@ def test_trust_store_is_frozen() -> None:
     store = ArchiveSignatureTrustStore(keys=())
     with pytest.raises(FrozenInstanceError):
         store.keys = ()
+
+
+def test_build_archive_signature_trust_store_preserves_keys_tuple() -> None:
+    key = private_key()
+    trusted = trusted_key(key)
+
+    store = build_archive_signature_trust_store(keys=(trusted,))
+
+    assert isinstance(store, ArchiveSignatureTrustStore)
+    assert store.keys == (trusted,)
+    assert store.get_key(key.key_id).public_key_bytes == key.public_key_bytes

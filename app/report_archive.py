@@ -73,11 +73,16 @@ from app.report_integrity import (
     is_valid_sha256_digest,
     parse_report_checksum,
 )
+from app.root_signature_trust import TrustedRootSigningPublicKey
 from app.signature_trust import (
     ArchiveSignatureTrustStore,
     ArchiveSigningPrivateKey,
     RevokedSignatureKeyPolicy,
     ensure_private_key_trusted_for_signing,
+)
+from app.signing_key_manifest import (
+    VerifiedSigningKeyManifest,
+    verify_signing_key_manifest,
 )
 
 ZIP_MEMBER_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
@@ -552,6 +557,66 @@ def verify_signed_authenticated_report_archive(
         report_authenticated_at=archive.report_authenticated_at,
         report_filename=archive.report_filename,
     )
+
+
+def export_signed_authenticated_report_archive_with_manifest(
+    *,
+    report_path: Path,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    signing_key: ArchiveSigningPrivateKey,
+    verified_manifest: VerifiedSigningKeyManifest,
+    signed_at: datetime,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+) -> tuple[ReportArchiveExportResult, ArchiveAuthentication, ArchiveSignaturePayload]:
+    if not isinstance(verified_manifest, VerifiedSigningKeyManifest):
+        raise TypeError("verified_manifest must be a VerifiedSigningKeyManifest")
+    return export_signed_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+        signing_key=signing_key,
+        signature_trust_store=verified_manifest.trust_store,
+        signed_at=signed_at,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+
+
+def verify_signed_authenticated_report_archive_with_manifest(
+    *,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    manifest_path: Path,
+    root_public_key: TrustedRootSigningPublicKey,
+    verification_time: datetime,
+    minimum_generation: int = 1,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    revoked_signature_key_policy: RevokedSignatureKeyPolicy = RevokedSignatureKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+    maximum_signature_clock_skew: timedelta = MAX_SIGNATURE_CLOCK_SKEW,
+) -> tuple[SignedAuthenticatedReportArchiveResult, VerifiedSigningKeyManifest]:
+    verified_manifest = verify_signing_key_manifest(
+        manifest_path=manifest_path,
+        root_public_key=root_public_key,
+        verification_time=verification_time,
+        minimum_generation=minimum_generation,
+        maximum_clock_skew=maximum_signature_clock_skew,
+    )
+    result = verify_signed_authenticated_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store,
+        signature_trust_store=verified_manifest.trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_key_policy,
+        revoked_signature_key_policy=revoked_signature_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+        maximum_signature_clock_skew=maximum_signature_clock_skew,
+    )
+    return result, verified_manifest
 
 
 def _validate_archive_output_path(path: Path) -> None:

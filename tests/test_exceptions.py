@@ -54,11 +54,15 @@ from app.exceptions import (
     InvalidReportArchiveMemberError,
     InvalidReportArchivePathError,
     InvalidReportExportPathError,
+    InvalidRootSigningPrivateKeyError,
+    InvalidRootSigningPublicKeyError,
     InvalidSchemaVersionError,
     MissingArchiveSigningPrivateKeyError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
     MissingReportArchiveMemberError,
+    MissingRootSigningPrivateKeyError,
+    MissingRootSigningPublicKeyError,
     MissingSchemaMigrationError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
@@ -84,10 +88,24 @@ from app.exceptions import (
     ReportIntegrityError,
     ReportIntegrityMismatchError,
     ReportIntegrityReadError,
+    RootSignatureTrustError,
+    RootSigningKeyIdError,
+    RootSigningKeyMismatchError,
     SchemaCompatibilityError,
     SchemaDowngradeError,
     SchemaMigrationError,
     SchemaMigrationStepError,
+    SigningKeyManifestDigestMismatchError,
+    SigningKeyManifestError,
+    SigningKeyManifestExpiredError,
+    SigningKeyManifestExportError,
+    SigningKeyManifestFromFutureError,
+    SigningKeyManifestMetadataMismatchError,
+    SigningKeyManifestNotYetValidError,
+    SigningKeyManifestReadError,
+    SigningKeyManifestRollbackError,
+    SigningKeyManifestSignatureVerificationError,
+    SigningKeyManifestValidationError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
@@ -556,3 +574,71 @@ def test_concrete_archive_signature_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 17
+
+
+def test_root_signature_trust_error_inherits_from_project_error() -> None:
+    assert issubclass(RootSignatureTrustError, AgenticAILabError)
+
+
+def test_concrete_root_signature_trust_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        MissingRootSigningPrivateKeyError,
+        InvalidRootSigningPrivateKeyError,
+        MissingRootSigningPublicKeyError,
+        InvalidRootSigningPublicKeyError,
+        RootSigningKeyIdError,
+        RootSigningKeyMismatchError,
+    ):
+        assert issubclass(exception_type, RootSignatureTrustError)
+
+
+def test_concrete_root_signature_trust_errors_are_distinct_classes() -> None:
+    exception_types = {
+        RootSignatureTrustError,
+        MissingRootSigningPrivateKeyError,
+        InvalidRootSigningPrivateKeyError,
+        MissingRootSigningPublicKeyError,
+        InvalidRootSigningPublicKeyError,
+        RootSigningKeyIdError,
+        RootSigningKeyMismatchError,
+    }
+
+    assert len(exception_types) == 7
+
+
+def test_signing_key_manifest_error_inherits_from_project_error() -> None:
+    assert issubclass(SigningKeyManifestError, AgenticAILabError)
+
+
+def test_concrete_signing_key_manifest_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        SigningKeyManifestReadError,
+        SigningKeyManifestValidationError,
+        SigningKeyManifestExportError,
+        SigningKeyManifestSignatureVerificationError,
+        SigningKeyManifestDigestMismatchError,
+        SigningKeyManifestMetadataMismatchError,
+        SigningKeyManifestRollbackError,
+        SigningKeyManifestExpiredError,
+        SigningKeyManifestNotYetValidError,
+        SigningKeyManifestFromFutureError,
+    ):
+        assert issubclass(exception_type, SigningKeyManifestError)
+
+
+def test_concrete_signing_key_manifest_errors_are_distinct_classes() -> None:
+    exception_types = {
+        SigningKeyManifestError,
+        SigningKeyManifestReadError,
+        SigningKeyManifestValidationError,
+        SigningKeyManifestExportError,
+        SigningKeyManifestSignatureVerificationError,
+        SigningKeyManifestDigestMismatchError,
+        SigningKeyManifestMetadataMismatchError,
+        SigningKeyManifestRollbackError,
+        SigningKeyManifestExpiredError,
+        SigningKeyManifestNotYetValidError,
+        SigningKeyManifestFromFutureError,
+    }
+
+    assert len(exception_types) == 11

@@ -150,6 +150,13 @@ class ArchiveSignatureTrustStore:
         raise UnknownArchiveSigningKeyError(_UNKNOWN_KEY_MESSAGE)
 
 
+def build_archive_signature_trust_store(
+    *,
+    keys: tuple[TrustedArchiveSigningPublicKey, ...],
+) -> ArchiveSignatureTrustStore:
+    return ArchiveSignatureTrustStore(keys=keys)
+
+
 def fingerprint_public_key(public_key_bytes: bytes) -> str:
     if not isinstance(public_key_bytes, bytes):
         raise TypeError("public_key_bytes must be bytes")

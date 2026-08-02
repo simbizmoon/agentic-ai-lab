@@ -43,12 +43,16 @@ from app.exceptions import (
     ReportBundleError,
     ReportExportError,
     ReportIntegrityError,
+    RootSignatureTrustError,
+    SigningKeyManifestError,
+    SigningKeyManifestReadError,
+    SigningKeyManifestValidationError,
 )
 from app.recovery import decide_recovery
 from app.report_archive import (
     archive_path_for,
     verify_authenticated_report_archive,
-    verify_signed_authenticated_report_archive,
+    verify_signed_authenticated_report_archive_with_manifest,
 )
 from app.report_authenticity import (
     authentication_path_for,
@@ -58,17 +62,32 @@ from app.report_bundle import manifest_path_for, verify_report_bundle
 from app.report_export import (
     export_json_report_archive,
     export_json_report_bundle,
-    export_json_report_signed_archive,
+    export_json_report_signed_archive_with_manifest,
     export_json_report_with_checksum,
 )
 from app.report_integrity import (
     checksum_path_for,
     verify_report_integrity,
 )
+from app.root_signature_trust import (
+    ensure_root_key_pair_matches,
+    load_root_signing_private_key,
+    load_trusted_root_public_key,
+)
 from app.signature_trust import (
     RevokedSignatureKeyPolicy,
     load_archive_signature_trust_store,
     load_archive_signing_private_key,
+)
+from app.signing_key_manifest import (
+    MIN_SIGNING_KEY_MANIFEST_GENERATION_ENV_NAME,
+    SIGNING_KEY_MANIFEST_PATH_ENV_NAME,
+    build_signing_key_manifest,
+    export_signing_key_manifest,
+    export_signing_key_manifest_signature,
+    sign_signing_key_manifest,
+    signing_key_manifest_signature_path_for,
+    verify_signing_key_manifest,
 )
 
 _MONKEYPATCH_COMPATIBILITY_EXPORTS = (
@@ -122,6 +141,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--verify-archive", type=Path)
     parser.add_argument("--verify-archive-authenticity", type=Path)
     parser.add_argument("--verify-archive-signature", type=Path)
+    parser.add_argument("--create-signing-key-manifest", type=Path)
+    parser.add_argument("--verify-signing-key-manifest", type=Path)
+    parser.add_argument("--signing-key-manifest", type=Path)
+    parser.add_argument("--manifest-generation", type=int)
+    parser.add_argument("--manifest-valid-from", type=parse_cli_datetime)
+    parser.add_argument("--manifest-valid-until", type=parse_cli_datetime)
+    parser.add_argument("--minimum-manifest-generation", type=int)
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -139,6 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     _validate_mode_args(parser, args)
+
+    if args.create_signing_key_manifest is not None:
+        return _run_create_signing_key_manifest(args, parser)
+    if args.verify_signing_key_manifest is not None:
+        return _run_verify_signing_key_manifest(args, parser)
 
     if args.verify is not None:
         return _run_verify(args.verify)
@@ -160,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.verify_archive_signature is not None:
         return _run_verify_archive_signature(
             args.verify_archive_signature,
+            manifest_path=_resolve_signing_key_manifest_path(args, parser),
+            minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
                 args.revoked_signature_key_policy
             ),
@@ -167,6 +200,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.verify_archive is not None:
         return _run_verify_archive(
             args.verify_archive,
+            manifest_path=_resolve_signing_key_manifest_path(args, parser),
+            minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
                 args.revoked_signature_key_policy
@@ -183,6 +218,8 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.verify_bundle,
         args.verify_archive_authenticity,
         args.verify_archive_signature,
+        args.verify_signing_key_manifest,
+        args.create_signing_key_manifest,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
@@ -192,39 +229,76 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     signature_policy_used = (
         args.revoked_signature_key_policy != RevokedSignatureKeyPolicy.REJECT.value
     )
+    if args.create_signing_key_manifest is not None:
+        if args.output is not None or args.authenticate or args.archive:
+            parser.error("--create-signing-key-manifest cannot be used with report export options")
+        if any(value is not None for value in (args.verify, args.verify_authenticity, args.verify_bundle, args.verify_archive_authenticity, args.verify_archive_signature, args.verify_archive, args.since, args.until, args.model, args.signing_key_manifest)):
+            parser.error("--create-signing-key-manifest cannot be combined with report or verify options")
+        if args.status != AuditStatusFilter.ALL.value or args.format == AuditReportFormat.JSON.value:
+            parser.error("--create-signing-key-manifest cannot be used with report filters")
+        if args.minimum_manifest_generation is not None:
+            parser.error("--create-signing-key-manifest cannot be used with --minimum-manifest-generation")
+        return
+    if args.verify_signing_key_manifest is not None:
+        _validate_common_verify_args(parser, args, "--verify-signing-key-manifest")
+        if args.signing_key_manifest is not None:
+            parser.error("--verify-signing-key-manifest cannot be used with --signing-key-manifest")
+        _validate_manifest_creation_options_absent(parser, args, "--verify-signing-key-manifest")
+        if hmac_policy_used or signature_policy_used:
+            parser.error("--verify-signing-key-manifest cannot be used with revoked key policies")
+        return
+
     if args.verify is not None:
         _validate_common_verify_args(parser, args, "--verify")
+        _validate_manifest_creation_options_absent(parser, args, "--verify")
+        if args.signing_key_manifest is not None or args.minimum_manifest_generation is not None:
+            parser.error("--verify cannot be used with signing key manifest options")
         if hmac_policy_used:
             parser.error("--verify cannot be used with --revoked-key-policy")
         if signature_policy_used:
             parser.error("--verify cannot be used with --revoked-signature-key-policy")
     elif args.verify_authenticity is not None:
         _validate_common_verify_args(parser, args, "--verify-authenticity")
+        _validate_manifest_creation_options_absent(parser, args, "--verify-authenticity")
+        if args.signing_key_manifest is not None or args.minimum_manifest_generation is not None:
+            parser.error("--verify-authenticity cannot be used with signing key manifest options")
         if signature_policy_used:
             parser.error(
                 "--verify-authenticity cannot be used with --revoked-signature-key-policy"
             )
     elif args.verify_bundle is not None:
         _validate_common_verify_args(parser, args, "--verify-bundle")
+        _validate_manifest_creation_options_absent(parser, args, "--verify-bundle")
+        if args.signing_key_manifest is not None or args.minimum_manifest_generation is not None:
+            parser.error("--verify-bundle cannot be used with signing key manifest options")
         if signature_policy_used:
             parser.error("--verify-bundle cannot be used with --revoked-signature-key-policy")
     elif args.verify_archive_authenticity is not None:
         _validate_common_verify_args(parser, args, "--verify-archive-authenticity")
+        _validate_manifest_creation_options_absent(parser, args, "--verify-archive-authenticity")
+        if args.signing_key_manifest is not None or args.minimum_manifest_generation is not None:
+            parser.error("--verify-archive-authenticity cannot be used with signing key manifest options")
         if signature_policy_used:
             parser.error(
                 "--verify-archive-authenticity cannot be used with --revoked-signature-key-policy"
             )
     elif args.verify_archive_signature is not None:
         _validate_common_verify_args(parser, args, "--verify-archive-signature")
+        _validate_manifest_creation_options_absent(parser, args, "--verify-archive-signature")
         if hmac_policy_used:
             parser.error("--verify-archive-signature cannot be used with --revoked-key-policy")
     elif args.verify_archive is not None:
         _validate_common_verify_args(parser, args, "--verify-archive")
+        _validate_manifest_creation_options_absent(parser, args, "--verify-archive")
     elif hmac_policy_used:
         parser.error("--revoked-key-policy can only be used with verify modes")
     elif signature_policy_used:
         parser.error("--revoked-signature-key-policy can only be used with signature verify modes")
 
+    if not args.archive and (args.signing_key_manifest is not None or args.minimum_manifest_generation is not None):
+        parser.error("signing key manifest options require --archive")
+    if args.manifest_generation is not None or args.manifest_valid_from is not None or args.manifest_valid_until is not None:
+        parser.error("manifest creation options require --create-signing-key-manifest")
     if args.archive and args.output is None:
         parser.error("--archive requires --output")
     if args.archive and not args.authenticate:
@@ -233,6 +307,19 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         parser.error("--authenticate requires --output")
     if args.output is not None and args.format != AuditReportFormat.JSON.value:
         parser.error("--output requires --format json")
+
+
+def _validate_manifest_creation_options_absent(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+    option_name: str,
+) -> None:
+    if args.manifest_generation is not None:
+        parser.error(f"{option_name} cannot be used with --manifest-generation")
+    if args.manifest_valid_from is not None:
+        parser.error(f"{option_name} cannot be used with --manifest-valid-from")
+    if args.manifest_valid_until is not None:
+        parser.error(f"{option_name} cannot be used with --manifest-valid-until")
 
 
 def _validate_common_verify_args(
@@ -298,6 +385,8 @@ def _run_report_generation(args: argparse.Namespace, parser: argparse.ArgumentPa
         ReportBundleError,
         ReportExportError,
         ReportIntegrityError,
+        RootSignatureTrustError,
+        SigningKeyManifestError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report generation failed", error=error)
         return 5
@@ -308,15 +397,21 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
     trust_store = load_authentication_trust_store(environ=os.environ)
     if args.archive:
         signing_key = load_archive_signing_private_key(environ=os.environ)
-        signature_trust_store = load_archive_signature_trust_store(environ=os.environ)
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        verified_manifest = verify_signing_key_manifest(
+            manifest_path=_resolve_signing_key_manifest_path(args, None),
+            root_public_key=root_public_key,
+            verification_time=exported_at,
+            minimum_generation=_resolve_minimum_manifest_generation(args, None),
+        )
         checksum, authentication, manifest, archive, archive_authentication, signature = (
-            export_json_report_signed_archive(
+            export_json_report_signed_archive_with_manifest(
                 path=args.output,
                 json_text=rendered_report,
                 trust_store=trust_store,
                 authenticated_at=exported_at,
                 signing_key=signing_key,
-                signature_trust_store=signature_trust_store,
+                verified_manifest=verified_manifest,
                 signed_at=exported_at,
             )
         )
@@ -364,6 +459,123 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
         print(f"Signature Public Key Fingerprint: {signature.public_key_fingerprint}")
         print(f"Signed At: {signature.signed_at.isoformat()}")
         print(f"Signature Archive SHA-256: {signature.archive_sha256}")
+    return 0
+
+
+def _resolve_signing_key_manifest_path(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None,
+) -> Path:
+    if args.signing_key_manifest is not None:
+        return args.signing_key_manifest
+    env_value = os.environ.get(SIGNING_KEY_MANIFEST_PATH_ENV_NAME)
+    if env_value:
+        return Path(env_value)
+    if parser is not None:
+        parser.error("--signing-key-manifest is required")
+    raise SigningKeyManifestReadError("Failed to read the archive signing key manifest.")
+
+
+def _resolve_minimum_manifest_generation(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None,
+) -> int:
+    if args.minimum_manifest_generation is not None:
+        value = args.minimum_manifest_generation
+    else:
+        env_value = os.environ.get(MIN_SIGNING_KEY_MANIFEST_GENERATION_ENV_NAME)
+        if env_value is None or env_value == "":
+            return 1
+        try:
+            value = int(env_value)
+        except ValueError:
+            if parser is not None:
+                parser.error("minimum manifest generation must be a positive integer")
+            raise SigningKeyManifestValidationError(
+                "The archive signing key manifest failed validation."
+            )
+    if value < 1:
+        if parser is not None:
+            parser.error("minimum manifest generation must be a positive integer")
+        raise SigningKeyManifestValidationError("The archive signing key manifest failed validation.")
+    return value
+
+
+def _run_create_signing_key_manifest(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    if args.manifest_generation is None:
+        parser.error("--manifest-generation is required")
+    if args.manifest_valid_from is None:
+        parser.error("--manifest-valid-from is required")
+    if args.manifest_valid_until is None:
+        parser.error("--manifest-valid-until is required")
+    try:
+        root_private_key = load_root_signing_private_key(environ=os.environ)
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        ensure_root_key_pair_matches(private_key=root_private_key, public_key=root_public_key)
+        raw_trust_store = load_archive_signature_trust_store(environ=os.environ)
+        created_at = datetime.now(UTC)
+        manifest = build_signing_key_manifest(
+            generation=args.manifest_generation,
+            issued_at=created_at,
+            valid_from=args.manifest_valid_from,
+            valid_until=args.manifest_valid_until,
+            root_public_key=root_public_key,
+            keys=raw_trust_store.keys,
+        )
+        signature = sign_signing_key_manifest(
+            manifest=manifest,
+            root_private_key=root_private_key,
+            signed_at=created_at,
+            filename=args.create_signing_key_manifest.name,
+        )
+        export_signing_key_manifest(path=args.create_signing_key_manifest, manifest=manifest)
+        signature_path = signing_key_manifest_signature_path_for(args.create_signing_key_manifest)
+        export_signing_key_manifest_signature(path=signature_path, signature=signature)
+    except (ArchiveSignatureError, RootSignatureTrustError, SigningKeyManifestError) as error:
+        _print_recovery_error(
+            header="[ERROR] Archive signing key manifest generation failed",
+            error=error,
+        )
+        return 5
+    print("Archive signing key manifest created.")
+    print(f"Manifest: {args.create_signing_key_manifest}")
+    print(f"Signature: {signature_path}")
+    print(f"Manifest Version: {manifest.manifest_version}")
+    print(f"Generation: {manifest.generation}")
+    print(f"Root Key ID: {root_public_key.key_id}")
+    print(f"Active Key ID: {next(key.key_id for key in raw_trust_store.keys if key.status.value == 'active')}")
+    return 0
+
+
+def _run_verify_signing_key_manifest(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        verified = verify_signing_key_manifest(
+            manifest_path=args.verify_signing_key_manifest,
+            root_public_key=root_public_key,
+            verification_time=datetime.now(UTC),
+            minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+        )
+    except (RootSignatureTrustError, SigningKeyManifestError) as error:
+        _print_recovery_error(
+            header="[ERROR] Archive signing key manifest verification failed",
+            error=error,
+        )
+        return 5
+    print("Archive signing key manifest verified.")
+    print(f"Manifest: {args.verify_signing_key_manifest}")
+    print(f"Signature: {signing_key_manifest_signature_path_for(args.verify_signing_key_manifest)}")
+    print(f"Manifest Version: {verified.result.manifest_version}")
+    print(f"Generation: {verified.result.generation}")
+    print(f"Root Key ID: {verified.result.root_key_id}")
+    print(f"Active Key ID: {verified.result.active_key_id}")
+    print(f"Key Count: {verified.result.key_count}")
     return 0
 
 
@@ -467,17 +679,26 @@ def _run_verify_archive_authenticity(
 def _run_verify_archive_signature(
     verify_path: Path,
     *,
+    manifest_path: Path,
+    minimum_generation: int,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
 ) -> int:
     try:
-        signature_trust_store = load_archive_signature_trust_store(environ=os.environ)
+        verification_time = datetime.now(UTC)
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        verified_manifest = verify_signing_key_manifest(
+            manifest_path=manifest_path,
+            root_public_key=root_public_key,
+            verification_time=verification_time,
+            minimum_generation=minimum_generation,
+        )
         result = verify_archive_signature(
             archive_path=verify_path,
-            signature_trust_store=signature_trust_store,
-            verification_time=datetime.now(UTC),
+            signature_trust_store=verified_manifest.trust_store,
+            verification_time=verification_time,
             revoked_key_policy=revoked_signature_key_policy,
         )
-    except ArchiveSignatureError as error:
+    except (ArchiveSignatureError, RootSignatureTrustError, SigningKeyManifestError) as error:
         _print_recovery_error(
             header="[ERROR] Audit report archive signature verification failed",
             error=error,
@@ -499,17 +720,22 @@ def _run_verify_archive_signature(
 def _run_verify_archive(
     verify_path: Path,
     *,
+    manifest_path: Path,
+    minimum_generation: int,
     revoked_key_policy: RevokedKeyPolicy,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
 ) -> int:
     try:
-        signature_trust_store = load_archive_signature_trust_store(environ=os.environ)
+        verification_time = datetime.now(UTC)
         trust_store = load_authentication_trust_store(environ=os.environ)
-        result = verify_signed_authenticated_report_archive(
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        result, verified_manifest = verify_signed_authenticated_report_archive_with_manifest(
             archive_path=verify_path,
             trust_store=trust_store,
-            signature_trust_store=signature_trust_store,
-            verification_time=datetime.now(UTC),
+            manifest_path=manifest_path,
+            root_public_key=root_public_key,
+            verification_time=verification_time,
+            minimum_generation=minimum_generation,
             revoked_key_policy=revoked_key_policy,
             revoked_signature_key_policy=revoked_signature_key_policy,
         )
@@ -521,6 +747,8 @@ def _run_verify_archive(
         ReportAuthenticityError,
         ReportBundleError,
         ReportIntegrityError,
+        RootSignatureTrustError,
+        SigningKeyManifestError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report archive verification failed", error=error)
         return 5
@@ -532,6 +760,7 @@ def _run_verify_archive(
     print(f"Signature Public Key Fingerprint: {result.signature_public_key_fingerprint}")
     print(f"Signed At: {result.signature_signed_at.isoformat()}")
     print(f"Signature Archive SHA-256: {result.signature_archive_sha256}")
+    print(f"Signing Key Manifest Generation: {verified_manifest.result.generation}")
     print(f"Archive Format Version: {result.archive_format_version}")
     print(f"Archive SHA-256: {result.archive_sha256}")
     print(f"Members: {result.member_count}")

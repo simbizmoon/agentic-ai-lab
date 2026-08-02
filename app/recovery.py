@@ -20,8 +20,10 @@ from app.exceptions import (
     ReportBundleError,
     ReportExportError,
     ReportIntegrityError,
+    RootSignatureTrustError,
     SchemaCompatibilityError,
     SchemaMigrationError,
+    SigningKeyManifestError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -202,6 +204,20 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The exported audit report failed an integrity check.",
+        )
+
+    if isinstance(error, SigningKeyManifestError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The archive signing key manifest is invalid, untrusted, or out of date.",
+        )
+
+    if isinstance(error, RootSignatureTrustError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The archive signing root key is not configured safely.",
         )
 
     if isinstance(error, ArchiveSignatureError):
