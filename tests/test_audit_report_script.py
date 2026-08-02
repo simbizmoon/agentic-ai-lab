@@ -3313,7 +3313,7 @@ def test_unrelated_mode_rejects_transparency_checkpoint_reference(
         script.main(["--transparency-checkpoint", str(tmp_path / "checkpoint.json")])
 
     assert exc_info.value.code == 2
-    assert "--transparency-checkpoint can only be used with proof or witness modes" in capsys.readouterr().err
+    assert "--transparency-checkpoint can only be used with proof, witness, split-view, or gossip-bundle modes" in capsys.readouterr().err
 
 
 def test_standalone_verify_checkpoint_still_uses_independent_mode(
@@ -3780,7 +3780,7 @@ def test_unrelated_mode_rejects_witness_options(
         script.main(["--witness-trust-store", str(tmp_path / "witness-trust.json")])
 
     assert exc_info.value.code == 2
-    assert "witness options require a witness-capable mode" in capsys.readouterr().err
+    assert "witness options require a witness-capable or gossip-bundle mode" in capsys.readouterr().err
 
 
 def test_witness_verify_modes_are_mutually_exclusive(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

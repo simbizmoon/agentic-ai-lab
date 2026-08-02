@@ -799,3 +799,46 @@ class SigningKeyManifestNotYetValidError(SigningKeyManifestError):
 
 class SigningKeyManifestFromFutureError(SigningKeyManifestError):
     """Raised when a signing key manifest time is too far in the future."""
+
+class TransparencyGossipBundleError(AgenticAILabError):
+    """Base exception for transparency gossip bundle errors."""
+
+
+class TransparencyGossipBundleConfigurationError(TransparencyGossipBundleError):
+    """Raised when gossip bundle signing configuration is invalid."""
+
+
+class TransparencyGossipBundleSignatureError(TransparencyGossipBundleError):
+    """Raised when a gossip bundle signature is invalid."""
+
+
+class TransparencyGossipBundleStructureError(TransparencyGossipBundleError):
+    """Raised when a gossip bundle ZIP structure is unsafe or invalid."""
+
+
+class TransparencyGossipBundleConflictError(TransparencyGossipBundleError):
+    """Raised when a gossip bundle conflicts with an existing file."""
+
+
+class TransparencyArtifactBindingError(TransparencyGossipBundleError):
+    """Raised when transparency artifact binding is invalid."""
+
+
+class TransparencyOfflineVerificationError(AgenticAILabError):
+    """Raised when offline transparency verification fails."""
+
+
+class TransparencyDecisionReceiptError(AgenticAILabError):
+    """Base exception for transparency trust decision receipt errors."""
+
+
+class TransparencyDecisionReceiptSignatureError(TransparencyDecisionReceiptError):
+    """Raised when a decision receipt signature is invalid."""
+
+
+class TransparencyDecisionReceiptConflictError(TransparencyDecisionReceiptError):
+    """Raised when a decision receipt conflicts with an existing file."""
+
+
+class TransparencyDecisionPolicyError(TransparencyDecisionReceiptError):
+    """Raised when a trust decision receipt does not satisfy policy."""

@@ -54,9 +54,12 @@ from app.exceptions import (
     SigningKeyManifestValidationError,
     TransparencyCheckpointError,
     TransparencyCheckpointStateError,
+    TransparencyDecisionReceiptError,
+    TransparencyGossipBundleError,
     TransparencyLogError,
     TransparencyLogStateError,
     TransparencyMerkleError,
+    TransparencyOfflineVerificationError,
     TransparencySplitViewEvidenceError,
     TransparencyWitnessError,
 )
@@ -144,9 +147,20 @@ from app.transparency_checkpoint_state import (
     apply_verified_checkpoint_to_state,
     load_transparency_checkpoint_state,
 )
+from app.transparency_decision_receipt import (
+    build_trusted_decision_receipt,
+    create_transparency_trust_decision_receipt,
+    load_decision_receipt_trust_store,
+    verify_transparency_trust_decision_receipt,
+)
 from app.transparency_gossip import (
     create_transparency_split_view_evidence,
     verify_transparency_split_view_evidence,
+)
+from app.transparency_gossip_bundle import (
+    create_transparency_gossip_bundle,
+    load_gossip_bundle_signing_trust_store,
+    load_transparency_gossip_bundle,
 )
 from app.transparency_log import (
     TRANSPARENCY_LOG_PATH_ENV_NAME,
@@ -165,6 +179,7 @@ from app.transparency_merkle import (
     load_transparency_consistency_proof,
     load_transparency_inclusion_proof,
 )
+from app.transparency_offline_verifier import verify_transparency_gossip_bundle_offline
 from app.transparency_quorum import verify_transparency_witness_quorum
 from app.transparency_witness import (
     create_transparency_witness_statement,
@@ -283,6 +298,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--create-split-view-evidence", type=Path)
     parser.add_argument("--verify-split-view-evidence", type=Path)
     parser.add_argument("--conflicting-checkpoint", type=Path)
+    parser.add_argument("--create-gossip-bundle", type=Path)
+    parser.add_argument("--verify-gossip-bundle", type=Path)
+    parser.add_argument("--show-gossip-bundle", type=Path)
+    parser.add_argument("--target-artifact", type=Path)
+    parser.add_argument("--artifact-type")
+    parser.add_argument("--inclusion-proof", type=Path)
+    parser.add_argument("--bundle-signing-trust-store", type=Path)
+    parser.add_argument("--decision-receipt", type=Path)
+    parser.add_argument("--create-decision-receipt", type=Path)
+    parser.add_argument("--verify-decision-receipt", type=Path)
+    parser.add_argument("--decision-receipt-trust-store", type=Path)
+    parser.add_argument("--verification-policy-id", default="default")
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -330,6 +357,14 @@ def main(argv: list[str] | None = None) -> int:
         return _run_create_split_view_evidence(args, parser)
     if args.verify_split_view_evidence is not None:
         return _run_verify_split_view_evidence(args, parser)
+    if args.create_gossip_bundle is not None:
+        return _run_create_gossip_bundle(args, parser)
+    if args.verify_gossip_bundle is not None:
+        return _run_verify_gossip_bundle(args, parser)
+    if args.show_gossip_bundle is not None:
+        return _run_show_gossip_bundle(args, parser)
+    if args.verify_decision_receipt is not None:
+        return _run_verify_decision_receipt(args, parser)
     if args.show_transparency_log is not None:
         return _run_show_transparency_log(args.show_transparency_log, args, parser)
     if args.verify_transparency_log is not None:
@@ -440,6 +475,10 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.verify_witness_quorum,
         args.create_split_view_evidence,
         args.verify_split_view_evidence,
+        args.create_gossip_bundle,
+        args.verify_gossip_bundle,
+        args.show_gossip_bundle,
+        args.verify_decision_receipt,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
@@ -618,6 +657,9 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         or args.verify_witness_quorum is not None
         or args.create_split_view_evidence is not None
         or args.verify_split_view_evidence is not None
+        or args.create_gossip_bundle is not None
+        or args.verify_gossip_bundle is not None
+        or args.show_gossip_bundle is not None
     )
     if transparency_options_used and not transparency_capable_mode:
         parser.error("transparency log options require a transparency-capable mode")
@@ -650,6 +692,10 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         or args.verify_archive_signature is not None
         or args.verify_archive is not None
     )
+    gossip_bundle_mode = (
+        args.create_gossip_bundle is not None
+        or args.verify_gossip_bundle is not None
+    )
     if args.transparency_checkpoint is not None and (
         args.create_inclusion_proof is None
         and args.verify_inclusion_proof is None
@@ -658,9 +704,13 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         and args.verify_witness_quorum is None
         and args.create_split_view_evidence is None
         and args.verify_split_view_evidence is None
+        and args.create_gossip_bundle is None
         and not witness_quorum_capable_mode
     ):
-        parser.error("--transparency-checkpoint can only be used with proof or witness modes")
+        parser.error(
+            "--transparency-checkpoint can only be used with "
+            "proof, witness, split-view, or gossip-bundle modes"
+        )
     if args.create_inclusion_proof is not None:
         if args.transparency_checkpoint is None:
             parser.error("--create-inclusion-proof requires --transparency-checkpoint")
@@ -685,11 +735,21 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
 
     if witness_policy_used and not (witness_modes_used or witness_options_used):
         parser.error("--revoked-witness-policy can only be used with witness verify modes")
-    if witness_options_used and not (witness_modes_used or witness_quorum_capable_mode):
-        parser.error("witness options require a witness-capable mode")
+    if witness_options_used and not (
+        witness_modes_used
+        or witness_quorum_capable_mode
+        or gossip_bundle_mode
+    ):
+        parser.error(
+            "witness options require a witness-capable "
+            "or gossip-bundle mode"
+        )
     if witness_modes_used:
         _validate_common_verify_args(parser, args, "witness mode")
-    if witness_options_used and witness_quorum_capable_mode:
+    if witness_options_used and (
+        witness_quorum_capable_mode
+        or args.create_gossip_bundle is not None
+    ):
         if args.transparency_checkpoint is None:
             parser.error("witness quorum requires --transparency-checkpoint")
         if args.witness_trust_store is None:
@@ -718,6 +778,65 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
             parser.error("--create-split-view-evidence requires --conflicting-checkpoint")
     if args.verify_split_view_evidence is not None and args.witness_trust_store is None:
         parser.error("--verify-split-view-evidence requires --witness-trust-store")
+
+    gossip_modes_used = (
+        args.create_gossip_bundle is not None
+        or args.verify_gossip_bundle is not None
+        or args.show_gossip_bundle is not None
+    )
+    gossip_options_used = (
+        args.target_artifact is not None
+        or args.artifact_type is not None
+        or args.inclusion_proof is not None
+        or args.bundle_signing_trust_store is not None
+        or args.create_decision_receipt is not None
+    )
+    if args.create_gossip_bundle is not None:
+        _validate_common_verify_args(parser, args, "--create-gossip-bundle")
+        if args.target_artifact is None:
+            parser.error("--create-gossip-bundle requires --target-artifact")
+        if args.artifact_type is None:
+            parser.error("--create-gossip-bundle requires --artifact-type")
+        if args.artifact_identifier is None:
+            parser.error("--create-gossip-bundle requires --artifact-identifier")
+        if args.transparency_checkpoint is None:
+            parser.error("--create-gossip-bundle requires --transparency-checkpoint")
+        if args.inclusion_proof is None:
+            parser.error("--create-gossip-bundle requires --inclusion-proof")
+        if args.witness_trust_store is None:
+            parser.error("--create-gossip-bundle requires --witness-trust-store")
+        if not args.witness_statement:
+            parser.error("--create-gossip-bundle requires --witness-statement")
+    elif args.verify_gossip_bundle is not None:
+        _validate_common_verify_args(parser, args, "--verify-gossip-bundle")
+        if args.target_artifact is None:
+            parser.error("--verify-gossip-bundle requires --target-artifact")
+        if args.bundle_signing_trust_store is None:
+            parser.error("--verify-gossip-bundle requires --bundle-signing-trust-store")
+    elif args.show_gossip_bundle is not None:
+        _validate_common_verify_args(parser, args, "--show-gossip-bundle")
+    elif gossip_options_used:
+        parser.error("gossip bundle options require a gossip bundle mode")
+
+    if args.verify_decision_receipt is not None:
+        _validate_common_verify_args(parser, args, "--verify-decision-receipt")
+        if args.decision_receipt_trust_store is None:
+            parser.error("--verify-decision-receipt requires --decision-receipt-trust-store")
+    elif args.decision_receipt is not None:
+        parser.error("--decision-receipt requires a receipt-capable mode")
+    elif (
+        args.decision_receipt_trust_store is not None
+        and not (
+            args.verify_gossip_bundle is not None
+            and args.create_decision_receipt is not None
+        )
+    ):
+        parser.error(
+            "--decision-receipt-trust-store requires "
+            "a receipt-capable mode"
+        )
+    elif args.verification_policy_id != "default" and not gossip_modes_used:
+        parser.error("--verification-policy-id requires a receipt-capable mode")
 
     if not args.archive and (args.signing_key_manifest is not None or args.minimum_manifest_generation is not None):
         parser.error("signing key manifest options require --archive")
@@ -1306,6 +1425,8 @@ def _run_create_witness_statement(args: argparse.Namespace, parser: argparse.Arg
     except (
         TransparencyCheckpointError,
         TransparencyCheckpointStateError,
+    TransparencyDecisionReceiptError,
+    TransparencyGossipBundleError,
         TransparencyLogError,
         TransparencyLogStateError,
         TransparencyMerkleError,
@@ -1428,6 +1549,164 @@ def _run_verify_split_view_evidence(args: argparse.Namespace, parser: argparse.A
     print(f"Tree Size: {result.tree_size}")
     return 0
 
+
+
+def _run_create_gossip_bundle(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        result = create_transparency_gossip_bundle(
+            output_path=args.create_gossip_bundle,
+            target_artifact_path=args.target_artifact,
+            artifact_type=args.artifact_type,
+            artifact_identifier=args.artifact_identifier,
+            checkpoint_path=args.transparency_checkpoint,
+            inclusion_proof_path=args.inclusion_proof,
+            witness_trust_store_path=args.witness_trust_store,
+            witness_statement_paths=tuple(args.witness_statement),
+            required_witness_quorum=args.minimum_witness_quorum,
+            created_at=datetime.now(UTC),
+            consistency_proof_path=args.consistency_proof,
+            environ=os.environ,
+        )
+    except (
+        TransparencyCheckpointError,
+        TransparencyGossipBundleError,
+        TransparencyLogError,
+        TransparencyLogStateError,
+        TransparencyMerkleError,
+        TransparencyWitnessError,
+    ) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency gossip bundle generation failed",
+            error=error,
+        )
+        return 5
+    print("Transparency gossip bundle created.")
+    print(f"Bundle: {args.create_gossip_bundle}")
+    print(f"Bundle ID: {result.bundle_id}")
+    print(f"Bundle SHA-256: {result.bundle_sha256}")
+    print(f"Artifact Identifier: {result.artifact_identifier}")
+    print(f"Artifact SHA-256: {result.artifact_sha256}")
+    print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
+    print(f"Witness Count: {result.witness_count}")
+    print(f"Bundle Reused: {str(result.bundle_reused).lower()}")
+    return 0
+
+
+def _run_verify_gossip_bundle(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        trust_store = load_gossip_bundle_signing_trust_store(
+            path=args.bundle_signing_trust_store,
+            environ=os.environ,
+        )
+        result = verify_transparency_gossip_bundle_offline(
+            bundle_path=args.verify_gossip_bundle,
+            target_artifact_path=args.target_artifact,
+            bundle_signing_trust_store=trust_store,
+            verification_time=datetime.now(UTC),
+            local_minimum_quorum=args.minimum_witness_quorum,
+            revoked_witness_policy=RevokedWitnessPolicy(args.revoked_witness_policy),
+        )
+        receipt_path = args.create_decision_receipt
+        if receipt_path is not None:
+            receipt = build_trusted_decision_receipt(
+                result=result,
+                policy_id=args.verification_policy_id,
+                verifier_version="agentic-ai-lab-cli",
+                verified_at=datetime.now(UTC),
+            )
+            receipt_trust_store = (
+                load_decision_receipt_trust_store(
+                    path=args.decision_receipt_trust_store,
+                    environ=os.environ,
+                )
+                if args.decision_receipt_trust_store is not None
+                else None
+            )
+            create_transparency_trust_decision_receipt(
+                output_path=receipt_path,
+                receipt=receipt,
+                signed_at=datetime.now(UTC),
+                trust_store=receipt_trust_store,
+                environ=os.environ,
+            )
+    except (
+        TransparencyCheckpointError,
+        TransparencyDecisionReceiptError,
+        TransparencyGossipBundleError,
+        TransparencyMerkleError,
+        TransparencyOfflineVerificationError,
+        TransparencyWitnessError,
+    ) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency gossip bundle verification failed",
+            error=error,
+        )
+        return 5
+    print("Transparency gossip bundle verified.")
+    print(f"Bundle: {args.verify_gossip_bundle}")
+    print(f"Bundle ID: {result.bundle_id}")
+    print(f"Bundle SHA-256: {result.bundle_sha256}")
+    print(f"Artifact Identifier: {result.artifact_identifier}")
+    print(f"Artifact SHA-256: {result.artifact_sha256}")
+    print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
+    print(f"Tree Size: {result.tree_size}")
+    print(f"Required Quorum: {result.required_witness_quorum}")
+    print(f"Valid Witness Count: {result.valid_witness_count}")
+    print(f"Valid Witness IDs: {', '.join(result.valid_witness_ids)}")
+    print(f"Quorum Satisfied: {str(result.quorum_satisfied).lower()}")
+    if args.create_decision_receipt is not None:
+        print("Decision: trusted")
+        print(f"Receipt: {args.create_decision_receipt}")
+    return 0
+
+
+def _run_show_gossip_bundle(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        loaded = load_transparency_gossip_bundle(path=args.show_gossip_bundle)
+    except TransparencyGossipBundleError as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency gossip bundle inspection failed",
+            error=error,
+        )
+        return 5
+    manifest = loaded.manifest
+    print("Transparency gossip bundle.")
+    print(f"Bundle: {args.show_gossip_bundle}")
+    print(f"Bundle ID: {manifest.bundle_id}")
+    print(f"Log ID: {manifest.log_id}")
+    print(f"Artifact Identifier: {manifest.artifact_identifier}")
+    print(f"Artifact SHA-256: {manifest.artifact_sha256}")
+    print(f"Checkpoint SHA-256: {manifest.checkpoint_sha256}")
+    print(f"Required Quorum: {manifest.required_witness_quorum}")
+    print(f"Witness Statements: {len(manifest.witness_statement_sha256s)}")
+    return 0
+
+
+def _run_verify_decision_receipt(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        trust_store = load_decision_receipt_trust_store(
+            path=args.decision_receipt_trust_store,
+            environ=os.environ,
+        )
+        result = verify_transparency_trust_decision_receipt(
+            receipt_path=args.verify_decision_receipt,
+            trust_store=trust_store,
+        )
+    except TransparencyDecisionReceiptError as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency trust decision receipt verification failed",
+            error=error,
+        )
+        return 5
+    print("Transparency trust decision receipt verified.")
+    print(f"Decision: {result.decision.value}")
+    print(f"Bundle ID: {result.bundle_id}")
+    print(f"Artifact Identifier: {result.artifact_identifier}")
+    print(f"Artifact SHA-256: {result.artifact_sha256}")
+    print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
+    if result.rejection_code is not None:
+        print(f"Rejection Code: {result.rejection_code.value}")
+    return 0
 
 def _run_verify_transparency_log(
     log_path: Path,

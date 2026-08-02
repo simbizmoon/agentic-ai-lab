@@ -37,9 +37,12 @@ from app.exceptions import (
     TokenBudgetExceededError,
     TransparencyCheckpointError,
     TransparencyCheckpointStateError,
+    TransparencyDecisionReceiptError,
+    TransparencyGossipBundleError,
     TransparencyLogError,
     TransparencyLogStateError,
     TransparencyMerkleError,
+    TransparencyOfflineVerificationError,
     TransparencySplitViewEvidenceError,
     TransparencyWitnessError,
     TransparencyWitnessQuorumError,
@@ -218,6 +221,28 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The exported audit report failed an integrity check.",
         )
 
+
+
+    if isinstance(error, TransparencyDecisionReceiptError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency trust decision receipt could not be handled safely.",
+        )
+
+    if isinstance(error, TransparencyOfflineVerificationError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency gossip bundle could not be verified offline safely.",
+        )
+
+    if isinstance(error, TransparencyGossipBundleError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency gossip bundle is unsafe, incomplete, or inconsistent.",
+        )
 
     if isinstance(error, TransparencySplitViewEvidenceError):
         return RecoveryDecision(
