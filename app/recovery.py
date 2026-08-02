@@ -40,6 +40,9 @@ from app.exceptions import (
     TransparencyLogError,
     TransparencyLogStateError,
     TransparencyMerkleError,
+    TransparencySplitViewEvidenceError,
+    TransparencyWitnessError,
+    TransparencyWitnessQuorumError,
 )
 
 
@@ -215,6 +218,27 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The exported audit report failed an integrity check.",
         )
 
+
+    if isinstance(error, TransparencySplitViewEvidenceError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency split-view evidence could not be handled safely.",
+        )
+
+    if isinstance(error, TransparencyWitnessQuorumError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency witness quorum was not satisfied safely.",
+        )
+
+    if isinstance(error, TransparencyWitnessError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency witness operation could not be completed safely.",
+        )
 
     if isinstance(error, TransparencyCheckpointStateError):
         return RecoveryDecision(

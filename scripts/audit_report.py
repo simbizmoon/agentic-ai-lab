@@ -57,6 +57,8 @@ from app.exceptions import (
     TransparencyLogError,
     TransparencyLogStateError,
     TransparencyMerkleError,
+    TransparencySplitViewEvidenceError,
+    TransparencyWitnessError,
 )
 from app.manifest_trust_state import (
     MANIFEST_TRUST_STATE_ENV_NAME,
@@ -142,6 +144,10 @@ from app.transparency_checkpoint_state import (
     apply_verified_checkpoint_to_state,
     load_transparency_checkpoint_state,
 )
+from app.transparency_gossip import (
+    create_transparency_split_view_evidence,
+    verify_transparency_split_view_evidence,
+)
 from app.transparency_log import (
     TRANSPARENCY_LOG_PATH_ENV_NAME,
     TRANSPARENCY_LOG_STATE_PATH_ENV_NAME,
@@ -158,6 +164,15 @@ from app.transparency_merkle import (
     export_transparency_inclusion_proof,
     load_transparency_consistency_proof,
     load_transparency_inclusion_proof,
+)
+from app.transparency_quorum import verify_transparency_witness_quorum
+from app.transparency_witness import (
+    create_transparency_witness_statement,
+    verify_transparency_witness_statement,
+)
+from app.transparency_witness_trust import (
+    RevokedWitnessPolicy,
+    load_transparency_witness_trust_store,
 )
 
 _MONKEYPATCH_COMPATIBILITY_EXPORTS = (
@@ -258,6 +273,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--consistency-proof", type=Path)
     parser.add_argument("--old-checkpoint", type=Path)
     parser.add_argument("--new-checkpoint", type=Path)
+    parser.add_argument("--witness-trust-store", type=Path)
+    parser.add_argument("--create-witness-statement", type=Path)
+    parser.add_argument("--verify-witness-statement", type=Path)
+    parser.add_argument("--witness-state", type=Path)
+    parser.add_argument("--witness-statement", type=Path, action="append")
+    parser.add_argument("--verify-witness-quorum", type=Path)
+    parser.add_argument("--minimum-witness-quorum", type=int)
+    parser.add_argument("--create-split-view-evidence", type=Path)
+    parser.add_argument("--verify-split-view-evidence", type=Path)
+    parser.add_argument("--conflicting-checkpoint", type=Path)
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -267,6 +292,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--revoked-signature-key-policy",
         choices=[policy.value for policy in RevokedSignatureKeyPolicy],
         default=RevokedSignatureKeyPolicy.REJECT.value,
+    )
+    parser.add_argument(
+        "--revoked-witness-policy",
+        choices=[policy.value for policy in RevokedWitnessPolicy],
+        default=RevokedWitnessPolicy.REJECT.value,
     )
     return parser
 
@@ -290,6 +320,16 @@ def main(argv: list[str] | None = None) -> int:
         return _run_create_consistency_proof(args, parser)
     if args.verify_consistency_proof is not None:
         return _run_verify_consistency_proof(args, parser)
+    if args.create_witness_statement is not None:
+        return _run_create_witness_statement(args, parser)
+    if args.verify_witness_statement is not None:
+        return _run_verify_witness_statement(args, parser)
+    if args.verify_witness_quorum is not None:
+        return _run_verify_witness_quorum(args, parser)
+    if args.create_split_view_evidence is not None:
+        return _run_create_split_view_evidence(args, parser)
+    if args.verify_split_view_evidence is not None:
+        return _run_verify_split_view_evidence(args, parser)
     if args.show_transparency_log is not None:
         return _run_show_transparency_log(args.show_transparency_log, args, parser)
     if args.verify_transparency_log is not None:
@@ -346,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
                 args.revoked_signature_key_policy
             ),
+            witness_args=args,
         )
     if args.verify_archive is not None:
         return _run_verify_archive(
@@ -362,6 +403,7 @@ def main(argv: list[str] | None = None) -> int:
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
                 args.revoked_signature_key_policy
             ),
+            witness_args=args,
         )
 
     return _run_report_generation(args, parser)
@@ -393,6 +435,11 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.verify_inclusion_proof,
         args.create_consistency_proof,
         args.verify_consistency_proof,
+        args.create_witness_statement,
+        args.verify_witness_statement,
+        args.verify_witness_quorum,
+        args.create_split_view_evidence,
+        args.verify_split_view_evidence,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
@@ -435,6 +482,7 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     signature_policy_used = (
         args.revoked_signature_key_policy != RevokedSignatureKeyPolicy.REJECT.value
     )
+    witness_policy_used = args.revoked_witness_policy != RevokedWitnessPolicy.REJECT.value
     if args.show_manifest_state is not None:
         if any(value is not None for value in (args.verify, args.verify_authenticity, args.verify_bundle, args.verify_archive_authenticity, args.verify_archive_signature, args.verify_archive, args.create_signing_key_manifest, args.verify_signing_key_manifest, args.since, args.until, args.model, args.signing_key_manifest, args.minimum_manifest_generation)):
             parser.error("--show-manifest-state cannot be combined with report or verify options")
@@ -565,6 +613,11 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         or args.verify_inclusion_proof is not None
         or args.create_consistency_proof is not None
         or args.verify_consistency_proof is not None
+        or args.create_witness_statement is not None
+        or args.verify_witness_statement is not None
+        or args.verify_witness_quorum is not None
+        or args.create_split_view_evidence is not None
+        or args.verify_split_view_evidence is not None
     )
     if transparency_options_used and not transparency_capable_mode:
         parser.error("transparency log options require a transparency-capable mode")
@@ -576,10 +629,38 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     if args.register_transparency_entry and not register_capable_mode:
         parser.error("--register-transparency-entry cannot be used in this mode")
 
+    witness_modes_used = (
+        args.create_witness_statement is not None
+        or args.verify_witness_statement is not None
+        or args.verify_witness_quorum is not None
+        or args.create_split_view_evidence is not None
+        or args.verify_split_view_evidence is not None
+    )
+    witness_options_used = (
+        args.witness_trust_store is not None
+        or args.witness_state is not None
+        or args.witness_statement is not None
+        or args.minimum_witness_quorum is not None
+        or args.conflicting_checkpoint is not None
+    )
+    witness_quorum_capable_mode = (
+        args.verify_root_transition is not None
+        or args.apply_root_transition is not None
+        or args.verify_signing_key_manifest is not None
+        or args.verify_archive_signature is not None
+        or args.verify_archive is not None
+    )
     if args.transparency_checkpoint is not None and (
-        args.create_inclusion_proof is None and args.verify_inclusion_proof is None
+        args.create_inclusion_proof is None
+        and args.verify_inclusion_proof is None
+        and args.create_witness_statement is None
+        and args.verify_witness_statement is None
+        and args.verify_witness_quorum is None
+        and args.create_split_view_evidence is None
+        and args.verify_split_view_evidence is None
+        and not witness_quorum_capable_mode
     ):
-        parser.error("--transparency-checkpoint can only be used with inclusion proof modes")
+        parser.error("--transparency-checkpoint can only be used with proof or witness modes")
     if args.create_inclusion_proof is not None:
         if args.transparency_checkpoint is None:
             parser.error("--create-inclusion-proof requires --transparency-checkpoint")
@@ -601,6 +682,42 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
             parser.error("--consistency-proof requires --checkpoint-state")
         if not args.update_checkpoint_state:
             parser.error("--consistency-proof requires --update-checkpoint-state")
+
+    if witness_policy_used and not (witness_modes_used or witness_options_used):
+        parser.error("--revoked-witness-policy can only be used with witness verify modes")
+    if witness_options_used and not (witness_modes_used or witness_quorum_capable_mode):
+        parser.error("witness options require a witness-capable mode")
+    if witness_modes_used:
+        _validate_common_verify_args(parser, args, "witness mode")
+    if witness_options_used and witness_quorum_capable_mode:
+        if args.transparency_checkpoint is None:
+            parser.error("witness quorum requires --transparency-checkpoint")
+        if args.witness_trust_store is None:
+            parser.error("witness quorum requires --witness-trust-store")
+        if not args.witness_statement:
+            parser.error("witness quorum requires --witness-statement")
+    if args.create_witness_statement is not None:
+        if args.transparency_checkpoint is None:
+            parser.error("--create-witness-statement requires --transparency-checkpoint")
+        if args.witness_state is None:
+            parser.error("--create-witness-statement requires --witness-state")
+    if args.verify_witness_statement is not None:
+        if args.transparency_checkpoint is None:
+            parser.error("--verify-witness-statement requires --transparency-checkpoint")
+        if args.witness_trust_store is None:
+            parser.error("--verify-witness-statement requires --witness-trust-store")
+    if args.verify_witness_quorum is not None:
+        if args.witness_trust_store is None:
+            parser.error("--verify-witness-quorum requires --witness-trust-store")
+        if not args.witness_statement:
+            parser.error("--verify-witness-quorum requires --witness-statement")
+    if args.create_split_view_evidence is not None:
+        if args.transparency_checkpoint is None:
+            parser.error("--create-split-view-evidence requires --transparency-checkpoint")
+        if args.conflicting_checkpoint is None:
+            parser.error("--create-split-view-evidence requires --conflicting-checkpoint")
+    if args.verify_split_view_evidence is not None and args.witness_trust_store is None:
+        parser.error("--verify-split-view-evidence requires --witness-trust-store")
 
     if not args.archive and (args.signing_key_manifest is not None or args.minimum_manifest_generation is not None):
         parser.error("signing key manifest options require --archive")
@@ -1060,6 +1177,33 @@ def _print_checkpoint_result(header: str, result) -> None:
     print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
 
 
+def _verify_optional_witness_quorum(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> None:
+    if not (
+        args.witness_trust_store is not None
+        or args.witness_statement is not None
+        or args.minimum_witness_quorum is not None
+    ):
+        return
+    checkpoint = verify_transparency_checkpoint(
+        checkpoint_path=args.transparency_checkpoint,
+        log_path=None,
+        log_state_path=None,
+        mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY,
+    )
+    trust_store = load_transparency_witness_trust_store(path=args.witness_trust_store)
+    verify_transparency_witness_quorum(
+        checkpoint=checkpoint,
+        statement_paths=tuple(args.witness_statement),
+        trust_store=trust_store,
+        verification_time=datetime.now(UTC),
+        required_quorum=args.minimum_witness_quorum,
+        revoked_witness_policy=RevokedWitnessPolicy(args.revoked_witness_policy),
+    )
+
+
 def _run_create_inclusion_proof(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     try:
         checkpoint = verify_transparency_checkpoint(
@@ -1144,6 +1288,144 @@ def _run_verify_consistency_proof(args: argparse.Namespace, parser: argparse.Arg
     print(f"Log ID: {result.log_id}")
     print(f"Old Tree Size: {result.old_tree_size}")
     print(f"New Tree Size: {result.new_tree_size}")
+    return 0
+
+
+def _run_create_witness_statement(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        result = create_transparency_witness_statement(
+            checkpoint_path=args.transparency_checkpoint,
+            output_path=args.create_witness_statement,
+            witness_state_path=args.witness_state,
+            observed_at=datetime.now(UTC),
+            consistency_proof_path=args.consistency_proof,
+            log_path=args.transparency_log,
+            log_state_path=args.transparency_log_state,
+            environ=os.environ,
+        )
+    except (
+        TransparencyCheckpointError,
+        TransparencyCheckpointStateError,
+        TransparencyLogError,
+        TransparencyLogStateError,
+        TransparencyMerkleError,
+        TransparencyWitnessError,
+    ) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency witness statement generation failed",
+            error=error,
+        )
+        return 5
+    print("Transparency witness statement created.")
+    print(f"Statement: {args.create_witness_statement}")
+    print(f"Witness ID: {result.envelope.statement.witness_id}")
+    print(f"Tree Size: {result.envelope.statement.tree_size}")
+    print(f"Checkpoint SHA-256: {result.envelope.statement.checkpoint_sha256}")
+    print(f"State Updated: {str(result.state_updated).lower()}")
+    return 0
+
+
+def _run_verify_witness_statement(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        checkpoint = verify_transparency_checkpoint(
+            checkpoint_path=args.transparency_checkpoint,
+            log_path=None,
+            log_state_path=None,
+            mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY,
+        )
+        trust_store = load_transparency_witness_trust_store(path=args.witness_trust_store)
+        result = verify_transparency_witness_statement(
+            statement_path=args.verify_witness_statement,
+            checkpoint=checkpoint,
+            trust_store=trust_store,
+            verification_time=datetime.now(UTC),
+            revoked_witness_policy=RevokedWitnessPolicy(args.revoked_witness_policy),
+        )
+    except (TransparencyCheckpointError, TransparencyWitnessError) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency witness statement verification failed",
+            error=error,
+        )
+        return 5
+    print("Transparency witness statement verified.")
+    print(f"Witness ID: {result.witness_id}")
+    print(f"Tree Size: {result.tree_size}")
+    print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
+    return 0
+
+
+def _run_verify_witness_quorum(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        checkpoint = verify_transparency_checkpoint(
+            checkpoint_path=args.verify_witness_quorum,
+            log_path=None,
+            log_state_path=None,
+            mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY,
+        )
+        trust_store = load_transparency_witness_trust_store(path=args.witness_trust_store)
+        result = verify_transparency_witness_quorum(
+            checkpoint=checkpoint,
+            statement_paths=tuple(args.witness_statement),
+            trust_store=trust_store,
+            verification_time=datetime.now(UTC),
+            required_quorum=args.minimum_witness_quorum,
+            revoked_witness_policy=RevokedWitnessPolicy(args.revoked_witness_policy),
+        )
+    except (TransparencyCheckpointError, TransparencyWitnessError) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency witness quorum verification failed",
+            error=error,
+        )
+        return 5
+    print("Transparency witness quorum verified.")
+    print(f"Required Quorum: {result.required_quorum}")
+    print(f"Valid Witness Count: {result.valid_witness_count}")
+    print(f"Valid Witness IDs: {', '.join(result.valid_witness_ids)}")
+    print(f"Quorum Satisfied: {str(result.quorum_satisfied).lower()}")
+    return 0
+
+
+def _run_create_split_view_evidence(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        envelope = create_transparency_split_view_evidence(
+            checkpoint_path=args.transparency_checkpoint,
+            conflicting_checkpoint_path=args.conflicting_checkpoint,
+            output_path=args.create_split_view_evidence,
+            detected_at=datetime.now(UTC),
+            environ=os.environ,
+        )
+    except (TransparencyCheckpointError, TransparencyWitnessError, TransparencySplitViewEvidenceError) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency split-view evidence generation failed",
+            error=error,
+        )
+        return 5
+    print("Transparency split-view evidence created.")
+    print(f"Evidence: {args.create_split_view_evidence}")
+    print(f"Witness ID: {envelope.evidence.detected_by_witness_id}")
+    print(f"Tree Size: {envelope.evidence.tree_size}")
+    return 0
+
+
+def _run_verify_split_view_evidence(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        trust_store = load_transparency_witness_trust_store(path=args.witness_trust_store)
+        result = verify_transparency_split_view_evidence(
+            evidence_path=args.verify_split_view_evidence,
+            trust_store=trust_store,
+            verification_time=datetime.now(UTC),
+            revoked_witness_policy=RevokedWitnessPolicy(args.revoked_witness_policy),
+        )
+    except (TransparencyWitnessError, TransparencySplitViewEvidenceError) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency split-view evidence verification failed",
+            error=error,
+        )
+        return 5
+    print("Transparency split-view evidence verified.")
+    print(f"Evidence ID: {result.evidence_id}")
+    print(f"Witness ID: {result.witness_id}")
+    print(f"Tree Size: {result.tree_size}")
     return 0
 
 
@@ -1322,6 +1604,7 @@ def _run_verify_root_transition(
     try:
         root_state = _load_current_root_state(args, parser)
         verification_time = datetime.now(UTC)
+        _verify_optional_witness_quorum(args, parser)
         result = verify_root_transition(
             transition_path=args.verify_root_transition,
             current_root=trusted_root_public_key_from_state(root_state),
@@ -1350,7 +1633,7 @@ def _run_verify_root_transition(
                     verification_result=verification,
                     artifact=artifact,
                 )
-    except (RootTransitionError, RootTrustStateError, TransparencyLogError, TransparencyLogStateError) as error:
+    except (RootTransitionError, RootTrustStateError, TransparencyLogError, TransparencyLogStateError, TransparencyWitnessError) as error:
         _print_recovery_error(
             header="[ERROR] Root transition verification failed",
             error=error,
@@ -1398,6 +1681,7 @@ def _run_apply_root_transition(
 ) -> int:
     try:
         application_time = datetime.now(UTC)
+        _verify_optional_witness_quorum(args, parser)
         transition_mode = _resolve_transparency_mode(args) or TransparencyLogMode.REQUIRE_EXISTING
         result, transparency_inclusion = apply_root_transition_with_transparency(
             transition_path=args.apply_root_transition,
@@ -1408,7 +1692,7 @@ def _run_apply_root_transition(
             transparency_state_path=_resolve_transparency_state_path(args, parser),
             transparency_mode=transition_mode,
         )
-    except (ManifestTrustStateError, RootTransitionError, RootTrustStateError, TransparencyLogError, TransparencyLogStateError) as error:
+    except (ManifestTrustStateError, RootTransitionError, RootTrustStateError, TransparencyLogError, TransparencyLogStateError, TransparencyWitnessError) as error:
         _print_recovery_error(
             header="[ERROR] Root transition application failed",
             error=error,
@@ -1548,6 +1832,7 @@ def _run_verify_signing_key_manifest(
     try:
         verification_time = datetime.now(UTC)
         root_state = _load_current_root_state(args, parser)
+        _verify_optional_witness_quorum(args, parser)
         transparency_mode = _resolve_transparency_mode(args)
         if transparency_mode is None:
             verified, state_decision = verify_signing_key_manifest_with_root_state(
@@ -1573,7 +1858,7 @@ def _run_verify_signing_key_manifest(
                 state_mode=_resolve_manifest_state_mode(args),
                 require_existing_state=args.require_existing_manifest_state,
             )
-    except (ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError, TransparencyLogError, TransparencyLogStateError) as error:
+    except (ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError, TransparencyLogError, TransparencyLogStateError, TransparencyWitnessError) as error:
         _print_recovery_error(
             header="[ERROR] Archive signing key manifest verification failed",
             error=error,
@@ -1702,9 +1987,12 @@ def _run_verify_archive_signature(
     state_mode: ManifestTrustStateMode,
     require_existing_state: bool,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
+    witness_args: argparse.Namespace | None = None,
 ) -> int:
     try:
         verification_time = datetime.now(UTC)
+        if witness_args is not None:
+            _verify_optional_witness_quorum(witness_args, argparse.ArgumentParser())
         root_state = _load_current_root_state(argparse.Namespace(root_trust_state=root_state_path), None)
         result, _verified_manifest, state_decision, transparency_inclusion = verify_archive_signature_with_root_state_and_transparency(
             archive_path=verify_path,
@@ -1719,7 +2007,7 @@ def _run_verify_archive_signature(
             require_existing_state=require_existing_state,
             revoked_signature_key_policy=revoked_signature_key_policy,
         )
-    except (ArchiveSignatureError, ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError, TransparencyLogError, TransparencyLogStateError) as error:
+    except (ArchiveSignatureError, ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError, TransparencyLogError, TransparencyLogStateError, TransparencyWitnessError) as error:
         _print_recovery_error(
             header="[ERROR] Audit report archive signature verification failed",
             error=error,
@@ -1757,9 +2045,12 @@ def _run_verify_archive(
     require_existing_state: bool,
     revoked_key_policy: RevokedKeyPolicy,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
+    witness_args: argparse.Namespace | None = None,
 ) -> int:
     try:
         verification_time = datetime.now(UTC)
+        if witness_args is not None:
+            _verify_optional_witness_quorum(witness_args, argparse.ArgumentParser())
         trust_store = load_authentication_trust_store(environ=os.environ)
         root_state = _load_current_root_state(argparse.Namespace(root_trust_state=root_state_path), None)
         result, verified_manifest, state_decision, transparency_inclusion = verify_signed_authenticated_report_archive_with_root_state_and_transparency(
@@ -1792,6 +2083,7 @@ def _run_verify_archive(
         SigningKeyManifestError,
         TransparencyLogError,
         TransparencyLogStateError,
+        TransparencyWitnessError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report archive verification failed", error=error)
         return 5

@@ -150,6 +150,16 @@ from app.exceptions import (
     TransparencyMerkleProofExportError,
     TransparencyMerkleProofReadError,
     TransparencyMerkleProofValidationError,
+    TransparencySplitViewEvidenceConflictError,
+    TransparencySplitViewEvidenceError,
+    TransparencyWitnessConfigurationError,
+    TransparencyWitnessEquivocationError,
+    TransparencyWitnessQuorumNotSatisfiedError,
+    TransparencyWitnessRollbackError,
+    TransparencyWitnessSignatureError,
+    TransparencyWitnessSplitViewError,
+    TransparencyWitnessStateError,
+    TransparencyWitnessTrustStoreError,
     UnexpectedReportArchiveMemberError,
     UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
@@ -173,6 +183,7 @@ PRIVATE_MANIFEST_SECRET = "PRIVATE-MANIFEST-SECRET"
 PRIVATE_MANIFEST_STATE_SECRET = "PRIVATE-MANIFEST-STATE-SECRET"
 PRIVATE_TRANSPARENCY_SECRET = "PRIVATE-TRANSPARENCY-LOG"
 PRIVATE_CHECKPOINT_SECRET = "PRIVATE-CHECKPOINT-PROOF"
+PRIVATE_WITNESS_SECRET = "PRIVATE-WITNESS-SECRET"
 
 
 def make_request() -> httpx.Request:
@@ -213,6 +224,7 @@ def assert_decision(
     assert PRIVATE_MANIFEST_SECRET not in decision.reason
     assert PRIVATE_TRANSPARENCY_SECRET not in decision.reason
     assert PRIVATE_CHECKPOINT_SECRET not in decision.reason
+    assert PRIVATE_WITNESS_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -585,4 +597,24 @@ def test_transparency_checkpoint_errors_are_abort_without_secret(error: BaseExce
     assert decision.action is RecoveryAction.ABORT
     assert decision.reason
     assert PRIVATE_CHECKPOINT_SECRET not in decision.reason
+    assert PRIVATE_WITNESS_SECRET not in decision.reason
     assert "a" * 64 not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        TransparencyWitnessConfigurationError,
+        TransparencyWitnessSignatureError,
+        TransparencyWitnessStateError,
+        TransparencyWitnessRollbackError,
+        TransparencyWitnessSplitViewError,
+        TransparencyWitnessEquivocationError,
+        TransparencyWitnessTrustStoreError,
+        TransparencyWitnessQuorumNotSatisfiedError,
+        TransparencySplitViewEvidenceError,
+        TransparencySplitViewEvidenceConflictError,
+    ],
+)
+def test_transparency_witness_recovery_aborts_without_sensitive_reason(error_type: type[Exception]) -> None:
+    assert_decision(error_type(PRIVATE_WITNESS_SECRET), retryable=False, action=RecoveryAction.ABORT)

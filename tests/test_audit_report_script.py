@@ -3313,7 +3313,7 @@ def test_unrelated_mode_rejects_transparency_checkpoint_reference(
         script.main(["--transparency-checkpoint", str(tmp_path / "checkpoint.json")])
 
     assert exc_info.value.code == 2
-    assert "--transparency-checkpoint can only be used with inclusion proof modes" in capsys.readouterr().err
+    assert "--transparency-checkpoint can only be used with proof or witness modes" in capsys.readouterr().err
 
 
 def test_standalone_verify_checkpoint_still_uses_independent_mode(
@@ -3688,3 +3688,342 @@ def test_checkpoint_state_same_size_conflict_still_returns_five_with_proof(
     output = capsys.readouterr().out
     assert "[ERROR] Transparency checkpoint verification failed" in output
     assert "PRIVATE-CHECKPOINT" not in output
+
+
+def test_create_witness_statement_mode_accepts_checkpoint_and_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, Path] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["statement"] = args.create_witness_statement
+        seen["checkpoint"] = args.transparency_checkpoint
+        seen["state"] = args.witness_state
+        return 0
+
+    monkeypatch.setattr(script, "_run_create_witness_statement", fake_runner)
+
+    assert script.main(
+        [
+            "--create-witness-statement",
+            str(tmp_path / "statement.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--witness-state",
+            str(tmp_path / "witness-state.json"),
+        ]
+    ) == 0
+    assert seen == {
+        "statement": tmp_path / "statement.json",
+        "checkpoint": tmp_path / "checkpoint.json",
+        "state": tmp_path / "witness-state.json",
+    }
+
+
+def test_verify_witness_quorum_mode_accepts_statement_references(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["checkpoint"] = args.verify_witness_quorum
+        seen["statements"] = args.witness_statement
+        seen["trust"] = args.witness_trust_store
+        return 0
+
+    monkeypatch.setattr(script, "_run_verify_witness_quorum", fake_runner)
+
+    assert script.main(
+        [
+            "--verify-witness-quorum",
+            str(tmp_path / "checkpoint.json"),
+            "--witness-trust-store",
+            str(tmp_path / "witness-trust.json"),
+            "--witness-statement",
+            str(tmp_path / "statement-1.json"),
+            "--witness-statement",
+            str(tmp_path / "statement-2.json"),
+            "--minimum-witness-quorum",
+            "2",
+        ]
+    ) == 0
+    assert seen["checkpoint"] == tmp_path / "checkpoint.json"
+    assert seen["trust"] == tmp_path / "witness-trust.json"
+    assert seen["statements"] == [tmp_path / "statement-1.json", tmp_path / "statement-2.json"]
+
+
+def test_create_split_view_evidence_requires_conflicting_checkpoint(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(
+            [
+                "--create-split-view-evidence",
+                str(tmp_path / "evidence.json"),
+                "--transparency-checkpoint",
+                str(tmp_path / "checkpoint.json"),
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "--create-split-view-evidence requires --conflicting-checkpoint" in capsys.readouterr().err
+
+
+def test_unrelated_mode_rejects_witness_options(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--witness-trust-store", str(tmp_path / "witness-trust.json")])
+
+    assert exc_info.value.code == 2
+    assert "witness options require a witness-capable mode" in capsys.readouterr().err
+
+
+def test_witness_verify_modes_are_mutually_exclusive(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(
+            [
+                "--verify-witness-statement",
+                str(tmp_path / "statement.json"),
+                "--verify-witness-quorum",
+                str(tmp_path / "checkpoint.json"),
+                "--witness-trust-store",
+                str(tmp_path / "witness-trust.json"),
+                "--witness-statement",
+                str(tmp_path / "statement-2.json"),
+                "--transparency-checkpoint",
+                str(tmp_path / "checkpoint.json"),
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "only one verify mode can be used at a time" in capsys.readouterr().err
+
+
+
+def test_create_witness_statement_accepts_transparency_log_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["statement"] = args.create_witness_statement
+        seen["checkpoint"] = args.transparency_checkpoint
+        seen["log"] = args.transparency_log
+        seen["log_state"] = args.transparency_log_state
+        seen["trust"] = args.witness_trust_store
+        seen["witness_state"] = args.witness_state
+        return 0
+
+    monkeypatch.setattr(script, "_run_create_witness_statement", fake_runner)
+
+    assert script.main(
+        [
+            "--create-witness-statement",
+            str(tmp_path / "statement.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--transparency-log",
+            str(tmp_path / "log.jsonl"),
+            "--transparency-log-state",
+            str(tmp_path / "log-state.json"),
+            "--witness-trust-store",
+            str(tmp_path / "witnesses.json"),
+            "--witness-state",
+            str(tmp_path / "witness-state.json"),
+        ]
+    ) == 0
+    assert seen == {
+        "statement": tmp_path / "statement.json",
+        "checkpoint": tmp_path / "checkpoint.json",
+        "log": tmp_path / "log.jsonl",
+        "log_state": tmp_path / "log-state.json",
+        "trust": tmp_path / "witnesses.json",
+        "witness_state": tmp_path / "witness-state.json",
+    }
+
+
+def test_verify_witness_statement_accepts_transparency_log_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["statement"] = args.verify_witness_statement
+        seen["checkpoint"] = args.transparency_checkpoint
+        seen["log"] = args.transparency_log
+        seen["log_state"] = args.transparency_log_state
+        seen["trust"] = args.witness_trust_store
+        return 0
+
+    monkeypatch.setattr(script, "_run_verify_witness_statement", fake_runner)
+
+    assert script.main(
+        [
+            "--verify-witness-statement",
+            str(tmp_path / "statement.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--transparency-log",
+            str(tmp_path / "log.jsonl"),
+            "--transparency-log-state",
+            str(tmp_path / "log-state.json"),
+            "--witness-trust-store",
+            str(tmp_path / "witnesses.json"),
+        ]
+    ) == 0
+    assert seen == {
+        "statement": tmp_path / "statement.json",
+        "checkpoint": tmp_path / "checkpoint.json",
+        "log": tmp_path / "log.jsonl",
+        "log_state": tmp_path / "log-state.json",
+        "trust": tmp_path / "witnesses.json",
+    }
+
+
+def test_verify_witness_quorum_accepts_transparency_checkpoint_reference(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["checkpoint"] = args.verify_witness_quorum
+        seen["transparency_checkpoint"] = args.transparency_checkpoint
+        seen["statements"] = args.witness_statement
+        seen["trust"] = args.witness_trust_store
+        return 0
+
+    monkeypatch.setattr(script, "_run_verify_witness_quorum", fake_runner)
+
+    assert script.main(
+        [
+            "--verify-witness-quorum",
+            str(tmp_path / "checkpoint.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--witness-trust-store",
+            str(tmp_path / "witnesses.json"),
+            "--witness-statement",
+            str(tmp_path / "statement.json"),
+        ]
+    ) == 0
+    assert seen == {
+        "checkpoint": tmp_path / "checkpoint.json",
+        "transparency_checkpoint": tmp_path / "checkpoint.json",
+        "statements": [tmp_path / "statement.json"],
+        "trust": tmp_path / "witnesses.json",
+    }
+
+
+def test_create_split_view_evidence_accepts_checkpoint_reference_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["evidence"] = args.create_split_view_evidence
+        seen["checkpoint"] = args.transparency_checkpoint
+        seen["conflicting"] = args.conflicting_checkpoint
+        return 0
+
+    monkeypatch.setattr(script, "_run_create_split_view_evidence", fake_runner)
+
+    assert script.main(
+        [
+            "--create-split-view-evidence",
+            str(tmp_path / "evidence.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--conflicting-checkpoint",
+            str(tmp_path / "checkpoint-conflict.json"),
+        ]
+    ) == 0
+    assert seen == {
+        "evidence": tmp_path / "evidence.json",
+        "checkpoint": tmp_path / "checkpoint.json",
+        "conflicting": tmp_path / "checkpoint-conflict.json",
+    }
+
+
+def test_report_mode_still_rejects_transparency_log_options_after_witness_modes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--transparency-log", str(tmp_path / "log.jsonl")])
+
+    assert exc_info.value.code == 2
+    assert "transparency log options require a transparency-capable mode" in capsys.readouterr().err
+
+
+
+def test_create_witness_statement_outputs_false_when_state_not_written(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = SimpleNamespace(
+        envelope=SimpleNamespace(
+            statement=SimpleNamespace(
+                witness_id="witness-a",
+                tree_size=2,
+                checkpoint_sha256="9" * 64,
+            )
+        ),
+        state_updated=False,
+    )
+    monkeypatch.setattr(script, "create_transparency_witness_statement", lambda **kwargs: result)
+
+    assert script.main(
+        [
+            "--create-witness-statement",
+            str(tmp_path / "statement.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--witness-state",
+            str(tmp_path / "witness-state.json"),
+        ]
+    ) == 0
+
+    output = capsys.readouterr().out
+    assert "State Updated: false" in output
+    assert "State Updated: true" not in output
+
+
+
+def test_create_split_view_evidence_reuse_returns_success(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    envelope = SimpleNamespace(
+        evidence=SimpleNamespace(
+            detected_by_witness_id="witness-a",
+            tree_size=1,
+        )
+    )
+    monkeypatch.setattr(script, "create_transparency_split_view_evidence", lambda **kwargs: envelope)
+
+    assert script.main(
+        [
+            "--create-split-view-evidence",
+            str(tmp_path / "evidence.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint-a.json"),
+            "--conflicting-checkpoint",
+            str(tmp_path / "checkpoint-b.json"),
+        ]
+    ) == 0
+
+    output = capsys.readouterr().out
+    assert "Transparency split-view evidence created." in output
+    assert "Witness ID: witness-a" in output
+    assert "Tree Size: 1" in output

@@ -156,6 +156,18 @@ from app.exceptions import (
     TransparencyMerkleProofExportError,
     TransparencyMerkleProofReadError,
     TransparencyMerkleProofValidationError,
+    TransparencySplitViewEvidenceConflictError,
+    TransparencySplitViewEvidenceError,
+    TransparencyWitnessConfigurationError,
+    TransparencyWitnessEquivocationError,
+    TransparencyWitnessError,
+    TransparencyWitnessQuorumError,
+    TransparencyWitnessQuorumNotSatisfiedError,
+    TransparencyWitnessRollbackError,
+    TransparencyWitnessSignatureError,
+    TransparencyWitnessSplitViewError,
+    TransparencyWitnessStateError,
+    TransparencyWitnessTrustStoreError,
     UnexpectedReportArchiveMemberError,
     UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
@@ -886,3 +898,42 @@ def test_transparency_merkle_checkpoint_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 20
+
+
+def test_transparency_witness_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencyWitnessError, AgenticAILabError)
+    for exception_type in (
+        TransparencyWitnessConfigurationError,
+        TransparencyWitnessSignatureError,
+        TransparencyWitnessStateError,
+        TransparencyWitnessRollbackError,
+        TransparencyWitnessSplitViewError,
+        TransparencyWitnessEquivocationError,
+        TransparencyWitnessTrustStoreError,
+        TransparencyWitnessQuorumError,
+        TransparencyWitnessQuorumNotSatisfiedError,
+    ):
+        assert issubclass(exception_type, TransparencyWitnessError)
+
+
+def test_transparency_split_view_evidence_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencySplitViewEvidenceError, AgenticAILabError)
+    assert issubclass(TransparencySplitViewEvidenceConflictError, TransparencySplitViewEvidenceError)
+
+
+def test_transparency_witness_error_classes_are_distinct() -> None:
+    assert len(
+        {
+            TransparencyWitnessConfigurationError,
+            TransparencyWitnessSignatureError,
+            TransparencyWitnessStateError,
+            TransparencyWitnessRollbackError,
+            TransparencyWitnessSplitViewError,
+            TransparencyWitnessEquivocationError,
+            TransparencyWitnessTrustStoreError,
+            TransparencyWitnessQuorumError,
+            TransparencyWitnessQuorumNotSatisfiedError,
+            TransparencySplitViewEvidenceError,
+            TransparencySplitViewEvidenceConflictError,
+        }
+    ) == 11

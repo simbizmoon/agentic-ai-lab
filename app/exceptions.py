@@ -537,6 +537,54 @@ class TransparencyConsistencyProofMismatchError(TransparencyMerkleError):
     """Raised when a transparency consistency proof does not match checkpoints."""
 
 
+class TransparencyWitnessError(AgenticAILabError):
+    """Base exception for transparency witness errors."""
+
+
+class TransparencyWitnessConfigurationError(TransparencyWitnessError):
+    """Raised when transparency witness key configuration is invalid."""
+
+
+class TransparencyWitnessSignatureError(TransparencyWitnessError):
+    """Raised when a transparency witness signature is invalid."""
+
+
+class TransparencyWitnessStateError(TransparencyWitnessError):
+    """Raised when transparency witness state cannot be handled safely."""
+
+
+class TransparencyWitnessRollbackError(TransparencyWitnessError):
+    """Raised when a witness checkpoint would roll back tree size."""
+
+
+class TransparencyWitnessSplitViewError(TransparencyWitnessError):
+    """Raised when a witness observes conflicting checkpoint roots."""
+
+
+class TransparencyWitnessEquivocationError(TransparencyWitnessError):
+    """Raised when one witness signs conflicting checkpoints."""
+
+
+class TransparencyWitnessTrustStoreError(TransparencyWitnessError):
+    """Raised when a witness trust store is invalid or unsafe."""
+
+
+class TransparencyWitnessQuorumError(TransparencyWitnessError):
+    """Raised when witness quorum verification fails."""
+
+
+class TransparencyWitnessQuorumNotSatisfiedError(TransparencyWitnessQuorumError):
+    """Raised when not enough unique trusted witnesses verify a checkpoint."""
+
+
+class TransparencySplitViewEvidenceError(AgenticAILabError):
+    """Base exception for transparency split-view evidence errors."""
+
+
+class TransparencySplitViewEvidenceConflictError(TransparencySplitViewEvidenceError):
+    """Raised when split-view evidence conflicts with an existing file."""
+
+
 class TransparencyCheckpointError(AgenticAILabError):
     """Base exception for transparency checkpoint errors."""
 
