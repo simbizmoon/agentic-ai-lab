@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import hmac
 import os
-from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from app.audit_report import validate_audit_report_json
-from app.authentication_keyring import (
-    MINIMUM_HMAC_KEY_BYTES,
-    AuthenticationKey,
-    AuthenticationKeyring,
-    is_valid_key_id,
-    load_authentication_keyring,
+from app.authentication_keyring import MINIMUM_HMAC_KEY_BYTES, is_valid_key_id
+from app.authentication_trust import (
+    AuthenticationTrustStore,
+    RevokedKeyPolicy,
+    TrustedAuthenticationKey,
+    ensure_key_trusted_for_verification,
+    parse_aware_datetime,
 )
 from app.exceptions import (
     AuthenticationExportError,
@@ -23,24 +24,26 @@ from app.exceptions import (
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
+    InvalidAuthenticationTrustStoreError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
 )
 
-HMAC_ALGORITHM = "hmac-sha256"
-HMAC_PROTOCOL_VERSION = 1
+HMAC_ALGORITHM = "hmac-sha256-v2"
+HMAC_PROTOCOL_VERSION = 2
 HMAC_CHUNK_SIZE = 64 * 1024
 HMAC_DOMAIN_SEPARATOR = (
     b"agentic-ai-lab:"
     b"audit-report:"
     b"hmac-sha256:"
-    b"v1"
+    b"v2"
 )
+MAX_AUTHENTICATION_CLOCK_SKEW = timedelta(minutes=5)
 _READ_ERROR_MESSAGE = "Failed to read the audit report authentication file."
 _FORMAT_ERROR_MESSAGE = "The audit report authentication file has an invalid format."
 _EXPORT_ERROR_MESSAGE = "Failed to export the audit report authentication file."
 
-ReportAuthenticationKey = AuthenticationKey
+ReportAuthenticationKey = TrustedAuthenticationKey
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class ReportAuthentication:
     algorithm: str
     protocol_version: int
     key_id: str
+    authenticated_at: datetime
     digest: str
     filename: str
 
@@ -56,6 +60,7 @@ class ReportAuthentication:
 class ReportAuthenticityResult:
     algorithm: str
     key_id: str
+    authenticated_at: datetime
     digest: str
     filename: str
 
@@ -66,13 +71,6 @@ def is_valid_hmac_digest(value: object) -> bool:
     if len(value) != 64:
         return False
     return all(character in "0123456789abcdef" for character in value)
-
-
-def load_authentication_key(
-    *,
-    environ: Mapping[str, str],
-) -> AuthenticationKey:
-    return load_authentication_keyring(environ=environ).get_active_key()
 
 
 def authentication_path_for(
@@ -86,17 +84,24 @@ def authentication_path_for(
 def calculate_report_hmac(
     *,
     report_path: Path,
-    key: AuthenticationKey,
+    key: TrustedAuthenticationKey,
+    authenticated_at: datetime,
 ) -> str:
     if not isinstance(report_path, Path):
         raise TypeError("report_path must be a Path")
     _validate_authentication_key(key)
+    authenticated_at = _normalize_aware_datetime(authenticated_at)
+    authenticated_at_text = authenticated_at.isoformat()
 
     try:
         if report_path.is_symlink() or not report_path.is_file():
             raise ReportAuthenticationReadError(_READ_ERROR_MESSAGE)
         digest = hmac.new(key.secret, digestmod="sha256")
         digest.update(HMAC_DOMAIN_SEPARATOR)
+        digest.update(b"\0")
+        digest.update(key.key_id.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(authenticated_at_text.encode("ascii"))
         digest.update(b"\0")
         digest.update(report_path.name.encode("utf-8"))
         digest.update(b"\0")
@@ -113,13 +118,20 @@ def calculate_report_hmac(
 def build_report_authentication(
     *,
     report_path: Path,
-    key: AuthenticationKey,
+    key: TrustedAuthenticationKey,
+    authenticated_at: datetime,
 ) -> ReportAuthentication:
+    authenticated_at = _normalize_aware_datetime(authenticated_at)
     return ReportAuthentication(
         algorithm=HMAC_ALGORITHM,
         protocol_version=HMAC_PROTOCOL_VERSION,
         key_id=key.key_id,
-        digest=calculate_report_hmac(report_path=report_path, key=key),
+        authenticated_at=authenticated_at,
+        digest=calculate_report_hmac(
+            report_path=report_path,
+            key=key,
+            authenticated_at=authenticated_at,
+        ),
         filename=report_path.name,
     )
 
@@ -133,12 +145,14 @@ def format_report_authentication(
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
     if not is_valid_key_id(authentication.key_id):
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
+    authenticated_at = _normalize_aware_datetime(authentication.authenticated_at)
     if not is_valid_hmac_digest(authentication.digest):
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
     _validate_authentication_filename(authentication.filename)
     return (
         f"{authentication.algorithm}  "
         f"{authentication.key_id}  "
+        f"{authenticated_at.isoformat()}  "
         f"{authentication.digest}  "
         f"{authentication.filename}\n"
     )
@@ -156,10 +170,10 @@ def parse_report_authentication(
     if "\n" in body or "\r" in body:
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
     fields = body.split("  ")
-    if len(fields) != 4 or any(field == "" for field in fields):
+    if len(fields) != 5 or any(field == "" for field in fields):
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
 
-    algorithm, key_id, digest, filename = fields
+    algorithm, key_id, authenticated_at_text, digest, filename = fields
     if algorithm != HMAC_ALGORITHM:
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
     if not is_valid_key_id(key_id):
@@ -167,10 +181,15 @@ def parse_report_authentication(
     if not is_valid_hmac_digest(digest):
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
     _validate_authentication_filename(filename)
+    try:
+        authenticated_at = parse_aware_datetime(authenticated_at_text)
+    except InvalidAuthenticationTrustStoreError as error:
+        raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE) from error
     return ReportAuthentication(
         algorithm=HMAC_ALGORITHM,
         protocol_version=HMAC_PROTOCOL_VERSION,
         key_id=key_id,
+        authenticated_at=authenticated_at,
         digest=digest,
         filename=filename,
     )
@@ -219,22 +238,20 @@ def export_authentication_file(
                 pass
 
 
-def validate_authentication_keyring(
-    keyring: AuthenticationKeyring,
-) -> None:
-    if not isinstance(keyring, AuthenticationKeyring):
-        raise TypeError("keyring must be an AuthenticationKeyring")
-
-
 def verify_report_authenticity(
     *,
     report_path: Path,
-    keyring: AuthenticationKeyring,
+    trust_store: AuthenticationTrustStore,
+    verification_time: datetime,
     authentication_path: Path | None = None,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
 ) -> ReportAuthenticityResult:
     if not isinstance(report_path, Path):
         raise TypeError("report_path must be a Path")
-    validate_authentication_keyring(keyring)
+    if not isinstance(trust_store, AuthenticationTrustStore):
+        raise TypeError("trust_store must be an AuthenticationTrustStore")
+    verification_time = _normalize_aware_datetime(verification_time)
     if authentication_path is None:
         authentication_path = authentication_path_for(report_path)
     if not isinstance(authentication_path, Path):
@@ -250,8 +267,19 @@ def verify_report_authenticity(
         raise AuthenticationFilenameMismatchError(
             "The authentication filename does not match the audit report."
         )
-    key = keyring.get_key(authentication.key_id)
-    actual_digest = calculate_report_hmac(report_path=report_path, key=key)
+    key = trust_store.get_key(authentication.key_id)
+    ensure_key_trusted_for_verification(
+        key=key,
+        authenticated_at=authentication.authenticated_at,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    actual_digest = calculate_report_hmac(
+        report_path=report_path,
+        key=key,
+        authenticated_at=authentication.authenticated_at,
+    )
     if not hmac.compare_digest(authentication.digest, actual_digest):
         raise ReportAuthenticityMismatchError(
             "The audit report authentication code does not match."
@@ -266,18 +294,23 @@ def verify_report_authenticity(
     return ReportAuthenticityResult(
         algorithm=authentication.algorithm,
         key_id=authentication.key_id,
+        authenticated_at=authentication.authenticated_at,
         digest=actual_digest,
         filename=authentication.filename,
     )
 
 
-def _validate_authentication_key(key: AuthenticationKey) -> None:
-    if not isinstance(key, AuthenticationKey):
-        raise TypeError("key must be an AuthenticationKey")
+def _validate_authentication_key(key: TrustedAuthenticationKey) -> None:
+    if not isinstance(key, TrustedAuthenticationKey):
+        raise TypeError("key must be a TrustedAuthenticationKey")
     if not is_valid_key_id(key.key_id):
-        raise InvalidAuthenticationKeyIdError("The audit report authentication key ID is invalid.")
+        raise InvalidAuthenticationKeyIdError(
+            "The audit report authentication key ID is invalid."
+        )
     if not isinstance(key.secret, bytes) or len(key.secret) < MINIMUM_HMAC_KEY_BYTES:
-        raise InvalidAuthenticationKeyError("The audit report authentication key is invalid.")
+        raise InvalidAuthenticationKeyError(
+            "The audit report authentication key is invalid."
+        )
 
 
 def _validate_authentication_filename(filename: str) -> None:
@@ -291,3 +324,11 @@ def _validate_authentication_filename(filename: str) -> None:
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
     if Path(filename).name != filename:
         raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
+
+
+def _normalize_aware_datetime(value: datetime) -> datetime:
+    if not isinstance(value, datetime):
+        raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise InvalidAuthenticationFormatError(_FORMAT_ERROR_MESSAGE)
+    return value.astimezone(UTC)

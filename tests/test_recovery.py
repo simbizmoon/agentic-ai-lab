@@ -15,7 +15,10 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
     AuthenticationFilenameMismatchError,
+    AuthenticationFromFutureError,
+    AuthenticationKeyNotValidAtSigningTimeError,
     AuthenticationKeyringError,
+    AuthenticationTrustError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     DuplicateAuthenticationKeyIdError,
@@ -24,6 +27,7 @@ from app.exceptions import (
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
     InvalidAuthenticationKeyringError,
+    InvalidAuthenticationTrustStoreError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
@@ -31,6 +35,9 @@ from app.exceptions import (
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
     MissingSchemaMigrationError,
+    MultipleActiveAuthenticationKeysError,
+    NoActiveAuthenticationKeyError,
+    RejectedAuthenticationKeyError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
     ReportExportWriteError,
@@ -55,6 +62,7 @@ from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 SENSITIVE_TEXT = "sk-test-sensitive-user-input"
 PRIVATE_HMAC_SECRET = "PRIVATE-HMAC-SECRET"
 PRIVATE_KEYRING_SECRET = "PRIVATE-KEYRING-SECRET"
+PRIVATE_TRUST_SECRET = "PRIVATE-TRUST-ERROR"
 
 
 def make_request() -> httpx.Request:
@@ -87,6 +95,7 @@ def assert_decision(
     assert SENSITIVE_TEXT not in decision.reason
     assert PRIVATE_HMAC_SECRET not in decision.reason
     assert PRIVATE_KEYRING_SECRET not in decision.reason
+    assert PRIVATE_TRUST_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -190,6 +199,13 @@ def test_recovery_decision_is_frozen() -> None:
         (InvalidAuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
         (DuplicateAuthenticationKeyIdError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
         (ActiveAuthenticationKeyNotFoundError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
+        (AuthenticationTrustError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
+        (InvalidAuthenticationTrustStoreError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
+        (NoActiveAuthenticationKeyError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
+        (MultipleActiveAuthenticationKeysError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
+        (AuthenticationKeyNotValidAtSigningTimeError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
+        (RejectedAuthenticationKeyError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
+        (AuthenticationFromFutureError(PRIVATE_TRUST_SECRET), False, RecoveryAction.ABORT),
         (MissingAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
         (InvalidAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
         (InvalidAuthenticationKeyIdError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),

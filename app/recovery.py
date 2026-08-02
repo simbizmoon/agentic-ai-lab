@@ -12,6 +12,7 @@ from app.exceptions import (
     AuditLogError,
     AuditReportValidationError,
     AuthenticationKeyringError,
+    AuthenticationTrustError,
     ReportAuthenticityError,
     ReportExportError,
     ReportIntegrityError,
@@ -204,6 +205,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The audit report authentication keyring is not configured safely.",
+        )
+
+    if isinstance(error, AuthenticationTrustError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report authentication trust policy rejected the operation.",
         )
 
     if isinstance(error, ReportAuthenticityError):

@@ -21,7 +21,10 @@ from app.audit_report import (
     read_audit_events,
     render_audit_report,
 )
-from app.authentication_keyring import load_authentication_keyring
+from app.authentication_trust import (
+    RevokedKeyPolicy,
+    load_authentication_trust_store,
+)
 from app.exceptions import (
     AuditLogError,
     ReportAuthenticityError,
@@ -98,6 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Verify an exported JSON audit report and HMAC sidecar.",
     )
+    parser.add_argument(
+        "--revoked-key-policy",
+        choices=[policy.value for policy in RevokedKeyPolicy],
+        default=RevokedKeyPolicy.REJECT.value,
+        help="Trust policy for revoked HMAC keys during authenticity verification.",
+    )
     return parser
 
 
@@ -111,7 +120,12 @@ def main(argv: list[str] | None = None) -> int:
         return _run_verify(args.verify)
     if args.verify_authenticity is not None:
         _validate_authenticity_verify_args(parser, args)
-        return _run_verify_authenticity(args.verify_authenticity)
+        return _run_verify_authenticity(
+            args.verify_authenticity,
+            revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
+        )
+    if args.revoked_key_policy != RevokedKeyPolicy.REJECT.value:
+        parser.error("--revoked-key-policy can only be used with --verify-authenticity")
 
     if args.authenticate and args.output is None:
         parser.error("--authenticate requires --output")
@@ -142,11 +156,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.output is not None:
             if args.authenticate:
-                keyring = load_authentication_keyring(environ=os.environ)
+                authenticated_at = datetime.now(UTC)
+                trust_store = load_authentication_trust_store(environ=os.environ)
                 checksum, authentication = export_json_report_with_authentication(
                     path=args.output,
                     json_text=rendered_report,
-                    keyring=keyring,
+                    trust_store=trust_store,
+                    authenticated_at=authenticated_at,
                 )
                 print("Audit report exported successfully.")
                 print(f"Output: {args.output}")
@@ -155,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Authentication: {authentication_path_for(args.output)}")
                 print(f"Algorithm: {authentication.algorithm}")
                 print(f"Key ID: {authentication.key_id}")
+                print(f"Authenticated At: {authentication.authenticated_at.isoformat()}")
                 print(f"HMAC: {authentication.digest}")
                 return 0
 
@@ -201,6 +218,8 @@ def _validate_verify_args(
         parser.error("--verify cannot be used with --status")
     if args.format == AuditReportFormat.JSON.value:
         parser.error("--verify cannot be used with --format json")
+    if args.revoked_key_policy != RevokedKeyPolicy.REJECT.value:
+        parser.error("--verify cannot be used with --revoked-key-policy")
 
 
 def _validate_authenticity_verify_args(
@@ -240,12 +259,18 @@ def _run_verify(verify_path: Path) -> int:
     return 0
 
 
-def _run_verify_authenticity(verify_path: Path) -> int:
+def _run_verify_authenticity(
+    verify_path: Path,
+    *,
+    revoked_key_policy: RevokedKeyPolicy,
+) -> int:
     try:
-        keyring = load_authentication_keyring(environ=os.environ)
+        trust_store = load_authentication_trust_store(environ=os.environ)
         result = verify_report_authenticity(
             report_path=verify_path,
-            keyring=keyring,
+            trust_store=trust_store,
+            verification_time=datetime.now(UTC),
+            revoked_key_policy=revoked_key_policy,
         )
     except (AuditLogError, ReportAuthenticityError) as error:
         _print_recovery_error(
@@ -259,6 +284,7 @@ def _run_verify_authenticity(verify_path: Path) -> int:
     print(f"Authentication: {authentication_path_for(verify_path)}")
     print(f"Algorithm: {result.algorithm}")
     print(f"Key ID: {result.key_id}")
+    print(f"Authenticated At: {result.authenticated_at.isoformat()}")
     print(f"HMAC: {result.digest}")
     return 0
 

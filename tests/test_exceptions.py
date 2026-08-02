@@ -8,7 +8,10 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
     AuthenticationFilenameMismatchError,
+    AuthenticationFromFutureError,
+    AuthenticationKeyNotValidAtSigningTimeError,
     AuthenticationKeyringError,
+    AuthenticationTrustError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     DuplicateAuthenticationKeyIdError,
@@ -18,6 +21,7 @@ from app.exceptions import (
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
     InvalidAuthenticationKeyringError,
+    InvalidAuthenticationTrustStoreError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
@@ -25,6 +29,9 @@ from app.exceptions import (
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
     MissingSchemaMigrationError,
+    MultipleActiveAuthenticationKeysError,
+    NoActiveAuthenticationKeyError,
+    RejectedAuthenticationKeyError,
     ReportAuthenticationReadError,
     ReportAuthenticityError,
     ReportAuthenticityMismatchError,
@@ -305,3 +312,41 @@ def test_concrete_authentication_keyring_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 6
+
+
+
+def test_authentication_trust_error_inherits_from_authenticity_error() -> None:
+    assert issubclass(AuthenticationTrustError, ReportAuthenticityError)
+
+
+def test_authentication_keyring_error_inherits_from_trust_error() -> None:
+    assert issubclass(AuthenticationKeyringError, AuthenticationTrustError)
+
+
+def test_concrete_authentication_trust_errors_inherit_from_trust_error() -> None:
+    for exception_type in (
+        InvalidAuthenticationTrustStoreError,
+        DuplicateAuthenticationKeyIdError,
+        NoActiveAuthenticationKeyError,
+        MultipleActiveAuthenticationKeysError,
+        AuthenticationKeyNotValidAtSigningTimeError,
+        RejectedAuthenticationKeyError,
+        AuthenticationFromFutureError,
+    ):
+        assert issubclass(exception_type, AuthenticationTrustError)
+
+
+def test_concrete_authentication_trust_errors_are_distinct_classes() -> None:
+    exception_types = {
+        AuthenticationTrustError,
+        InvalidAuthenticationTrustStoreError,
+        DuplicateAuthenticationKeyIdError,
+        NoActiveAuthenticationKeyError,
+        MultipleActiveAuthenticationKeysError,
+        AuthenticationKeyNotValidAtSigningTimeError,
+        RejectedAuthenticationKeyError,
+        AuthenticationFromFutureError,
+        AuthenticationKeyringError,
+    }
+
+    assert len(exception_types) == 9

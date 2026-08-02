@@ -166,7 +166,11 @@ class InvalidAuthenticationKeyIdError(ReportAuthenticityError):
 
 
 
-class AuthenticationKeyringError(ReportAuthenticityError):
+class AuthenticationTrustError(ReportAuthenticityError):
+    """Base exception for authentication trust policy errors."""
+
+
+class AuthenticationKeyringError(AuthenticationTrustError):
     """Base exception for authentication keyring configuration errors."""
 
 
@@ -184,6 +188,31 @@ class DuplicateAuthenticationKeyIdError(AuthenticationKeyringError):
 
 class ActiveAuthenticationKeyNotFoundError(AuthenticationKeyringError):
     """Raised when the active authentication key is not registered."""
+
+
+class InvalidAuthenticationTrustStoreError(AuthenticationTrustError):
+    """Raised when an authentication trust store is invalid."""
+
+
+class NoActiveAuthenticationKeyError(AuthenticationTrustError):
+    """Raised when no key is active for signing at the requested time."""
+
+
+class MultipleActiveAuthenticationKeysError(AuthenticationTrustError):
+    """Raised when more than one key is active for signing."""
+
+
+class AuthenticationKeyNotValidAtSigningTimeError(AuthenticationTrustError):
+    """Raised when a key was not valid at authentication time."""
+
+
+class RejectedAuthenticationKeyError(AuthenticationTrustError):
+    """Raised when trust policy rejects an authentication key."""
+
+
+class AuthenticationFromFutureError(AuthenticationTrustError):
+    """Raised when authenticated_at is too far in the future."""
+
 
 class ReportAuthenticationReadError(ReportAuthenticityError):
     """Raised when an authentication sidecar or report cannot be read."""

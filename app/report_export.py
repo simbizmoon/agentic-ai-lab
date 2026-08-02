@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from app.audit_report import validate_audit_report_json
-from app.authentication_keyring import AuthenticationKeyring
+from app.authentication_trust import AuthenticationTrustStore, select_signing_key
 from app.exceptions import InvalidReportExportPathError, ReportExportWriteError
 from app.report_authenticity import (
     ReportAuthentication,
@@ -96,13 +97,18 @@ def export_json_report_with_authentication(
     *,
     path: Path,
     json_text: str,
-    keyring: AuthenticationKeyring,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
 ) -> tuple[ReportChecksum, ReportAuthentication]:
-    active_key = keyring.get_active_key()
+    signing_key = select_signing_key(
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+    )
     checksum = export_json_report_with_checksum(path=path, json_text=json_text)
     authentication = build_report_authentication(
         report_path=path,
-        key=active_key,
+        key=signing_key,
+        authenticated_at=authenticated_at,
     )
     export_authentication_file(
         authentication_path=authentication_path_for(path),

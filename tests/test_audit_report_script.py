@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 import scripts.audit_report as script
 from app.audit_report import validate_audit_report_json
-from app.authentication_keyring import (
-    HMAC_KEY_ENV_NAME,
-    HMAC_KEY_ID_ENV_NAME,
-    HMAC_KEYRING_ENV_NAME,
-    AuthenticationKey,
-    AuthenticationKeyring,
+from app.authentication_keyring import HMAC_KEY_ENV_NAME, HMAC_KEY_ID_ENV_NAME
+from app.authentication_trust import (
+    AUTHENTICATION_TRUST_STORE_ENV_NAME,
+    SINGLE_KEY_VALID_FROM_ENV_NAME,
+    AuthenticationKeyStatus,
+    AuthenticationTrustStore,
+    TrustedAuthenticationKey,
 )
 from app.exceptions import (
     AuditReportValidationError,
@@ -34,6 +36,9 @@ HMAC_SECRET_B64 = base64.b64encode(HMAC_SECRET).decode("ascii")
 HMAC_KEY_ID = "key-1"
 OLD_HMAC_SECRET = b"o" * 32
 NEW_HMAC_SECRET = b"n" * 32
+VALID_FROM = "2020-01-01T00:00:00+00:00"
+AUTHENTICATED_AT = datetime(2026, 8, 2, 0, 0, tzinfo=UTC)
+VERIFICATION_TIME = datetime(2026, 8, 2, 0, 1, tzinfo=UTC)
 SECRET_VALUES = (
     "sk-test-do-not-log",
     PRIVATE_INPUT,
@@ -105,13 +110,46 @@ def failure_event(
 
 
 
-def keyring_json(active_key_id: str = "new-key") -> str:
+
+def trust_store_json(active_key_id: str = "new-key") -> str:
+    old_status = "active" if active_key_id == "old-key" else "verify_only"
+    new_status = "active" if active_key_id == "new-key" else "verify_only"
     return json.dumps(
         {
-            "active_key_id": active_key_id,
             "keys": [
-                {"key_id": "old-key", "secret_b64": base64.b64encode(OLD_HMAC_SECRET).decode("ascii")},
-                {"key_id": "new-key", "secret_b64": base64.b64encode(NEW_HMAC_SECRET).decode("ascii")},
+                {
+                    "key_id": "old-key",
+                    "secret_b64": base64.b64encode(OLD_HMAC_SECRET).decode("ascii"),
+                    "status": old_status,
+                    "valid_from": VALID_FROM,
+                    "valid_until": None,
+                    "revoked_at": None,
+                },
+                {
+                    "key_id": "new-key",
+                    "secret_b64": base64.b64encode(NEW_HMAC_SECRET).decode("ascii"),
+                    "status": new_status,
+                    "valid_from": VALID_FROM,
+                    "valid_until": None,
+                    "revoked_at": None,
+                },
+            ],
+        }
+    )
+
+
+def revoked_trust_store_json(*, revoked_at: str) -> str:
+    return json.dumps(
+        {
+            "keys": [
+                {
+                    "key_id": HMAC_KEY_ID,
+                    "secret_b64": HMAC_SECRET_B64,
+                    "status": "revoked",
+                    "valid_from": VALID_FROM,
+                    "valid_until": None,
+                    "revoked_at": revoked_at,
+                }
             ],
         }
     )
@@ -122,19 +160,33 @@ def configure_authentication_keyring(
     *,
     active_key_id: str = "new-key",
 ) -> None:
-    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, keyring_json(active_key_id))
+    monkeypatch.setenv(AUTHENTICATION_TRUST_STORE_ENV_NAME, trust_store_json(active_key_id))
 
 
-def runtime_keyring() -> AuthenticationKeyring:
-    return AuthenticationKeyring(
-        active_key_id="new-key",
-        keys=(AuthenticationKey("old-key", OLD_HMAC_SECRET), AuthenticationKey("new-key", NEW_HMAC_SECRET)),
+def runtime_keyring() -> AuthenticationTrustStore:
+    return AuthenticationTrustStore(
+        keys=(
+            TrustedAuthenticationKey(
+                "old-key",
+                OLD_HMAC_SECRET,
+                AuthenticationKeyStatus.VERIFY_ONLY,
+                datetime.fromisoformat(VALID_FROM),
+            ),
+            TrustedAuthenticationKey(
+                "new-key",
+                NEW_HMAC_SECRET,
+                AuthenticationKeyStatus.ACTIVE,
+                datetime.fromisoformat(VALID_FROM),
+            ),
+        )
     )
 
 
 def configure_authentication_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(HMAC_KEY_ENV_NAME, HMAC_SECRET_B64)
     monkeypatch.setenv(HMAC_KEY_ID_ENV_NAME, HMAC_KEY_ID)
+    monkeypatch.setenv(SINGLE_KEY_VALID_FROM_ENV_NAME, VALID_FROM)
+
 
 def write_jsonl(path: Path, *events: dict[str, object]) -> None:
     path.write_text(
@@ -1371,6 +1423,7 @@ def test_verify_failure_does_not_modify_report_or_checksum(
 
 
 
+
 def test_authenticate_export_creates_json_checksum_and_hmac(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1402,7 +1455,20 @@ def test_authenticate_export_hmac_verifies(
         ["--format", "json", "--output", str(output_path), "--authenticate"],
     )
 
-    verify_report_authenticity(report_path=output_path, keyring=AuthenticationKeyring(active_key_id=HMAC_KEY_ID, keys=(AuthenticationKey(HMAC_KEY_ID, HMAC_SECRET),)))
+    verify_report_authenticity(
+        report_path=output_path,
+        trust_store=AuthenticationTrustStore(
+            keys=(
+                TrustedAuthenticationKey(
+                    HMAC_KEY_ID,
+                    HMAC_SECRET,
+                    AuthenticationKeyStatus.ACTIVE,
+                    datetime.fromisoformat(VALID_FROM),
+                ),
+            )
+        ),
+        verification_time=datetime.now(UTC),
+    )
 
 
 def test_authenticate_export_success_output_includes_authentication_fields(
@@ -1420,8 +1486,9 @@ def test_authenticate_export_success_output_includes_authentication_fields(
     )
     output = capsys.readouterr().out
 
-    assert "Algorithm: hmac-sha256" in output
+    assert "Algorithm: hmac-sha256-v2" in output
     assert f"Key ID: {HMAC_KEY_ID}" in output
+    assert "Authenticated At:" in output
     assert "HMAC:" in output
     assert HMAC_SECRET_B64 not in output
 
@@ -1473,6 +1540,7 @@ def test_authenticate_missing_key_returns_five(
 ) -> None:
     monkeypatch.delenv(HMAC_KEY_ENV_NAME, raising=False)
     monkeypatch.delenv(HMAC_KEY_ID_ENV_NAME, raising=False)
+    monkeypatch.delenv(SINGLE_KEY_VALID_FROM_ENV_NAME, raising=False)
     output_path = tmp_path / "audit-report.json"
 
     assert run_main(
@@ -1488,6 +1556,7 @@ def test_authenticate_invalid_key_returns_five(
 ) -> None:
     monkeypatch.setenv(HMAC_KEY_ENV_NAME, "not-base64!")
     monkeypatch.setenv(HMAC_KEY_ID_ENV_NAME, HMAC_KEY_ID)
+    monkeypatch.setenv(SINGLE_KEY_VALID_FROM_ENV_NAME, VALID_FROM)
     output_path = tmp_path / "audit-report.json"
 
     assert run_main(
@@ -1574,7 +1643,9 @@ def test_verify_authenticity_outputs_success_fields(
     output = capsys.readouterr().out
 
     assert "Audit report authenticity verified." in output
+    assert "Algorithm: hmac-sha256-v2" in output
     assert f"Key ID: {HMAC_KEY_ID}" in output
+    assert "Authenticated At:" in output
     assert "HMAC:" in output
     assert HMAC_SECRET_B64 not in output
 
@@ -1626,7 +1697,10 @@ def test_verify_authenticity_changed_json_returns_five(
         tmp_path,
         ["--format", "json", "--output", str(output_path), "--authenticate"],
     )
-    output_path.write_text(output_path.read_text(encoding="utf-8").replace("gpt-test", "gpt-x"), encoding="utf-8")
+    output_path.write_text(
+        output_path.read_text(encoding="utf-8").replace("gpt-test", "gpt-x"),
+        encoding="utf-8",
+    )
 
     assert script.main(["--verify-authenticity", str(output_path)]) == 5
 
@@ -1706,11 +1780,19 @@ def test_verify_authenticity_missing_hmac_returns_five(
         ["--verify-authenticity", "report.json", "--model", "gpt-5"],
         ["--verify-authenticity", "report.json", "--status", "success"],
         ["--verify-authenticity", "report.json", "--format", "json"],
+        ["--verify-authenticity", "report.json", "--revoked-key-policy", "unknown"],
     ],
 )
 def test_verify_authenticity_rejects_invalid_combinations(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc_info:
         script.main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_revoked_key_policy_is_only_allowed_for_verify_authenticity() -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--revoked-key-policy", "allow_pre_revocation"])
 
     assert exc_info.value.code == 2
 
@@ -1760,8 +1842,7 @@ def test_verify_authenticity_failure_does_not_modify_files(
     assert auth_path.read_text(encoding="utf-8") == auth_before
 
 
-
-def test_authenticate_export_with_multi_keyring_uses_active_key(
+def test_authenticate_export_with_trust_store_uses_active_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -1780,7 +1861,7 @@ def test_authenticate_export_with_multi_keyring_uses_active_key(
     assert "  new-key  " in authentication_path_for(output_path).read_text(encoding="utf-8")
 
 
-def test_authenticate_export_keyring_does_not_use_old_key_for_new_file(
+def test_authenticate_export_trust_store_does_not_use_old_key_for_new_file(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1839,11 +1920,11 @@ def test_verify_authenticity_unregistered_sidecar_key_returns_five(
     assert script.main(["--verify-authenticity", str(output_path)]) == 5
 
 
-def test_authenticate_malformed_keyring_returns_five(
+def test_authenticate_malformed_trust_store_returns_five(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, "{")
+    monkeypatch.setenv(AUTHENTICATION_TRUST_STORE_ENV_NAME, "{")
 
     assert run_main(
         monkeypatch,
@@ -1852,18 +1933,31 @@ def test_authenticate_malformed_keyring_returns_five(
     ) == 5
 
 
-def test_authenticate_duplicate_keyring_returns_five(
+def test_authenticate_duplicate_trust_store_returns_five(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv(
-        HMAC_KEYRING_ENV_NAME,
+        AUTHENTICATION_TRUST_STORE_ENV_NAME,
         json.dumps(
             {
-                "active_key_id": "dup-key",
                 "keys": [
-                    {"key_id": "dup-key", "secret_b64": base64.b64encode(HMAC_SECRET).decode("ascii")},
-                    {"key_id": "dup-key", "secret_b64": base64.b64encode(NEW_HMAC_SECRET).decode("ascii")},
+                    {
+                        "key_id": "dup-key",
+                        "secret_b64": base64.b64encode(HMAC_SECRET).decode("ascii"),
+                        "status": "active",
+                        "valid_from": VALID_FROM,
+                        "valid_until": None,
+                        "revoked_at": None,
+                    },
+                    {
+                        "key_id": "dup-key",
+                        "secret_b64": base64.b64encode(NEW_HMAC_SECRET).decode("ascii"),
+                        "status": "active",
+                        "valid_from": VALID_FROM,
+                        "valid_until": None,
+                        "revoked_at": None,
+                    },
                 ],
             }
         ),
@@ -1876,16 +1970,24 @@ def test_authenticate_duplicate_keyring_returns_five(
     ) == 5
 
 
-def test_authenticate_missing_active_key_returns_five(
+def test_authenticate_no_active_key_returns_five(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv(
-        HMAC_KEYRING_ENV_NAME,
+        AUTHENTICATION_TRUST_STORE_ENV_NAME,
         json.dumps(
             {
-                "active_key_id": "missing-key",
-                "keys": [{"key_id": "key-1", "secret_b64": HMAC_SECRET_B64}],
+                "keys": [
+                    {
+                        "key_id": "key-1",
+                        "secret_b64": HMAC_SECRET_B64,
+                        "status": "verify_only",
+                        "valid_from": VALID_FROM,
+                        "valid_until": None,
+                        "revoked_at": None,
+                    }
+                ],
             }
         ),
     )
@@ -1897,7 +1999,7 @@ def test_authenticate_missing_active_key_returns_five(
     ) == 5
 
 
-def test_keyring_json_and_secrets_are_not_printed_on_error(
+def test_trust_store_json_and_secrets_are_not_printed_on_error(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -1905,11 +2007,19 @@ def test_keyring_json_and_secrets_are_not_printed_on_error(
     secret = "PRIVATE-KEYRING-SECRET"
     payload = json.dumps(
         {
-            "active_key_id": "key-1",
-            "keys": [{"key_id": "key-1", "secret_b64": secret}],
+            "keys": [
+                {
+                    "key_id": "key-1",
+                    "secret_b64": secret,
+                    "status": "active",
+                    "valid_from": VALID_FROM,
+                    "valid_until": None,
+                    "revoked_at": None,
+                }
+            ],
         }
     )
-    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, payload)
+    monkeypatch.setenv(AUTHENTICATION_TRUST_STORE_ENV_NAME, payload)
 
     run_main(
         monkeypatch,
@@ -1937,7 +2047,7 @@ def test_single_key_environment_remains_compatible(
     assert "  key-1  " in authentication_path_for(output_path).read_text(encoding="utf-8")
 
 
-def test_keyring_json_takes_precedence_over_single_key(
+def test_trust_store_json_takes_precedence_over_single_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -1955,15 +2065,117 @@ def test_keyring_json_takes_precedence_over_single_key(
     assert "  key-1  " not in authentication_path_for(output_path).read_text(encoding="utf-8")
 
 
-def test_bad_keyring_json_does_not_fallback_to_single_key(
+def test_bad_trust_store_json_does_not_fallback_to_single_key(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     configure_authentication_key(monkeypatch)
-    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, "{")
+    monkeypatch.setenv(AUTHENTICATION_TRUST_STORE_ENV_NAME, "{")
 
     assert run_main(
         monkeypatch,
         tmp_path,
         ["--format", "json", "--output", str(tmp_path / "report.json"), "--authenticate"],
     ) == 5
+
+
+def test_revoked_key_default_verify_policy_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    monkeypatch.setenv(
+        AUTHENTICATION_TRUST_STORE_ENV_NAME,
+        revoked_trust_store_json(revoked_at="2100-01-01T00:00:00+00:00"),
+    )
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+def test_revoked_key_allow_pre_revocation_policy_accepts_old_signature(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    monkeypatch.setenv(
+        AUTHENTICATION_TRUST_STORE_ENV_NAME,
+        revoked_trust_store_json(revoked_at="2100-01-01T00:00:00+00:00"),
+    )
+
+    assert script.main(
+        [
+            "--verify-authenticity",
+            str(output_path),
+            "--revoked-key-policy",
+            "allow_pre_revocation",
+        ]
+    ) == 0
+
+
+def test_revoked_key_at_boundary_fails_even_with_allow_policy(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    sidecar_text = authentication_path_for(output_path).read_text(encoding="utf-8")
+    authenticated_at = sidecar_text.split("  ")[2]
+    monkeypatch.setenv(
+        AUTHENTICATION_TRUST_STORE_ENV_NAME,
+        revoked_trust_store_json(revoked_at=authenticated_at),
+    )
+
+    assert script.main(
+        [
+            "--verify-authenticity",
+            str(output_path),
+            "--revoked-key-policy",
+            "allow_pre_revocation",
+        ]
+    ) == 5
+
+
+def test_verify_authenticity_future_authentication_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    class FutureDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return datetime(2100, 1, 1, 0, 0, tzinfo=UTC)
+
+    monkeypatch.setattr(script, "datetime", FutureDateTime)
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    class PresentDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return datetime(2026, 8, 2, 0, 0, tzinfo=UTC)
+
+    monkeypatch.setattr(script, "datetime", PresentDateTime)
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
