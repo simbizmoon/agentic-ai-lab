@@ -101,6 +101,7 @@ from app.exceptions import (
     RootSignatureTrustError,
     RootSigningKeyIdError,
     RootSigningKeyMismatchError,
+    RootTransitionTransparencyConflictError,
     SchemaCompatibilityError,
     SchemaDowngradeError,
     SchemaMigrationStepError,
@@ -114,6 +115,7 @@ from app.exceptions import (
     SigningKeyManifestReadError,
     SigningKeyManifestRollbackError,
     SigningKeyManifestSignatureVerificationError,
+    SigningKeyManifestTransparencyConflictError,
     SigningKeyManifestValidationError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
@@ -122,9 +124,20 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    TransparencyLogConflictError,
+    TransparencyLogDivergenceError,
+    TransparencyLogReadError,
+    TransparencyLogStateExportError,
+    TransparencyLogStateMismatchError,
+    TransparencyLogStateReadError,
+    TransparencyLogStateValidationError,
+    TransparencyLogValidationError,
+    TransparencyLogWriteError,
     UnexpectedReportArchiveMemberError,
     UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
+    UnloggedRootTransitionError,
+    UnloggedSigningKeyManifestError,
     UnsafeReportArchiveMemberError,
     UnsupportedAuditSchemaError,
     UnsupportedSchemaVersionError,
@@ -141,6 +154,7 @@ PRIVATE_SIGNATURE_SECRET = "PRIVATE-ARCHIVE-SECRET"
 PRIVATE_ROOT_SECRET = "PRIVATE-ROOT-SECRET"
 PRIVATE_MANIFEST_SECRET = "PRIVATE-MANIFEST-SECRET"
 PRIVATE_MANIFEST_STATE_SECRET = "PRIVATE-MANIFEST-STATE-SECRET"
+PRIVATE_TRANSPARENCY_SECRET = "PRIVATE-TRANSPARENCY-LOG"
 
 
 def make_request() -> httpx.Request:
@@ -179,6 +193,7 @@ def assert_decision(
     assert PRIVATE_SIGNATURE_SECRET not in decision.reason
     assert PRIVATE_ROOT_SECRET not in decision.reason
     assert PRIVATE_MANIFEST_SECRET not in decision.reason
+    assert PRIVATE_TRANSPARENCY_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -493,3 +508,31 @@ def test_manifest_trust_state_retirement_error_recovery_is_abort() -> None:
     assert decision.action is RecoveryAction.ABORT
     assert decision.reason
     assert "PRIVATE-RETIRED-STATE" not in decision.reason
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TransparencyLogStateReadError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogStateValidationError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogStateExportError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogReadError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogValidationError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogWriteError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogDivergenceError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogStateMismatchError(PRIVATE_TRANSPARENCY_SECRET),
+        TransparencyLogConflictError(PRIVATE_TRANSPARENCY_SECRET),
+        RootTransitionTransparencyConflictError(PRIVATE_TRANSPARENCY_SECRET),
+        SigningKeyManifestTransparencyConflictError(PRIVATE_TRANSPARENCY_SECRET),
+        UnloggedRootTransitionError(PRIVATE_TRANSPARENCY_SECRET),
+        UnloggedSigningKeyManifestError(PRIVATE_TRANSPARENCY_SECRET),
+    ],
+)
+def test_transparency_log_errors_are_abort_without_secret(error: BaseException) -> None:
+    decision = decide_recovery(error)
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert PRIVATE_TRANSPARENCY_SECRET not in decision.reason
+    assert "a" * 64 not in decision.reason

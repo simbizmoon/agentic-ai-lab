@@ -66,6 +66,13 @@ from app.signing_key_manifest import (
     export_signing_key_manifest_signature,
     sign_signing_key_manifest,
     signing_key_manifest_signature_path_for,
+    verify_signing_key_manifest,
+)
+from app.transparency_log import (
+    TRANSPARENCY_LOG_PATH_ENV_NAME,
+    TRANSPARENCY_LOG_STATE_PATH_ENV_NAME,
+    register_verified_artifact,
+    transparency_artifact_from_verified_signing_key_manifest,
 )
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
@@ -301,6 +308,21 @@ def write_signing_key_manifest(
             initialized_at=AUTHENTICATED_AT,
         )
     monkeypatch.setenv(ROOT_TRUST_STATE_ENV_NAME, str(root_state_path))
+    transparency_log_path = tmp_path / "transparency.jsonl"
+    transparency_state_path = tmp_path / "transparency-state.json"
+    verified = verify_signing_key_manifest(
+        manifest_path=manifest_path,
+        root_public_key=root_public_key,
+        verification_time=AUTHENTICATED_AT,
+    )
+    register_verified_artifact(
+        log_path=transparency_log_path,
+        state_path=transparency_state_path,
+        artifact=transparency_artifact_from_verified_signing_key_manifest(verified.result),
+        recorded_at=AUTHENTICATED_AT,
+    )
+    monkeypatch.setenv(TRANSPARENCY_LOG_PATH_ENV_NAME, str(transparency_log_path))
+    monkeypatch.setenv(TRANSPARENCY_LOG_STATE_PATH_ENV_NAME, str(transparency_state_path))
     return manifest_path
 
 
@@ -2681,7 +2703,7 @@ def test_archive_export_failure_keeps_bundle_files(
         )
         raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report_signed_archive_with_root_state", fail_archive)
+    monkeypatch.setattr(script, "export_json_report_signed_archive_with_root_state_and_transparency", fail_archive)
 
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 5
     output = capsys.readouterr().out

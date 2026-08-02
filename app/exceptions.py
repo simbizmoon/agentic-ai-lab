@@ -453,6 +453,66 @@ class RootSigningKeyMismatchError(RootSignatureTrustError):
     """Raised when root private and public keys do not match."""
 
 
+class TransparencyLogStateError(AgenticAILabError):
+    """Base exception for transparency log state errors."""
+
+
+class TransparencyLogStateReadError(TransparencyLogStateError):
+    """Raised when transparency log state cannot be read."""
+
+
+class TransparencyLogStateValidationError(TransparencyLogStateError):
+    """Raised when transparency log state is invalid."""
+
+
+class TransparencyLogStateExportError(TransparencyLogStateError):
+    """Raised when transparency log state cannot be written safely."""
+
+
+class TransparencyLogError(AgenticAILabError):
+    """Base exception for transparency log errors."""
+
+
+class TransparencyLogReadError(TransparencyLogError):
+    """Raised when transparency log cannot be read."""
+
+
+class TransparencyLogValidationError(TransparencyLogError):
+    """Raised when transparency log structure is invalid."""
+
+
+class TransparencyLogWriteError(TransparencyLogError):
+    """Raised when transparency log cannot be appended safely."""
+
+
+class TransparencyLogDivergenceError(TransparencyLogError):
+    """Raised when log and state diverge."""
+
+
+class TransparencyLogStateMismatchError(TransparencyLogError):
+    """Raised when transparency log state does not match log tip."""
+
+
+class TransparencyLogConflictError(TransparencyLogError):
+    """Raised when an artifact conflicts with a logged artifact."""
+
+
+class RootTransitionTransparencyConflictError(TransparencyLogConflictError):
+    """Raised when a root transition conflicts with the transparency log."""
+
+
+class SigningKeyManifestTransparencyConflictError(TransparencyLogConflictError):
+    """Raised when a signing key manifest conflicts with the transparency log."""
+
+
+class UnloggedRootTransitionError(TransparencyLogError):
+    """Raised when a root transition is not registered in transparency log."""
+
+
+class UnloggedSigningKeyManifestError(TransparencyLogError):
+    """Raised when a signing key manifest is not registered in transparency log."""
+
+
 class RootTransitionError(AgenticAILabError):
     """Base exception for root key transition errors."""
 

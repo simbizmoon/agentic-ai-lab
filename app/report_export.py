@@ -48,6 +48,7 @@ from app.signature_trust import ArchiveSignatureTrustStore, ArchiveSigningPrivat
 from app.signing_key_manifest import (
     VerifiedSigningKeyManifest,
     verify_signing_key_manifest_with_root_state,
+    verify_signing_key_manifest_with_root_state_and_transparency,
     verify_signing_key_manifest_with_state,
 )
 
@@ -402,4 +403,60 @@ def export_json_report_signed_archive_with_root_state(
         archive_authentication,
         signature,
         state_decision,
+    )
+
+
+def export_json_report_signed_archive_with_root_state_and_transparency(
+    *,
+    path: Path,
+    json_text: str,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    signing_key: ArchiveSigningPrivateKey,
+    manifest_path: Path,
+    root_state: RootTrustStatePayload,
+    state_path: Path | None,
+    transparency_log_path: Path,
+    transparency_state_path: Path,
+    signed_at: datetime,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    archive_path: Path | None = None,
+):
+    from app.transparency_log import TransparencyLogMode
+
+    verified_manifest, state_decision, inclusion = verify_signing_key_manifest_with_root_state_and_transparency(
+        manifest_path=manifest_path,
+        root_state=root_state,
+        verification_time=signed_at,
+        state_path=state_path,
+        transparency_log_path=transparency_log_path,
+        transparency_state_path=transparency_state_path,
+        transparency_mode=TransparencyLogMode.REQUIRE_EXISTING,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+    )
+    checksum, authentication, manifest, archive, archive_authentication, signature = (
+        export_json_report_signed_archive_with_manifest(
+            path=path,
+            json_text=json_text,
+            trust_store=trust_store,
+            authenticated_at=authenticated_at,
+            signing_key=signing_key,
+            verified_manifest=verified_manifest,
+            signed_at=signed_at,
+            archive_path=archive_path,
+        )
+    )
+    return (
+        checksum,
+        authentication,
+        manifest,
+        archive,
+        archive_authentication,
+        signature,
+        state_decision,
+        inclusion,
     )

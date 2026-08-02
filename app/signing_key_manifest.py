@@ -761,3 +761,56 @@ def _is_safe_json_filename(value: object) -> bool:
         and "\0" not in value
         and Path(value).name == value
     )
+
+
+def verify_signing_key_manifest_with_root_state_and_transparency(
+    *,
+    manifest_path: Path,
+    root_state: RootTrustStatePayload,
+    verification_time: datetime,
+    state_path: Path | None,
+    transparency_log_path: Path,
+    transparency_state_path: Path,
+    transparency_mode,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    signature_path: Path | None = None,
+    maximum_clock_skew: timedelta = MAX_KEY_MANIFEST_CLOCK_SKEW,
+):
+    from app.transparency_log import (
+        TransparencyLogMode,
+        register_verified_artifact,
+        require_transparency_entry,
+        transparency_artifact_from_verified_signing_key_manifest,
+        verify_transparency_log,
+    )
+
+    verified_manifest, state_decision = verify_signing_key_manifest_with_root_state(
+        manifest_path=manifest_path,
+        root_state=root_state,
+        verification_time=verification_time,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+        signature_path=signature_path,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    artifact = transparency_artifact_from_verified_signing_key_manifest(verified_manifest.result)
+    mode = TransparencyLogMode(transparency_mode)
+    if mode is TransparencyLogMode.REGISTER_IF_MISSING:
+        log_result = register_verified_artifact(
+            log_path=transparency_log_path,
+            state_path=transparency_state_path,
+            artifact=artifact,
+            recorded_at=verification_time,
+        )
+        inclusion = log_result.inclusion
+    else:
+        verification = verify_transparency_log(
+            log_path=transparency_log_path,
+            state_path=transparency_state_path,
+        )
+        inclusion = require_transparency_entry(verification_result=verification, artifact=artifact)
+    return verified_manifest, state_decision, inclusion

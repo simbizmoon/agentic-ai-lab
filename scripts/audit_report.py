@@ -51,6 +51,8 @@ from app.exceptions import (
     SigningKeyManifestError,
     SigningKeyManifestReadError,
     SigningKeyManifestValidationError,
+    TransparencyLogError,
+    TransparencyLogStateError,
 )
 from app.manifest_trust_state import (
     MANIFEST_TRUST_STATE_ENV_NAME,
@@ -63,9 +65,9 @@ from app.manifest_trust_state import (
 from app.recovery import decide_recovery
 from app.report_archive import (
     archive_path_for,
-    verify_archive_signature_with_root_state,
+    verify_archive_signature_with_root_state_and_transparency,
     verify_authenticated_report_archive,
-    verify_signed_authenticated_report_archive_with_root_state,
+    verify_signed_authenticated_report_archive_with_root_state_and_transparency,
 )
 from app.report_authenticity import (
     authentication_path_for,
@@ -75,7 +77,7 @@ from app.report_bundle import manifest_path_for, verify_report_bundle
 from app.report_export import (
     export_json_report_archive,
     export_json_report_bundle,
-    export_json_report_signed_archive_with_root_state,
+    export_json_report_signed_archive_with_root_state_and_transparency,
     export_json_report_with_checksum,
 )
 from app.report_integrity import (
@@ -100,7 +102,7 @@ from app.root_transition import (
 )
 from app.root_trust_state import (
     ROOT_TRUST_STATE_ENV_NAME,
-    apply_root_transition,
+    apply_root_transition_with_transparency,
     initialize_root_trust_state,
     load_root_trust_state,
     trusted_root_public_key_from_state,
@@ -120,6 +122,18 @@ from app.signing_key_manifest import (
     signing_key_manifest_signature_path_for,
     verify_signing_key_manifest,
     verify_signing_key_manifest_with_root_state,
+    verify_signing_key_manifest_with_root_state_and_transparency,
+)
+from app.transparency_log import (
+    TRANSPARENCY_LOG_PATH_ENV_NAME,
+    TRANSPARENCY_LOG_STATE_PATH_ENV_NAME,
+    TransparencyLogAppendResult,
+    TransparencyLogInclusionResult,
+    TransparencyLogMode,
+    register_verified_artifact,
+    require_transparency_entry,
+    transparency_artifact_from_verified_root_transition,
+    verify_transparency_log,
 )
 
 _MONKEYPATCH_COMPATIBILITY_EXPORTS = (
@@ -198,6 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--apply-root-transition", type=Path)
     parser.add_argument("--root-trust-state", type=Path)
     parser.add_argument("--retire-manifest-state", type=Path)
+    parser.add_argument("--transparency-log", type=Path)
+    parser.add_argument("--transparency-log-state", type=Path)
+    parser.add_argument("--verify-transparency-log", type=Path)
+    parser.add_argument("--show-transparency-log", type=Path)
+    parser.add_argument("--register-transparency-entry", action="store_true")
+    parser.add_argument("--require-transparency-entry", action="store_true")
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -216,6 +236,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _validate_mode_args(parser, args)
 
+    if args.show_transparency_log is not None:
+        return _run_show_transparency_log(args.show_transparency_log, args, parser)
+    if args.verify_transparency_log is not None:
+        return _run_verify_transparency_log(args.verify_transparency_log, args, parser)
     if args.show_root_trust_state is not None:
         return _run_show_root_trust_state(args.show_root_trust_state)
     if args.initialize_root_trust_state is not None:
@@ -261,6 +285,8 @@ def main(argv: list[str] | None = None) -> int:
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             state_path=_resolve_manifest_state_path(args),
             root_state_path=args.root_trust_state,
+            transparency_log_path=_resolve_transparency_log_path(args, parser),
+            transparency_state_path=_resolve_transparency_state_path(args, parser),
             state_mode=_resolve_manifest_state_mode(args),
             require_existing_state=args.require_existing_manifest_state,
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
@@ -274,6 +300,8 @@ def main(argv: list[str] | None = None) -> int:
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             state_path=_resolve_manifest_state_path(args),
             root_state_path=args.root_trust_state,
+            transparency_log_path=_resolve_transparency_log_path(args, parser),
+            transparency_state_path=_resolve_transparency_state_path(args, parser),
             state_mode=_resolve_manifest_state_mode(args),
             require_existing_state=args.require_existing_manifest_state,
             revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
@@ -302,10 +330,14 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.verify_root_transition,
         args.retire_manifest_state,
         args.apply_root_transition,
+        args.verify_transparency_log,
+        args.show_transparency_log,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
         parser.error("only one verify mode can be used at a time")
+    if args.register_transparency_entry and args.require_transparency_entry:
+        parser.error("transparency register and require modes are mutually exclusive")
 
     root_mode = (
         args.show_root_trust_state,
@@ -315,6 +347,19 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.retire_manifest_state,
         args.apply_root_transition,
     )
+    if args.show_transparency_log is not None or args.verify_transparency_log is not None:
+        option_name = "--show-transparency-log" if args.show_transparency_log is not None else "--verify-transparency-log"
+        _validate_common_verify_args(parser, args, option_name)
+        if args.signing_key_manifest is not None or args.minimum_manifest_generation is not None:
+            parser.error(f"{option_name} cannot be used with signing key manifest options")
+        if args.manifest_state is not None or args.no_update_manifest_state or args.require_existing_manifest_state:
+            parser.error(f"{option_name} cannot be used with manifest state options")
+        if args.root_trust_state is not None:
+            parser.error(f"{option_name} cannot be used with --root-trust-state")
+        if args.register_transparency_entry or args.require_transparency_entry:
+            parser.error(f"{option_name} cannot register or require an artifact")
+        return
+
     if any(value is not None for value in root_mode):
         if args.output is not None or args.authenticate or args.archive:
             parser.error("root trust modes cannot be used with report export options")
@@ -438,6 +483,30 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     if state_options_used and not state_capable_mode:
         parser.error("manifest state options require a signing manifest mode")
 
+    transparency_options_used = (
+        args.transparency_log is not None
+        or args.transparency_log_state is not None
+        or args.register_transparency_entry
+        or args.require_transparency_entry
+    )
+    transparency_capable_mode = (
+        args.verify_root_transition is not None
+        or args.apply_root_transition is not None
+        or args.verify_signing_key_manifest is not None
+        or args.verify_archive_signature is not None
+        or args.verify_archive is not None
+        or (args.archive and args.authenticate and args.output is not None)
+    )
+    if transparency_options_used and not transparency_capable_mode:
+        parser.error("transparency log options require a transparency-capable mode")
+    register_capable_mode = (
+        args.verify_root_transition is not None
+        or args.apply_root_transition is not None
+        or args.verify_signing_key_manifest is not None
+    )
+    if args.register_transparency_entry and not register_capable_mode:
+        parser.error("--register-transparency-entry cannot be used in this mode")
+
     if not args.archive and (args.signing_key_manifest is not None or args.minimum_manifest_generation is not None):
         parser.error("signing key manifest options require --archive")
     if args.manifest_generation is not None or args.manifest_valid_from is not None or args.manifest_valid_until is not None:
@@ -512,7 +581,7 @@ def _run_report_generation(args: argparse.Namespace, parser: argparse.ArgumentPa
             print(rendered_report)
             return 0
         if args.authenticate:
-            return _export_authenticated_report(args, rendered_report)
+            return _export_authenticated_report(args, parser, rendered_report)
         checksum = export_json_report_with_checksum(path=args.output, json_text=rendered_report)
         print("Audit report exported successfully.")
         print(f"Output: {args.output}")
@@ -533,12 +602,18 @@ def _run_report_generation(args: argparse.Namespace, parser: argparse.ArgumentPa
         RootSignatureTrustError,
         RootTrustStateError,
         SigningKeyManifestError,
+        TransparencyLogError,
+        TransparencyLogStateError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report generation failed", error=error)
         return 5
 
 
-def _export_authenticated_report(args: argparse.Namespace, rendered_report: str) -> int:
+def _export_authenticated_report(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    rendered_report: str,
+) -> int:
     exported_at = datetime.now(UTC)
     trust_store = load_authentication_trust_store(environ=os.environ)
     if args.archive:
@@ -552,17 +627,20 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
             archive_authentication,
             signature,
             state_decision,
-        ) = export_json_report_signed_archive_with_root_state(
+            transparency_inclusion,
+        ) = export_json_report_signed_archive_with_root_state_and_transparency(
             path=args.output,
             json_text=rendered_report,
             trust_store=trust_store,
             authenticated_at=exported_at,
             signing_key=signing_key,
-            manifest_path=_resolve_signing_key_manifest_path(args, None),
+            manifest_path=_resolve_signing_key_manifest_path(args, parser),
             root_state=root_state,
             state_path=_resolve_manifest_state_path(args),
+            transparency_log_path=_resolve_transparency_log_path(args, parser),
+            transparency_state_path=_resolve_transparency_state_path(args, parser),
             signed_at=exported_at,
-            minimum_generation=_resolve_minimum_manifest_generation(args, None),
+            minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             state_mode=_resolve_manifest_state_mode(args),
             require_existing_state=args.require_existing_manifest_state,
         )
@@ -577,6 +655,7 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
         archive_authentication = None
         signature = None
         state_decision = None
+        transparency_inclusion = None
 
     print("Audit report exported successfully.")
     print(f"Output: {args.output}")
@@ -606,6 +685,8 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
         print(f"Archive HMAC: {archive_authentication.digest}")
         if state_decision is not None:
             _print_manifest_state_decision(args, state_decision)
+        if transparency_inclusion is not None:
+            _print_transparency_inclusion(transparency_inclusion)
         print(f"Signature: {archive_signature_path_for(archive_path)}")
         print(f"Signature Algorithm: {signature.algorithm}")
         print(f"Signature Protocol Version: {signature.signature_version}")
@@ -670,6 +751,53 @@ def _resolve_manifest_state_mode(args: argparse.Namespace) -> ManifestTrustState
     return ManifestTrustStateMode.UPDATE
 
 
+def _resolve_transparency_log_path(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None,
+) -> Path:
+    if args.transparency_log is not None:
+        return args.transparency_log
+    env_value = os.environ.get(TRANSPARENCY_LOG_PATH_ENV_NAME)
+    if env_value:
+        return Path(env_value)
+    if parser is not None:
+        parser.error("--transparency-log is required")
+    raise TransparencyLogError("The transparency log is required.")
+
+
+def _resolve_transparency_state_path(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None,
+) -> Path:
+    if args.transparency_log_state is not None:
+        return args.transparency_log_state
+    env_value = os.environ.get(TRANSPARENCY_LOG_STATE_PATH_ENV_NAME)
+    if env_value:
+        return Path(env_value)
+    if parser is not None:
+        parser.error("--transparency-log-state is required")
+    raise TransparencyLogStateError("The transparency log state is required.")
+
+
+def _resolve_transparency_mode(args: argparse.Namespace) -> TransparencyLogMode | None:
+    if args.register_transparency_entry:
+        return TransparencyLogMode.REGISTER_IF_MISSING
+    if args.require_transparency_entry:
+        return TransparencyLogMode.REQUIRE_EXISTING
+    return None
+
+
+def _print_transparency_inclusion(inclusion: TransparencyLogInclusionResult) -> None:
+    print(f"Transparency Sequence: {inclusion.sequence}")
+    print(f"Transparency Entry Hash: {inclusion.entry_hash}")
+    print(f"Transparency Recorded At: {inclusion.recorded_at.isoformat()}")
+
+
+def _print_transparency_append_result(result: TransparencyLogAppendResult) -> None:
+    print(f"Transparency Entry Registered: {str(result.entry_registered).lower()}")
+    _print_transparency_inclusion(result.inclusion)
+
+
 def _print_manifest_state_decision(
     args: argparse.Namespace,
     decision: ManifestTrustStateDecision,
@@ -721,6 +849,63 @@ def _load_current_root_state(
     if state is None:
         raise RootTrustStateError("The root trust state is missing.")
     return state
+
+
+def _run_verify_transparency_log(
+    log_path: Path,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        result = verify_transparency_log(
+            log_path=log_path,
+            state_path=_resolve_transparency_state_path(args, parser),
+        )
+    except (TransparencyLogError, TransparencyLogStateError) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency log verification failed",
+            error=error,
+        )
+        return 5
+    print("Transparency log verified.")
+    print(f"Log Version: {result.log_version}")
+    print(f"Entry Count: {result.entry_count}")
+    print(f"First Sequence: {result.first_sequence if result.first_sequence is not None else 'none'}")
+    print(f"Last Sequence: {result.last_sequence if result.last_sequence is not None else 'none'}")
+    print(f"Last Entry Hash: {result.last_entry_hash if result.last_entry_hash is not None else 'none'}")
+    print(f"Root Transition Entries: {result.root_transition_count}")
+    print(f"Signing Key Manifest Entries: {result.signing_key_manifest_count}")
+    return 0
+
+
+def _run_show_transparency_log(
+    log_path: Path,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        result = verify_transparency_log(
+            log_path=log_path,
+            state_path=_resolve_transparency_state_path(args, parser),
+        )
+    except (TransparencyLogError, TransparencyLogStateError) as error:
+        _print_recovery_error(
+            header="[ERROR] Transparency log inspection failed",
+            error=error,
+        )
+        return 5
+    print("Transparency log.")
+    print(f"Log Version: {result.log_version}")
+    print(f"Entry Count: {result.entry_count}")
+    for inclusion in result.entries_by_identifier.values():
+        print(
+            "Entry: "
+            f"sequence={inclusion.sequence} "
+            f"type={inclusion.artifact_type.value} "
+            f"identifier={inclusion.artifact_identifier} "
+            f"recorded_at={inclusion.recorded_at.isoformat()}"
+        )
+    return 0
 
 
 def _run_show_root_trust_state(state_path: Path) -> int:
@@ -840,13 +1025,36 @@ def _run_verify_root_transition(
 ) -> int:
     try:
         root_state = _load_current_root_state(args, parser)
+        verification_time = datetime.now(UTC)
         result = verify_root_transition(
             transition_path=args.verify_root_transition,
             current_root=trusted_root_public_key_from_state(root_state),
             current_root_epoch=root_state.current_root_epoch,
-            verification_time=datetime.now(UTC),
+            verification_time=verification_time,
         )
-    except (RootTransitionError, RootTrustStateError) as error:
+        transparency_result = None
+        transparency_inclusion = None
+        transparency_mode = _resolve_transparency_mode(args)
+        if transparency_mode is not None:
+            artifact = transparency_artifact_from_verified_root_transition(result)
+            if transparency_mode is TransparencyLogMode.REGISTER_IF_MISSING:
+                transparency_result = register_verified_artifact(
+                    log_path=_resolve_transparency_log_path(args, parser),
+                    state_path=_resolve_transparency_state_path(args, parser),
+                    artifact=artifact,
+                    recorded_at=verification_time,
+                )
+                transparency_inclusion = transparency_result.inclusion
+            else:
+                verification = verify_transparency_log(
+                    log_path=_resolve_transparency_log_path(args, parser),
+                    state_path=_resolve_transparency_state_path(args, parser),
+                )
+                transparency_inclusion = require_transparency_entry(
+                    verification_result=verification,
+                    artifact=artifact,
+                )
+    except (RootTransitionError, RootTrustStateError, TransparencyLogError, TransparencyLogStateError) as error:
         _print_recovery_error(
             header="[ERROR] Root transition verification failed",
             error=error,
@@ -859,6 +1067,10 @@ def _run_verify_root_transition(
     print(f"Previous Root Key ID: {result.previous_root_key_id}")
     print(f"Next Root Key ID: {result.next_root_key_id}")
     print(f"Active For Application: {str(result.is_active_for_application).lower()}")
+    if transparency_result is not None:
+        _print_transparency_append_result(transparency_result)
+    elif transparency_inclusion is not None:
+        _print_transparency_inclusion(transparency_inclusion)
     return 0
 
 
@@ -889,13 +1101,18 @@ def _run_apply_root_transition(
     parser: argparse.ArgumentParser,
 ) -> int:
     try:
-        result = apply_root_transition(
+        application_time = datetime.now(UTC)
+        transition_mode = _resolve_transparency_mode(args) or TransparencyLogMode.REQUIRE_EXISTING
+        result, transparency_inclusion = apply_root_transition_with_transparency(
             transition_path=args.apply_root_transition,
             state_path=_resolve_root_trust_state_path(args, parser),
-            application_time=datetime.now(UTC),
+            application_time=application_time,
             active_manifest_state_path=_resolve_manifest_state_path(args),
+            transparency_log_path=_resolve_transparency_log_path(args, parser),
+            transparency_state_path=_resolve_transparency_state_path(args, parser),
+            transparency_mode=transition_mode,
         )
-    except (ManifestTrustStateError, RootTransitionError, RootTrustStateError) as error:
+    except (ManifestTrustStateError, RootTransitionError, RootTrustStateError, TransparencyLogError, TransparencyLogStateError) as error:
         _print_recovery_error(
             header="[ERROR] Root transition application failed",
             error=error,
@@ -908,6 +1125,7 @@ def _run_apply_root_transition(
     print(f"Previous Root Key ID: {result.previous_root_key_id}")
     print(f"Next Root Key ID: {result.next_root_key_id}")
     print(f"State Updated: {str(result.state_updated).lower()}")
+    _print_transparency_inclusion(transparency_inclusion)
     return 0
 
 
@@ -1034,16 +1252,32 @@ def _run_verify_signing_key_manifest(
     try:
         verification_time = datetime.now(UTC)
         root_state = _load_current_root_state(args, parser)
-        verified, state_decision = verify_signing_key_manifest_with_root_state(
-            manifest_path=args.verify_signing_key_manifest,
-            root_state=root_state,
-            verification_time=verification_time,
-            state_path=_resolve_manifest_state_path(args),
-            minimum_generation=_resolve_minimum_manifest_generation(args, parser),
-            state_mode=_resolve_manifest_state_mode(args),
-            require_existing_state=args.require_existing_manifest_state,
-        )
-    except (ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError) as error:
+        transparency_mode = _resolve_transparency_mode(args)
+        if transparency_mode is None:
+            verified, state_decision = verify_signing_key_manifest_with_root_state(
+                manifest_path=args.verify_signing_key_manifest,
+                root_state=root_state,
+                verification_time=verification_time,
+                state_path=_resolve_manifest_state_path(args),
+                minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+                state_mode=_resolve_manifest_state_mode(args),
+                require_existing_state=args.require_existing_manifest_state,
+            )
+            transparency_inclusion = None
+        else:
+            verified, state_decision, transparency_inclusion = verify_signing_key_manifest_with_root_state_and_transparency(
+                manifest_path=args.verify_signing_key_manifest,
+                root_state=root_state,
+                verification_time=verification_time,
+                state_path=_resolve_manifest_state_path(args),
+                transparency_log_path=_resolve_transparency_log_path(args, parser),
+                transparency_state_path=_resolve_transparency_state_path(args, parser),
+                transparency_mode=transparency_mode,
+                minimum_generation=_resolve_minimum_manifest_generation(args, parser),
+                state_mode=_resolve_manifest_state_mode(args),
+                require_existing_state=args.require_existing_manifest_state,
+            )
+    except (ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError, TransparencyLogError, TransparencyLogStateError) as error:
         _print_recovery_error(
             header="[ERROR] Archive signing key manifest verification failed",
             error=error,
@@ -1058,6 +1292,8 @@ def _run_verify_signing_key_manifest(
     print(f"Active Key ID: {verified.result.active_key_id}")
     print(f"Key Count: {verified.result.key_count}")
     _print_manifest_state_decision(args, state_decision)
+    if transparency_inclusion is not None:
+        _print_transparency_inclusion(transparency_inclusion)
     return 0
 
 
@@ -1165,6 +1401,8 @@ def _run_verify_archive_signature(
     minimum_generation: int,
     state_path: Path | None,
     root_state_path: Path | None,
+    transparency_log_path: Path,
+    transparency_state_path: Path,
     state_mode: ManifestTrustStateMode,
     require_existing_state: bool,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
@@ -1172,18 +1410,20 @@ def _run_verify_archive_signature(
     try:
         verification_time = datetime.now(UTC)
         root_state = _load_current_root_state(argparse.Namespace(root_trust_state=root_state_path), None)
-        result, _verified_manifest, state_decision = verify_archive_signature_with_root_state(
+        result, _verified_manifest, state_decision, transparency_inclusion = verify_archive_signature_with_root_state_and_transparency(
             archive_path=verify_path,
             manifest_path=manifest_path,
             root_state=root_state,
             verification_time=verification_time,
             state_path=state_path,
+            transparency_log_path=transparency_log_path,
+            transparency_state_path=transparency_state_path,
             minimum_generation=minimum_generation,
             state_mode=state_mode,
             require_existing_state=require_existing_state,
             revoked_signature_key_policy=revoked_signature_key_policy,
         )
-    except (ArchiveSignatureError, ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError) as error:
+    except (ArchiveSignatureError, ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError, TransparencyLogError, TransparencyLogStateError) as error:
         _print_recovery_error(
             header="[ERROR] Audit report archive signature verification failed",
             error=error,
@@ -1204,6 +1444,7 @@ def _run_verify_archive_signature(
         state_mode=state_mode,
         decision=state_decision,
     )
+    _print_transparency_inclusion(transparency_inclusion)
     return 0
 
 
@@ -1214,6 +1455,8 @@ def _run_verify_archive(
     minimum_generation: int,
     state_path: Path | None,
     root_state_path: Path | None,
+    transparency_log_path: Path,
+    transparency_state_path: Path,
     state_mode: ManifestTrustStateMode,
     require_existing_state: bool,
     revoked_key_policy: RevokedKeyPolicy,
@@ -1223,13 +1466,15 @@ def _run_verify_archive(
         verification_time = datetime.now(UTC)
         trust_store = load_authentication_trust_store(environ=os.environ)
         root_state = _load_current_root_state(argparse.Namespace(root_trust_state=root_state_path), None)
-        result, verified_manifest, state_decision = verify_signed_authenticated_report_archive_with_root_state(
+        result, verified_manifest, state_decision, transparency_inclusion = verify_signed_authenticated_report_archive_with_root_state_and_transparency(
             archive_path=verify_path,
             trust_store=trust_store,
             manifest_path=manifest_path,
             root_state=root_state,
             verification_time=verification_time,
             state_path=state_path,
+            transparency_log_path=transparency_log_path,
+            transparency_state_path=transparency_state_path,
             minimum_generation=minimum_generation,
             state_mode=state_mode,
             require_existing_state=require_existing_state,
@@ -1249,6 +1494,8 @@ def _run_verify_archive(
         RootSignatureTrustError,
         RootTrustStateError,
         SigningKeyManifestError,
+        TransparencyLogError,
+        TransparencyLogStateError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report archive verification failed", error=error)
         return 5
@@ -1266,6 +1513,7 @@ def _run_verify_archive(
         state_mode=state_mode,
         decision=state_decision,
     )
+    _print_transparency_inclusion(transparency_inclusion)
     print(f"Archive Format Version: {result.archive_format_version}")
     print(f"Archive SHA-256: {result.archive_sha256}")
     print(f"Members: {result.member_count}")

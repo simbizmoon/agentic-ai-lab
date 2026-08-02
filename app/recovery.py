@@ -35,6 +35,8 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    TransparencyLogError,
+    TransparencyLogStateError,
 )
 
 
@@ -210,6 +212,20 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The exported audit report failed an integrity check.",
         )
 
+
+    if isinstance(error, TransparencyLogStateError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency log state could not be verified or updated safely.",
+        )
+
+    if isinstance(error, TransparencyLogError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency log is incomplete, inconsistent, or unsafe.",
+        )
 
     if isinstance(error, RootTransitionError):
         return RecoveryDecision(

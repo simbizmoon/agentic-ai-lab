@@ -100,6 +100,7 @@ from app.exceptions import (
     RootSignatureTrustError,
     RootSigningKeyIdError,
     RootSigningKeyMismatchError,
+    RootTransitionTransparencyConflictError,
     SchemaCompatibilityError,
     SchemaDowngradeError,
     SchemaMigrationError,
@@ -114,6 +115,7 @@ from app.exceptions import (
     SigningKeyManifestReadError,
     SigningKeyManifestRollbackError,
     SigningKeyManifestSignatureVerificationError,
+    SigningKeyManifestTransparencyConflictError,
     SigningKeyManifestValidationError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
@@ -123,9 +125,22 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    TransparencyLogConflictError,
+    TransparencyLogDivergenceError,
+    TransparencyLogError,
+    TransparencyLogReadError,
+    TransparencyLogStateError,
+    TransparencyLogStateExportError,
+    TransparencyLogStateMismatchError,
+    TransparencyLogStateReadError,
+    TransparencyLogStateValidationError,
+    TransparencyLogValidationError,
+    TransparencyLogWriteError,
     UnexpectedReportArchiveMemberError,
     UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
+    UnloggedRootTransitionError,
+    UnloggedSigningKeyManifestError,
     UnsafeReportArchiveMemberError,
     UnsupportedAuditSchemaError,
     UnsupportedSchemaVersionError,
@@ -737,3 +752,52 @@ def test_root_trust_state_errors_are_project_errors() -> None:
     assert issubclass(RootTrustStateError, AgenticAILabError)
     assert all(issubclass(error_type, RootTrustStateError) for error_type in concrete)
     assert len(set(concrete)) == len(concrete)
+
+
+def test_transparency_log_state_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencyLogStateError, AgenticAILabError)
+    for exception_type in (
+        TransparencyLogStateReadError,
+        TransparencyLogStateValidationError,
+        TransparencyLogStateExportError,
+    ):
+        assert issubclass(exception_type, TransparencyLogStateError)
+
+
+def test_transparency_log_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencyLogError, AgenticAILabError)
+    for exception_type in (
+        TransparencyLogReadError,
+        TransparencyLogValidationError,
+        TransparencyLogWriteError,
+        TransparencyLogDivergenceError,
+        TransparencyLogStateMismatchError,
+        TransparencyLogConflictError,
+        RootTransitionTransparencyConflictError,
+        SigningKeyManifestTransparencyConflictError,
+        UnloggedRootTransitionError,
+        UnloggedSigningKeyManifestError,
+    ):
+        assert issubclass(exception_type, TransparencyLogError)
+
+
+def test_transparency_errors_are_distinct_classes() -> None:
+    exception_types = {
+        TransparencyLogStateError,
+        TransparencyLogStateReadError,
+        TransparencyLogStateValidationError,
+        TransparencyLogStateExportError,
+        TransparencyLogError,
+        TransparencyLogReadError,
+        TransparencyLogValidationError,
+        TransparencyLogWriteError,
+        TransparencyLogDivergenceError,
+        TransparencyLogStateMismatchError,
+        TransparencyLogConflictError,
+        RootTransitionTransparencyConflictError,
+        SigningKeyManifestTransparencyConflictError,
+        UnloggedRootTransitionError,
+        UnloggedSigningKeyManifestError,
+    }
+
+    assert len(exception_types) == 15

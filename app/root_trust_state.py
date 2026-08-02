@@ -398,3 +398,53 @@ def _normalize_aware_datetime(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timezone required")
     return value.astimezone(UTC)
+
+
+def apply_root_transition_with_transparency(
+    *,
+    transition_path: Path,
+    state_path: Path,
+    application_time: datetime,
+    active_manifest_state_path: Path | None,
+    transparency_log_path: Path,
+    transparency_state_path: Path,
+    transparency_mode,
+) -> RootTransitionApplicationResult:
+    from app.transparency_log import (
+        TransparencyLogMode,
+        register_verified_artifact,
+        require_transparency_entry,
+        transparency_artifact_from_verified_root_transition,
+        verify_transparency_log,
+    )
+
+    current_state = load_root_trust_state(path=state_path)
+    if current_state is None:
+        raise MissingRootTrustStateError(_MISSING_MESSAGE)
+    verified = verify_root_transition(
+        transition_path=transition_path,
+        current_root=trusted_root_public_key_from_state(current_state),
+        current_root_epoch=current_state.current_root_epoch,
+        verification_time=application_time,
+    )
+    artifact = transparency_artifact_from_verified_root_transition(verified)
+    mode = TransparencyLogMode(transparency_mode)
+    if mode is TransparencyLogMode.REGISTER_IF_MISSING:
+        register_verified_artifact(
+            log_path=transparency_log_path,
+            state_path=transparency_state_path,
+            artifact=artifact,
+            recorded_at=application_time,
+        )
+    else:
+        verification = verify_transparency_log(
+            log_path=transparency_log_path,
+            state_path=transparency_state_path,
+        )
+        require_transparency_entry(verification_result=verification, artifact=artifact)
+    return apply_root_transition(
+        transition_path=transition_path,
+        state_path=state_path,
+        application_time=application_time,
+        active_manifest_state_path=active_manifest_state_path,
+    )
