@@ -13,7 +13,12 @@ from app.exceptions import (
     AuditLogReadError,
     AuditReportValidationError,
     InvalidAuditEventError,
+    InvalidMigrationRegistryError,
+    InvalidSchemaVersionError,
+    MissingSchemaMigrationError,
     SchemaCompatibilityError,
+    SchemaDowngradeError,
+    SchemaMigrationStepError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -22,6 +27,7 @@ from app.exceptions import (
     TimeBudgetExceededError,
     TokenBudgetExceededError,
     UnsupportedAuditSchemaError,
+    UnsupportedSchemaVersionError,
 )
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 
@@ -141,6 +147,12 @@ def test_recovery_decision_is_frozen() -> None:
         (InvalidAuditEventError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (AuditReportValidationError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (SchemaCompatibilityError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (InvalidSchemaVersionError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (UnsupportedSchemaVersionError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (SchemaDowngradeError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (InvalidMigrationRegistryError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (MissingSchemaMigrationError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (SchemaMigrationStepError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (AttemptBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TokenBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TimeBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),

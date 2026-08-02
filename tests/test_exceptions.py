@@ -7,7 +7,13 @@ from app.exceptions import (
     AuditReportValidationError,
     ExecutionBudgetError,
     InvalidAuditEventError,
+    InvalidMigrationRegistryError,
+    InvalidSchemaVersionError,
+    MissingSchemaMigrationError,
     SchemaCompatibilityError,
+    SchemaDowngradeError,
+    SchemaMigrationError,
+    SchemaMigrationStepError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
@@ -17,6 +23,7 @@ from app.exceptions import (
     TimeBudgetExceededError,
     TokenBudgetExceededError,
     UnsupportedAuditSchemaError,
+    UnsupportedSchemaVersionError,
 )
 
 
@@ -132,3 +139,32 @@ def test_schema_compatibility_error_is_distinct_class() -> None:
     }
 
     assert len(exception_types) == 4
+
+
+def test_schema_migration_error_inherits_from_project_error() -> None:
+    assert issubclass(SchemaMigrationError, AgenticAILabError)
+
+
+def test_concrete_schema_migration_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        InvalidSchemaVersionError,
+        UnsupportedSchemaVersionError,
+        SchemaDowngradeError,
+        InvalidMigrationRegistryError,
+        MissingSchemaMigrationError,
+        SchemaMigrationStepError,
+    ):
+        assert issubclass(exception_type, SchemaMigrationError)
+
+
+def test_concrete_schema_migration_errors_are_distinct_classes() -> None:
+    exception_types = {
+        InvalidSchemaVersionError,
+        UnsupportedSchemaVersionError,
+        SchemaDowngradeError,
+        InvalidMigrationRegistryError,
+        MissingSchemaMigrationError,
+        SchemaMigrationStepError,
+    }
+
+    assert len(exception_types) == 6

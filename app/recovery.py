@@ -12,6 +12,7 @@ from app.exceptions import (
     AuditLogError,
     AuditReportValidationError,
     SchemaCompatibilityError,
+    SchemaMigrationError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -171,6 +172,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The published audit report schema contract changed unexpectedly.",
+        )
+
+    if isinstance(error, SchemaMigrationError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The schema payload could not be migrated safely.",
         )
 
     if isinstance(error, ValueError):

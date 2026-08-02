@@ -82,3 +82,31 @@ class AuditReportValidationError(AuditLogError):
 
 class SchemaCompatibilityError(AgenticAILabError):
     """Raised when a published schema contract changes unexpectedly."""
+
+
+class SchemaMigrationError(AgenticAILabError):
+    """Base exception for schema migration errors."""
+
+
+class InvalidSchemaVersionError(SchemaMigrationError):
+    """Raised when a schema version is invalid."""
+
+
+class UnsupportedSchemaVersionError(SchemaMigrationError):
+    """Raised when a schema version is no longer supported."""
+
+
+class SchemaDowngradeError(SchemaMigrationError):
+    """Raised when a downgrade migration is requested."""
+
+
+class InvalidMigrationRegistryError(SchemaMigrationError):
+    """Raised when a migration registry is structurally invalid."""
+
+
+class MissingSchemaMigrationError(SchemaMigrationError):
+    """Raised when a required migration step is not registered."""
+
+
+class SchemaMigrationStepError(SchemaMigrationError):
+    """Raised when a migration step fails or returns an invalid result."""
