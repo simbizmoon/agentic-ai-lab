@@ -1,4 +1,5 @@
 from app.exceptions import (
+    ActiveAuthenticationKeyNotFoundError,
     AgenticAILabError,
     AttemptBudgetExceededError,
     AuditLogError,
@@ -7,18 +8,22 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
     AuthenticationFilenameMismatchError,
+    AuthenticationKeyringError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
+    DuplicateAuthenticationKeyIdError,
     ExecutionBudgetError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
+    InvalidAuthenticationKeyringError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
     MissingAuthenticationKeyError,
+    MissingAuthenticationKeyringError,
     MissingSchemaMigrationError,
     ReportAuthenticationReadError,
     ReportAuthenticityError,
@@ -273,3 +278,30 @@ def test_concrete_report_authenticity_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 10
+
+
+def test_authentication_keyring_error_inherits_from_authenticity_error() -> None:
+    assert issubclass(AuthenticationKeyringError, ReportAuthenticityError)
+
+
+def test_concrete_authentication_keyring_errors_inherit_from_keyring_error() -> None:
+    for exception_type in (
+        MissingAuthenticationKeyringError,
+        InvalidAuthenticationKeyringError,
+        DuplicateAuthenticationKeyIdError,
+        ActiveAuthenticationKeyNotFoundError,
+    ):
+        assert issubclass(exception_type, AuthenticationKeyringError)
+
+
+def test_concrete_authentication_keyring_errors_are_distinct_classes() -> None:
+    exception_types = {
+        AuthenticationKeyringError,
+        MissingAuthenticationKeyringError,
+        InvalidAuthenticationKeyringError,
+        DuplicateAuthenticationKeyIdError,
+        ActiveAuthenticationKeyNotFoundError,
+        UnknownAuthenticationKeyError,
+    }
+
+    assert len(exception_types) == 6

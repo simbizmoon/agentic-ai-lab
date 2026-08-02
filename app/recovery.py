@@ -11,6 +11,7 @@ from app.exceptions import (
     AttemptBudgetExceededError,
     AuditLogError,
     AuditReportValidationError,
+    AuthenticationKeyringError,
     ReportAuthenticityError,
     ReportExportError,
     ReportIntegrityError,
@@ -196,6 +197,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The exported audit report failed an integrity check.",
+        )
+
+    if isinstance(error, AuthenticationKeyringError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report authentication keyring is not configured safely.",
         )
 
     if isinstance(error, ReportAuthenticityError):

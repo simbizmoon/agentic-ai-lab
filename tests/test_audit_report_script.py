@@ -8,6 +8,13 @@ import pytest
 
 import scripts.audit_report as script
 from app.audit_report import validate_audit_report_json
+from app.authentication_keyring import (
+    HMAC_KEY_ENV_NAME,
+    HMAC_KEY_ID_ENV_NAME,
+    HMAC_KEYRING_ENV_NAME,
+    AuthenticationKey,
+    AuthenticationKeyring,
+)
 from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
@@ -16,8 +23,6 @@ from app.exceptions import (
 )
 from app.observability import AUDIT_SCHEMA_VERSION
 from app.report_authenticity import (
-    HMAC_KEY_ENV_NAME,
-    HMAC_KEY_ID_ENV_NAME,
     authentication_path_for,
     verify_report_authenticity,
 )
@@ -27,6 +32,8 @@ PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시
 HMAC_SECRET = b"s" * 32
 HMAC_SECRET_B64 = base64.b64encode(HMAC_SECRET).decode("ascii")
 HMAC_KEY_ID = "key-1"
+OLD_HMAC_SECRET = b"o" * 32
+NEW_HMAC_SECRET = b"n" * 32
 SECRET_VALUES = (
     "sk-test-do-not-log",
     PRIVATE_INPUT,
@@ -94,6 +101,35 @@ def failure_event(
     }
 
 
+
+
+
+
+def keyring_json(active_key_id: str = "new-key") -> str:
+    return json.dumps(
+        {
+            "active_key_id": active_key_id,
+            "keys": [
+                {"key_id": "old-key", "secret_b64": base64.b64encode(OLD_HMAC_SECRET).decode("ascii")},
+                {"key_id": "new-key", "secret_b64": base64.b64encode(NEW_HMAC_SECRET).decode("ascii")},
+            ],
+        }
+    )
+
+
+def configure_authentication_keyring(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    active_key_id: str = "new-key",
+) -> None:
+    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, keyring_json(active_key_id))
+
+
+def runtime_keyring() -> AuthenticationKeyring:
+    return AuthenticationKeyring(
+        active_key_id="new-key",
+        keys=(AuthenticationKey("old-key", OLD_HMAC_SECRET), AuthenticationKey("new-key", NEW_HMAC_SECRET)),
+    )
 
 
 def configure_authentication_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1366,7 +1402,7 @@ def test_authenticate_export_hmac_verifies(
         ["--format", "json", "--output", str(output_path), "--authenticate"],
     )
 
-    verify_report_authenticity(report_path=output_path, keyring={HMAC_KEY_ID: HMAC_SECRET})
+    verify_report_authenticity(report_path=output_path, keyring=AuthenticationKeyring(active_key_id=HMAC_KEY_ID, keys=(AuthenticationKey(HMAC_KEY_ID, HMAC_SECRET),)))
 
 
 def test_authenticate_export_success_output_includes_authentication_fields(
@@ -1722,3 +1758,212 @@ def test_verify_authenticity_failure_does_not_modify_files(
 
     assert output_path.read_text(encoding="utf-8") == report_before
     assert auth_path.read_text(encoding="utf-8") == auth_before
+
+
+
+def test_authenticate_export_with_multi_keyring_uses_active_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_keyring(monkeypatch, active_key_id="new-key")
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    ) == 0
+    output = capsys.readouterr().out
+
+    assert "Key ID: new-key" in output
+    assert "  new-key  " in authentication_path_for(output_path).read_text(encoding="utf-8")
+
+
+def test_authenticate_export_keyring_does_not_use_old_key_for_new_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_keyring(monkeypatch, active_key_id="new-key")
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    assert "  old-key  " not in authentication_path_for(output_path).read_text(encoding="utf-8")
+
+
+def test_verify_authenticity_old_report_after_active_key_rotation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_keyring(monkeypatch, active_key_id="old-key")
+    old_path = tmp_path / "old-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(old_path), "--authenticate"],
+    )
+    configure_authentication_keyring(monkeypatch, active_key_id="new-key")
+    new_path = tmp_path / "new-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(new_path), "--authenticate"],
+    )
+
+    assert script.main(["--verify-authenticity", str(old_path)]) == 0
+    assert "  old-key  " in authentication_path_for(old_path).read_text(encoding="utf-8")
+    assert "  new-key  " in authentication_path_for(new_path).read_text(encoding="utf-8")
+
+
+def test_verify_authenticity_unregistered_sidecar_key_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_keyring(monkeypatch, active_key_id="new-key")
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    authentication_path_for(output_path).write_text(
+        authentication_path_for(output_path).read_text(encoding="utf-8").replace("new-key", "missing-key"),
+        encoding="utf-8",
+    )
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+def test_authenticate_malformed_keyring_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, "{")
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(tmp_path / "report.json"), "--authenticate"],
+    ) == 5
+
+
+def test_authenticate_duplicate_keyring_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv(
+        HMAC_KEYRING_ENV_NAME,
+        json.dumps(
+            {
+                "active_key_id": "dup-key",
+                "keys": [
+                    {"key_id": "dup-key", "secret_b64": base64.b64encode(HMAC_SECRET).decode("ascii")},
+                    {"key_id": "dup-key", "secret_b64": base64.b64encode(NEW_HMAC_SECRET).decode("ascii")},
+                ],
+            }
+        ),
+    )
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(tmp_path / "report.json"), "--authenticate"],
+    ) == 5
+
+
+def test_authenticate_missing_active_key_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv(
+        HMAC_KEYRING_ENV_NAME,
+        json.dumps(
+            {
+                "active_key_id": "missing-key",
+                "keys": [{"key_id": "key-1", "secret_b64": HMAC_SECRET_B64}],
+            }
+        ),
+    )
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(tmp_path / "report.json"), "--authenticate"],
+    ) == 5
+
+
+def test_keyring_json_and_secrets_are_not_printed_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    secret = "PRIVATE-KEYRING-SECRET"
+    payload = json.dumps(
+        {
+            "active_key_id": "key-1",
+            "keys": [{"key_id": "key-1", "secret_b64": secret}],
+        }
+    )
+    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, payload)
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(tmp_path / "report.json"), "--authenticate"],
+    )
+    output = capsys.readouterr().out
+
+    assert secret not in output
+    assert payload not in output
+
+
+def test_single_key_environment_remains_compatible(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    ) == 0
+    assert "  key-1  " in authentication_path_for(output_path).read_text(encoding="utf-8")
+
+
+def test_keyring_json_takes_precedence_over_single_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    configure_authentication_keyring(monkeypatch, active_key_id="new-key")
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    assert "  new-key  " in authentication_path_for(output_path).read_text(encoding="utf-8")
+    assert "  key-1  " not in authentication_path_for(output_path).read_text(encoding="utf-8")
+
+
+def test_bad_keyring_json_does_not_fallback_to_single_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    monkeypatch.setenv(HMAC_KEYRING_ENV_NAME, "{")
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(tmp_path / "report.json"), "--authenticate"],
+    ) == 5

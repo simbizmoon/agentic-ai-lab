@@ -9,6 +9,7 @@ import pytest
 
 from app import report_export
 from app.audit_report import validate_audit_report_json
+from app.authentication_keyring import AuthenticationKey, AuthenticationKeyring
 from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
@@ -18,7 +19,6 @@ from app.exceptions import (
 )
 from app.report_authenticity import (
     ReportAuthentication,
-    ReportAuthenticationKey,
     authentication_path_for,
     verify_report_authenticity,
 )
@@ -507,15 +507,22 @@ def test_export_with_checksum_runs_json_before_checksum(
     assert calls == ["json", "build", "path", "checksum"]
 
 
-def auth_key() -> ReportAuthenticationKey:
-    return ReportAuthenticationKey(key_id="key-1", secret=b"s" * 32)
+def auth_keyring(
+    *,
+    active_key_id: str = "key-1",
+    keys: tuple[AuthenticationKey, ...] | None = None,
+) -> AuthenticationKeyring:
+    return AuthenticationKeyring(
+        active_key_id=active_key_id,
+        keys=keys or (AuthenticationKey("key-1", b"s" * 32),),
+    )
 
 
 def test_export_json_report_with_authentication_succeeds(tmp_path: Path) -> None:
     checksum, authentication = export_json_report_with_authentication(
         path=tmp_path / "report.json",
         json_text=valid_json_text(),
-        key=auth_key(),
+        keyring=auth_keyring(),
     )
 
     assert checksum.digest
@@ -525,7 +532,7 @@ def test_export_json_report_with_authentication_succeeds(tmp_path: Path) -> None
 def test_export_json_report_with_authentication_creates_json(tmp_path: Path) -> None:
     target = tmp_path / "report.json"
 
-    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
     assert target.is_file()
 
@@ -533,7 +540,7 @@ def test_export_json_report_with_authentication_creates_json(tmp_path: Path) -> 
 def test_export_json_report_with_authentication_creates_checksum(tmp_path: Path) -> None:
     target = tmp_path / "report.json"
 
-    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
     assert checksum_path_for(target).is_file()
 
@@ -541,7 +548,7 @@ def test_export_json_report_with_authentication_creates_checksum(tmp_path: Path)
 def test_export_json_report_with_authentication_creates_hmac(tmp_path: Path) -> None:
     target = tmp_path / "report.json"
 
-    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
     assert authentication_path_for(target).is_file()
 
@@ -550,7 +557,7 @@ def test_export_json_report_with_authentication_returns_tuple(tmp_path: Path) ->
     result = export_json_report_with_authentication(
         path=tmp_path / "report.json",
         json_text=valid_json_text(),
-        key=auth_key(),
+        keyring=auth_keyring(),
     )
 
     assert len(result) == 2
@@ -559,7 +566,7 @@ def test_export_json_report_with_authentication_returns_tuple(tmp_path: Path) ->
 def test_export_json_report_with_authentication_checksum_verifies(tmp_path: Path) -> None:
     target = tmp_path / "report.json"
 
-    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
     verify_report_integrity(report_path=target)
 
@@ -567,9 +574,9 @@ def test_export_json_report_with_authentication_checksum_verifies(tmp_path: Path
 def test_export_json_report_with_authentication_hmac_verifies(tmp_path: Path) -> None:
     target = tmp_path / "report.json"
 
-    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
-    verify_report_authenticity(report_path=target, keyring={"key-1": b"s" * 32})
+    verify_report_authenticity(report_path=target, keyring=auth_keyring())
 
 
 def test_export_json_report_with_authentication_order(
@@ -600,7 +607,7 @@ def test_export_json_report_with_authentication_order(
     monkeypatch.setattr(report_export, "authentication_path_for", record_auth_path)
     monkeypatch.setattr(report_export, "export_authentication_file", record_auth_export)
 
-    export_json_report_with_authentication(path=tmp_path / "report.json", json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=tmp_path / "report.json", json_text=valid_json_text(), keyring=auth_keyring())
 
     assert calls == ["checksum", "build-auth", "auth-path", "auth-export"]
 
@@ -617,7 +624,7 @@ def test_hmac_failure_keeps_json_and_checksum(
     monkeypatch.setattr(report_export, "export_authentication_file", fail_auth_export)
 
     with pytest.raises(AuthenticationExportError):
-        export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+        export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
     assert target.exists()
     assert checksum_path_for(target).exists()
@@ -633,12 +640,85 @@ def test_hmac_failure_propagates_exception(
     monkeypatch.setattr(report_export, "export_authentication_file", fail_auth_export)
 
     with pytest.raises(AuthenticationExportError):
-        export_json_report_with_authentication(path=tmp_path / "report.json", json_text=valid_json_text(), key=auth_key())
+        export_json_report_with_authentication(path=tmp_path / "report.json", json_text=valid_json_text(), keyring=auth_keyring())
 
 
 def test_authentication_export_does_not_store_secret(tmp_path: Path) -> None:
     target = tmp_path / "report.json"
 
-    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), keyring=auth_keyring())
 
     assert "ssss" not in authentication_path_for(target).read_text(encoding="utf-8")
+
+
+def test_export_with_authentication_uses_active_key_id(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+    ring = auth_keyring(
+        active_key_id="new-key",
+        keys=(AuthenticationKey("old-key", b"o" * 32), AuthenticationKey("new-key", b"n" * 32)),
+    )
+
+    _, authentication = export_json_report_with_authentication(
+        path=target,
+        json_text=valid_json_text(),
+        keyring=ring,
+    )
+
+    assert authentication.key_id == "new-key"
+
+
+def test_export_with_authentication_does_not_use_first_key_when_inactive(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+    ring = auth_keyring(
+        active_key_id="new-key",
+        keys=(AuthenticationKey("old-key", b"o" * 32), AuthenticationKey("new-key", b"n" * 32)),
+    )
+
+    export_json_report_with_authentication(
+        path=target,
+        json_text=valid_json_text(),
+        keyring=ring,
+    )
+
+    assert "  new-key  " in authentication_path_for(target).read_text(encoding="utf-8")
+    assert "  old-key  " not in authentication_path_for(target).read_text(encoding="utf-8")
+
+
+def test_export_with_authentication_key_order_does_not_change_active_key(tmp_path: Path) -> None:
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    keys_a = (AuthenticationKey("old-key", b"o" * 32), AuthenticationKey("new-key", b"n" * 32))
+    keys_b = tuple(reversed(keys_a))
+
+    _, auth_a = export_json_report_with_authentication(
+        path=first,
+        json_text=valid_json_text(),
+        keyring=auth_keyring(active_key_id="new-key", keys=keys_a),
+    )
+    _, auth_b = export_json_report_with_authentication(
+        path=second,
+        json_text=valid_json_text(),
+        keyring=auth_keyring(active_key_id="new-key", keys=keys_b),
+    )
+
+    assert auth_a.key_id == auth_b.key_id == "new-key"
+
+
+def test_export_with_authentication_active_key_rotation_changes_new_sidecar_key_id(tmp_path: Path) -> None:
+    old_path = tmp_path / "old.json"
+    new_path = tmp_path / "new.json"
+    keys = (AuthenticationKey("old-key", b"o" * 32), AuthenticationKey("new-key", b"n" * 32))
+
+    _, old_auth = export_json_report_with_authentication(
+        path=old_path,
+        json_text=valid_json_text(),
+        keyring=auth_keyring(active_key_id="old-key", keys=keys),
+    )
+    _, new_auth = export_json_report_with_authentication(
+        path=new_path,
+        json_text=valid_json_text(),
+        keyring=auth_keyring(active_key_id="new-key", keys=keys),
+    )
+
+    assert old_auth.key_id == "old-key"
+    assert new_auth.key_id == "new-key"

@@ -7,6 +7,7 @@ import openai
 import pytest
 
 from app.exceptions import (
+    ActiveAuthenticationKeyNotFoundError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditLogParseError,
@@ -14,17 +15,21 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
     AuthenticationFilenameMismatchError,
+    AuthenticationKeyringError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
+    DuplicateAuthenticationKeyIdError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
+    InvalidAuthenticationKeyringError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
     MissingAuthenticationKeyError,
+    MissingAuthenticationKeyringError,
     MissingSchemaMigrationError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
@@ -49,6 +54,7 @@ from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 
 SENSITIVE_TEXT = "sk-test-sensitive-user-input"
 PRIVATE_HMAC_SECRET = "PRIVATE-HMAC-SECRET"
+PRIVATE_KEYRING_SECRET = "PRIVATE-KEYRING-SECRET"
 
 
 def make_request() -> httpx.Request:
@@ -80,6 +86,7 @@ def assert_decision(
     assert decision.reason
     assert SENSITIVE_TEXT not in decision.reason
     assert PRIVATE_HMAC_SECRET not in decision.reason
+    assert PRIVATE_KEYRING_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -178,6 +185,11 @@ def test_recovery_decision_is_frozen() -> None:
         (ChecksumFilenameMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ReportIntegrityMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ChecksumExportError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (AuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
+        (MissingAuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
+        (InvalidAuthenticationKeyringError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
+        (DuplicateAuthenticationKeyIdError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
+        (ActiveAuthenticationKeyNotFoundError(PRIVATE_KEYRING_SECRET), False, RecoveryAction.ABORT),
         (MissingAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
         (InvalidAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
         (InvalidAuthenticationKeyIdError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),

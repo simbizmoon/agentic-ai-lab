@@ -9,6 +9,12 @@ from typing import Any
 import pytest
 
 from app import report_authenticity
+from app.authentication_keyring import (
+    HMAC_KEY_ENV_NAME,
+    HMAC_KEY_ID_ENV_NAME,
+    AuthenticationKey,
+    AuthenticationKeyring,
+)
 from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
@@ -16,7 +22,7 @@ from app.exceptions import (
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
-    MissingAuthenticationKeyError,
+    MissingAuthenticationKeyringError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
     UnknownAuthenticationKeyError,
@@ -25,11 +31,8 @@ from app.report_authenticity import (
     HMAC_ALGORITHM,
     HMAC_CHUNK_SIZE,
     HMAC_DOMAIN_SEPARATOR,
-    HMAC_KEY_ENV_NAME,
-    HMAC_KEY_ID_ENV_NAME,
     HMAC_PROTOCOL_VERSION,
     ReportAuthentication,
-    ReportAuthenticationKey,
     ReportAuthenticityResult,
     authentication_path_for,
     build_report_authentication,
@@ -55,8 +58,21 @@ def valid_json_text() -> str:
     return FIXTURE_PATH.read_text(encoding="utf-8")
 
 
-def key(key_id: str = "key-1", secret: bytes = SECRET) -> ReportAuthenticationKey:
-    return ReportAuthenticationKey(key_id=key_id, secret=secret)
+def key(key_id: str = "key-1", secret: bytes = SECRET) -> AuthenticationKey:
+    return AuthenticationKey(key_id=key_id, secret=secret)
+
+
+def auth_keyring(
+    key_id: str = "key-1",
+    secret: bytes = SECRET,
+    *,
+    active_key_id: str | None = None,
+    extra_keys: tuple[AuthenticationKey, ...] = (),
+) -> AuthenticationKeyring:
+    return AuthenticationKeyring(
+        active_key_id=active_key_id or key_id,
+        keys=(AuthenticationKey(key_id=key_id, secret=secret), *extra_keys),
+    )
 
 
 def write_report(path: Path, text: str | None = None) -> Path:
@@ -122,7 +138,7 @@ def test_load_authentication_key_uses_key_id() -> None:
 def test_load_authentication_key_rejects_missing_or_empty_values(
     environ: dict[str, str],
 ) -> None:
-    with pytest.raises(MissingAuthenticationKeyError):
+    with pytest.raises(MissingAuthenticationKeyringError):
         load_authentication_key(environ=environ)
 
 
@@ -163,7 +179,7 @@ def test_load_authentication_key_rejects_invalid_key_id() -> None:
 
 
 def test_authentication_key_repr_hides_secret() -> None:
-    assert SECRET_TEXT not in repr(ReportAuthenticationKey("key-1", SECRET_TEXT.encode()))
+    assert SECRET_TEXT not in repr(AuthenticationKey("key-1", (SECRET_TEXT + "x" * 32).encode()))
 
 
 def test_load_authentication_key_does_not_mutate_environ() -> None:
@@ -495,33 +511,28 @@ def test_authentication_export_converts_os_error(
         )
 
 
-def test_validate_keyring_accepts_mapping() -> None:
-    validate_authentication_keyring({"key-1": SECRET})
+def test_validate_keyring_accepts_authentication_keyring() -> None:
+    validate_authentication_keyring(auth_keyring())
 
 
-def test_validate_keyring_accepts_empty_mapping() -> None:
-    validate_authentication_keyring({})
+def test_validate_keyring_rejects_mapping() -> None:
+    with pytest.raises(TypeError):
+        validate_authentication_keyring({"key-1": SECRET})  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("keyring", [{"bad key": SECRET}, {"key-1": "secret"}, {"key-1": b"s" * 31}])
-def test_validate_keyring_rejects_invalid_values(keyring: dict[str, object]) -> None:
-    with pytest.raises((InvalidAuthenticationKeyIdError, InvalidAuthenticationKeyError)):
-        validate_authentication_keyring(keyring)  # type: ignore[arg-type]
+def test_validate_keyring_does_not_mutate_keyring() -> None:
+    ring = auth_keyring()
+    before = ring.keys
 
+    validate_authentication_keyring(ring)
 
-def test_validate_keyring_does_not_mutate_mapping() -> None:
-    keyring = {"key-1": SECRET}
-    before = dict(keyring)
-
-    validate_authentication_keyring(keyring)
-
-    assert keyring == before
+    assert ring.keys == before
 
 
 def test_verify_report_authenticity_succeeds(tmp_path: Path) -> None:
     report_path, _, _ = write_report_and_authentication(tmp_path / "report.json")
 
-    result = verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+    result = verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
     assert result.filename == "report.json"
 
@@ -529,7 +540,7 @@ def test_verify_report_authenticity_succeeds(tmp_path: Path) -> None:
 def test_verify_report_authenticity_returns_result(tmp_path: Path) -> None:
     report_path, _, authentication = write_report_and_authentication(tmp_path / "report.json")
 
-    result = verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+    result = verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
     assert result == ReportAuthenticityResult(HMAC_ALGORITHM, "key-1", authentication.digest, "report.json")
 
@@ -539,7 +550,7 @@ def test_verify_detects_changed_file_byte(tmp_path: Path) -> None:
     report_path.write_text(valid_json_text().replace("gpt-5", "gpt-6"), encoding="utf-8")
 
     with pytest.raises(ReportAuthenticityMismatchError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_verify_detects_removed_newline(tmp_path: Path) -> None:
@@ -547,21 +558,21 @@ def test_verify_detects_removed_newline(tmp_path: Path) -> None:
     report_path.write_text(report_path.read_text(encoding="utf-8").rstrip("\n"), encoding="utf-8")
 
     with pytest.raises(ReportAuthenticityMismatchError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_verify_detects_different_secret(tmp_path: Path) -> None:
     report_path, _, _ = write_report_and_authentication(tmp_path / "report.json")
 
     with pytest.raises(ReportAuthenticityMismatchError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": OTHER_SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring(secret=OTHER_SECRET))
 
 
 def test_verify_detects_unknown_key_id(tmp_path: Path) -> None:
     report_path, _, _ = write_report_and_authentication(tmp_path / "report.json")
 
     with pytest.raises(UnknownAuthenticationKeyError):
-        verify_report_authenticity(report_path=report_path, keyring={"other": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring("other", SECRET))
 
 
 def test_verify_detects_filename_mismatch(tmp_path: Path) -> None:
@@ -574,7 +585,7 @@ def test_verify_detects_filename_mismatch(tmp_path: Path) -> None:
     )
 
     with pytest.raises(AuthenticationFilenameMismatchError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_verify_detects_sidecar_digest_change(tmp_path: Path) -> None:
@@ -587,7 +598,7 @@ def test_verify_detects_sidecar_digest_change(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ReportAuthenticityMismatchError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_verify_detects_malformed_sidecar(tmp_path: Path) -> None:
@@ -595,14 +606,14 @@ def test_verify_detects_malformed_sidecar(tmp_path: Path) -> None:
     authentication_path_for(report_path).write_text(SECRET_TEXT, encoding="utf-8")
 
     with pytest.raises(InvalidAuthenticationFormatError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_verify_detects_missing_sidecar(tmp_path: Path) -> None:
     report_path = write_report(tmp_path / "report.json")
 
     with pytest.raises(ReportAuthenticationReadError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_verify_detects_missing_report(tmp_path: Path) -> None:
@@ -610,7 +621,7 @@ def test_verify_detects_missing_report(tmp_path: Path) -> None:
     auth_path.write_text(f"{HMAC_ALGORITHM}  key-1  {'a' * 64}  report.json\n", encoding="utf-8")
 
     with pytest.raises(ReportAuthenticationReadError):
-        verify_report_authenticity(report_path=tmp_path / "report.json", keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=tmp_path / "report.json", keyring=auth_keyring())
 
 
 def test_verify_uses_compare_digest(
@@ -627,7 +638,7 @@ def test_verify_uses_compare_digest(
 
     monkeypatch.setattr(report_authenticity.hmac, "compare_digest", recording_compare)
 
-    verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+    verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
     assert len(calls) == 1
 
@@ -639,7 +650,7 @@ def test_verify_valid_hmac_then_invalid_json_contract(tmp_path: Path) -> None:
     export_authentication_file(authentication_path=authentication_path_for(report_path), authentication=authentication)
 
     with pytest.raises(AuditReportValidationError):
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
 
 def test_authentication_errors_omit_secret_json_and_sidecar(tmp_path: Path) -> None:
@@ -647,7 +658,64 @@ def test_authentication_errors_omit_secret_json_and_sidecar(tmp_path: Path) -> N
     authentication_path_for(report_path).write_text(SECRET_TEXT, encoding="utf-8")
 
     with pytest.raises(InvalidAuthenticationFormatError) as exc_info:
-        verify_report_authenticity(report_path=report_path, keyring={"key-1": SECRET})
+        verify_report_authenticity(report_path=report_path, keyring=auth_keyring())
 
     assert SECRET_TEXT not in str(exc_info.value)
     assert "schema_version" not in str(exc_info.value)
+
+
+def test_verify_with_multi_keyring_uses_sidecar_key_id(tmp_path: Path) -> None:
+    report_path, _, _ = write_report_and_authentication(tmp_path / "report.json")
+    ring = auth_keyring(
+        "other",
+        OTHER_SECRET,
+        active_key_id="other",
+        extra_keys=(AuthenticationKey("key-1", SECRET),),
+    )
+
+    result = verify_report_authenticity(report_path=report_path, keyring=ring)
+
+    assert result.key_id == "key-1"
+
+
+def test_verify_old_key_succeeds_when_active_key_is_new(tmp_path: Path) -> None:
+    report_path, _, _ = write_report_and_authentication(tmp_path / "report.json")
+    ring = AuthenticationKeyring(
+        active_key_id="new-key",
+        keys=(AuthenticationKey("old-key", OTHER_SECRET), AuthenticationKey("key-1", SECRET), AuthenticationKey("new-key", b"n" * 32)),
+    )
+
+    assert verify_report_authenticity(report_path=report_path, keyring=ring).key_id == "key-1"
+
+
+def test_verify_does_not_try_other_registered_keys(tmp_path: Path) -> None:
+    report_path = write_report(tmp_path / "report.json")
+    matching_auth = build_report_authentication(
+        report_path=report_path,
+        key=AuthenticationKey("other-key", SECRET),
+    )
+    auth_path = authentication_path_for(report_path)
+    export_authentication_file(
+        authentication_path=auth_path,
+        authentication=ReportAuthentication(
+            matching_auth.algorithm,
+            matching_auth.protocol_version,
+            "missing-key",
+            matching_auth.digest,
+            matching_auth.filename,
+        ),
+    )
+    ring = auth_keyring("other-key", SECRET)
+
+    with pytest.raises(UnknownAuthenticationKeyError):
+        verify_report_authenticity(report_path=report_path, keyring=ring)
+
+
+def test_verify_protocol_version_one_and_sidecar_four_fields(tmp_path: Path) -> None:
+    report_path, auth_path, authentication = write_report_and_authentication(tmp_path / "report.json")
+
+    fields = auth_path.read_text(encoding="utf-8").strip().split("  ")
+
+    assert authentication.protocol_version == HMAC_PROTOCOL_VERSION
+    assert len(fields) == 4
+    assert verify_report_authenticity(report_path=report_path, keyring=auth_keyring()).key_id == "key-1"

@@ -21,6 +21,7 @@ from app.audit_report import (
     read_audit_events,
     render_audit_report,
 )
+from app.authentication_keyring import load_authentication_keyring
 from app.exceptions import (
     AuditLogError,
     ReportAuthenticityError,
@@ -30,7 +31,6 @@ from app.exceptions import (
 from app.recovery import decide_recovery
 from app.report_authenticity import (
     authentication_path_for,
-    load_authentication_key,
     verify_report_authenticity,
 )
 from app.report_export import (
@@ -142,11 +142,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.output is not None:
             if args.authenticate:
-                key = load_authentication_key(environ=os.environ)
+                keyring = load_authentication_keyring(environ=os.environ)
                 checksum, authentication = export_json_report_with_authentication(
                     path=args.output,
                     json_text=rendered_report,
-                    key=key,
+                    keyring=keyring,
                 )
                 print("Audit report exported successfully.")
                 print(f"Output: {args.output}")
@@ -242,10 +242,10 @@ def _run_verify(verify_path: Path) -> int:
 
 def _run_verify_authenticity(verify_path: Path) -> int:
     try:
-        key = load_authentication_key(environ=os.environ)
+        keyring = load_authentication_keyring(environ=os.environ)
         result = verify_report_authenticity(
             report_path=verify_path,
-            keyring={key.key_id: key.secret},
+            keyring=keyring,
         )
     except (AuditLogError, ReportAuthenticityError) as error:
         _print_recovery_error(

@@ -164,6 +164,27 @@ class InvalidAuthenticationKeyIdError(ReportAuthenticityError):
     """Raised when an authentication key ID is invalid."""
 
 
+
+
+class AuthenticationKeyringError(ReportAuthenticityError):
+    """Base exception for authentication keyring configuration errors."""
+
+
+class MissingAuthenticationKeyringError(AuthenticationKeyringError):
+    """Raised when an authentication keyring is missing."""
+
+
+class InvalidAuthenticationKeyringError(AuthenticationKeyringError):
+    """Raised when an authentication keyring is invalid."""
+
+
+class DuplicateAuthenticationKeyIdError(AuthenticationKeyringError):
+    """Raised when authentication key IDs are duplicated."""
+
+
+class ActiveAuthenticationKeyNotFoundError(AuthenticationKeyringError):
+    """Raised when the active authentication key is not registered."""
+
 class ReportAuthenticationReadError(ReportAuthenticityError):
     """Raised when an authentication sidecar or report cannot be read."""
 

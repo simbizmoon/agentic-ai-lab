@@ -2,27 +2,29 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
 import hmac
 import os
-import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from app.audit_report import validate_audit_report_json
+from app.authentication_keyring import (
+    MINIMUM_HMAC_KEY_BYTES,
+    AuthenticationKey,
+    AuthenticationKeyring,
+    is_valid_key_id,
+    load_authentication_keyring,
+)
 from app.exceptions import (
     AuthenticationExportError,
     AuthenticationFilenameMismatchError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
     InvalidAuthenticationKeyIdError,
-    MissingAuthenticationKeyError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
-    UnknownAuthenticationKeyError,
 )
 
 HMAC_ALGORITHM = "hmac-sha256"
@@ -34,22 +36,11 @@ HMAC_DOMAIN_SEPARATOR = (
     b"hmac-sha256:"
     b"v1"
 )
-HMAC_KEY_ENV_NAME = "AUDIT_REPORT_HMAC_KEY_B64"
-HMAC_KEY_ID_ENV_NAME = "AUDIT_REPORT_HMAC_KEY_ID"
-MINIMUM_HMAC_KEY_BYTES = 32
-
-_KEY_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _READ_ERROR_MESSAGE = "Failed to read the audit report authentication file."
 _FORMAT_ERROR_MESSAGE = "The audit report authentication file has an invalid format."
 _EXPORT_ERROR_MESSAGE = "Failed to export the audit report authentication file."
 
-AuthenticationKeyring = Mapping[str, bytes]
-
-
-@dataclass(frozen=True)
-class ReportAuthenticationKey:
-    key_id: str
-    secret: bytes = field(repr=False)
+ReportAuthenticationKey = AuthenticationKey
 
 
 @dataclass(frozen=True)
@@ -69,10 +60,6 @@ class ReportAuthenticityResult:
     filename: str
 
 
-def is_valid_key_id(value: object) -> bool:
-    return isinstance(value, str) and _KEY_ID_PATTERN.fullmatch(value) is not None
-
-
 def is_valid_hmac_digest(value: object) -> bool:
     if not isinstance(value, str):
         return False
@@ -84,29 +71,8 @@ def is_valid_hmac_digest(value: object) -> bool:
 def load_authentication_key(
     *,
     environ: Mapping[str, str],
-) -> ReportAuthenticationKey:
-    if not isinstance(environ, Mapping):
-        raise TypeError("environ must be a Mapping")
-    if HMAC_KEY_ENV_NAME not in environ or HMAC_KEY_ID_ENV_NAME not in environ:
-        raise MissingAuthenticationKeyError("The audit report authentication key is missing.")
-
-    encoded_key = environ[HMAC_KEY_ENV_NAME]
-    key_id = environ[HMAC_KEY_ID_ENV_NAME]
-    if not encoded_key or not key_id:
-        raise MissingAuthenticationKeyError("The audit report authentication key is missing.")
-    if not is_valid_key_id(key_id):
-        raise InvalidAuthenticationKeyIdError("The audit report authentication key ID is invalid.")
-
-    try:
-        encoded_bytes = encoded_key.encode("ascii")
-        secret = base64.b64decode(encoded_bytes, validate=True)
-    except (binascii.Error, ValueError, UnicodeEncodeError) as error:
-        raise InvalidAuthenticationKeyError("The audit report authentication key is invalid.") from error
-
-    if len(secret) < MINIMUM_HMAC_KEY_BYTES:
-        raise InvalidAuthenticationKeyError("The audit report authentication key is invalid.")
-
-    return ReportAuthenticationKey(key_id=key_id, secret=secret)
+) -> AuthenticationKey:
+    return load_authentication_keyring(environ=environ).get_active_key()
 
 
 def authentication_path_for(
@@ -120,7 +86,7 @@ def authentication_path_for(
 def calculate_report_hmac(
     *,
     report_path: Path,
-    key: ReportAuthenticationKey,
+    key: AuthenticationKey,
 ) -> str:
     if not isinstance(report_path, Path):
         raise TypeError("report_path must be a Path")
@@ -147,7 +113,7 @@ def calculate_report_hmac(
 def build_report_authentication(
     *,
     report_path: Path,
-    key: ReportAuthenticationKey,
+    key: AuthenticationKey,
 ) -> ReportAuthentication:
     return ReportAuthentication(
         algorithm=HMAC_ALGORITHM,
@@ -256,15 +222,8 @@ def export_authentication_file(
 def validate_authentication_keyring(
     keyring: AuthenticationKeyring,
 ) -> None:
-    if not isinstance(keyring, Mapping):
-        raise TypeError("keyring must be a Mapping")
-    for key_id, secret in keyring.items():
-        if not is_valid_key_id(key_id):
-            raise InvalidAuthenticationKeyIdError("The audit report authentication key ID is invalid.")
-        if not isinstance(secret, bytes):
-            raise InvalidAuthenticationKeyError("The audit report authentication key is invalid.")
-        if len(secret) < MINIMUM_HMAC_KEY_BYTES:
-            raise InvalidAuthenticationKeyError("The audit report authentication key is invalid.")
+    if not isinstance(keyring, AuthenticationKeyring):
+        raise TypeError("keyring must be an AuthenticationKeyring")
 
 
 def verify_report_authenticity(
@@ -291,13 +250,7 @@ def verify_report_authenticity(
         raise AuthenticationFilenameMismatchError(
             "The authentication filename does not match the audit report."
         )
-    if authentication.key_id not in keyring:
-        raise UnknownAuthenticationKeyError("The authentication key ID is not available.")
-
-    key = ReportAuthenticationKey(
-        key_id=authentication.key_id,
-        secret=keyring[authentication.key_id],
-    )
+    key = keyring.get_key(authentication.key_id)
     actual_digest = calculate_report_hmac(report_path=report_path, key=key)
     if not hmac.compare_digest(authentication.digest, actual_digest):
         raise ReportAuthenticityMismatchError(
@@ -318,9 +271,9 @@ def verify_report_authenticity(
     )
 
 
-def _validate_authentication_key(key: ReportAuthenticationKey) -> None:
-    if not isinstance(key, ReportAuthenticationKey):
-        raise TypeError("key must be a ReportAuthenticationKey")
+def _validate_authentication_key(key: AuthenticationKey) -> None:
+    if not isinstance(key, AuthenticationKey):
+        raise TypeError("key must be an AuthenticationKey")
     if not is_valid_key_id(key.key_id):
         raise InvalidAuthenticationKeyIdError("The audit report authentication key ID is invalid.")
     if not isinstance(key.secret, bytes) or len(key.secret) < MINIMUM_HMAC_KEY_BYTES:
