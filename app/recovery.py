@@ -11,6 +11,7 @@ from app.exceptions import (
     AttemptBudgetExceededError,
     AuditLogError,
     AuditReportValidationError,
+    ReportAuthenticityError,
     ReportExportError,
     ReportIntegrityError,
     SchemaCompatibilityError,
@@ -195,6 +196,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The exported audit report failed an integrity check.",
+        )
+
+    if isinstance(error, ReportAuthenticityError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report could not be authenticated safely.",
         )
 
     if isinstance(error, ValueError):

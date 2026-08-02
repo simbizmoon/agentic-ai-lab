@@ -11,13 +11,21 @@ from app import report_export
 from app.audit_report import validate_audit_report_json
 from app.exceptions import (
     AuditReportValidationError,
+    AuthenticationExportError,
     ChecksumExportError,
     InvalidReportExportPathError,
     ReportExportWriteError,
 )
+from app.report_authenticity import (
+    ReportAuthentication,
+    ReportAuthenticationKey,
+    authentication_path_for,
+    verify_report_authenticity,
+)
 from app.report_export import (
     _validate_export_path,
     export_json_report,
+    export_json_report_with_authentication,
     export_json_report_with_checksum,
 )
 from app.report_integrity import (
@@ -497,3 +505,140 @@ def test_export_with_checksum_runs_json_before_checksum(
     export_json_report_with_checksum(path=tmp_path / "report.json", json_text=valid_json_text())
 
     assert calls == ["json", "build", "path", "checksum"]
+
+
+def auth_key() -> ReportAuthenticationKey:
+    return ReportAuthenticationKey(key_id="key-1", secret=b"s" * 32)
+
+
+def test_export_json_report_with_authentication_succeeds(tmp_path: Path) -> None:
+    checksum, authentication = export_json_report_with_authentication(
+        path=tmp_path / "report.json",
+        json_text=valid_json_text(),
+        key=auth_key(),
+    )
+
+    assert checksum.digest
+    assert isinstance(authentication, ReportAuthentication)
+
+
+def test_export_json_report_with_authentication_creates_json(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    assert target.is_file()
+
+
+def test_export_json_report_with_authentication_creates_checksum(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    assert checksum_path_for(target).is_file()
+
+
+def test_export_json_report_with_authentication_creates_hmac(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    assert authentication_path_for(target).is_file()
+
+
+def test_export_json_report_with_authentication_returns_tuple(tmp_path: Path) -> None:
+    result = export_json_report_with_authentication(
+        path=tmp_path / "report.json",
+        json_text=valid_json_text(),
+        key=auth_key(),
+    )
+
+    assert len(result) == 2
+
+
+def test_export_json_report_with_authentication_checksum_verifies(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    verify_report_integrity(report_path=target)
+
+
+def test_export_json_report_with_authentication_hmac_verifies(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    verify_report_authenticity(report_path=target, keyring={"key-1": b"s" * 32})
+
+
+def test_export_json_report_with_authentication_order(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def record_checksum(**kwargs: object) -> object:
+        calls.append("checksum")
+        Path(kwargs["path"]).write_text(valid_json_text(), encoding="utf-8")
+        checksum_path_for(Path(kwargs["path"])).write_text(f"{'a' * 64}  report.json\n", encoding="utf-8")
+        return object()
+
+    def record_build_auth(**kwargs: object) -> ReportAuthentication:
+        calls.append("build-auth")
+        return ReportAuthentication("hmac-sha256", 1, "key-1", "b" * 64, "report.json")
+
+    def record_auth_path(path: Path) -> Path:
+        calls.append("auth-path")
+        return path.parent / f"{path.name}.hmac"
+
+    def record_auth_export(**kwargs: object) -> None:
+        calls.append("auth-export")
+
+    monkeypatch.setattr(report_export, "export_json_report_with_checksum", record_checksum)
+    monkeypatch.setattr(report_export, "build_report_authentication", record_build_auth)
+    monkeypatch.setattr(report_export, "authentication_path_for", record_auth_path)
+    monkeypatch.setattr(report_export, "export_authentication_file", record_auth_export)
+
+    export_json_report_with_authentication(path=tmp_path / "report.json", json_text=valid_json_text(), key=auth_key())
+
+    assert calls == ["checksum", "build-auth", "auth-path", "auth-export"]
+
+
+def test_hmac_failure_keeps_json_and_checksum(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "report.json"
+
+    def fail_auth_export(**kwargs: object) -> None:
+        raise AuthenticationExportError("PRIVATE-HMAC-SECRET")
+
+    monkeypatch.setattr(report_export, "export_authentication_file", fail_auth_export)
+
+    with pytest.raises(AuthenticationExportError):
+        export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    assert target.exists()
+    assert checksum_path_for(target).exists()
+
+
+def test_hmac_failure_propagates_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fail_auth_export(**kwargs: object) -> None:
+        raise AuthenticationExportError("PRIVATE-HMAC-SECRET")
+
+    monkeypatch.setattr(report_export, "export_authentication_file", fail_auth_export)
+
+    with pytest.raises(AuthenticationExportError):
+        export_json_report_with_authentication(path=tmp_path / "report.json", json_text=valid_json_text(), key=auth_key())
+
+
+def test_authentication_export_does_not_store_secret(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_authentication(path=target, json_text=valid_json_text(), key=auth_key())
+
+    assert "ssss" not in authentication_path_for(target).read_text(encoding="utf-8")

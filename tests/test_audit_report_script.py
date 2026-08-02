@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -9,13 +10,23 @@ import scripts.audit_report as script
 from app.audit_report import validate_audit_report_json
 from app.exceptions import (
     AuditReportValidationError,
+    AuthenticationExportError,
     ChecksumExportError,
     ReportExportWriteError,
 )
 from app.observability import AUDIT_SCHEMA_VERSION
+from app.report_authenticity import (
+    HMAC_KEY_ENV_NAME,
+    HMAC_KEY_ID_ENV_NAME,
+    authentication_path_for,
+    verify_report_authenticity,
+)
 from app.report_integrity import checksum_path_for, verify_report_integrity
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
+HMAC_SECRET = b"s" * 32
+HMAC_SECRET_B64 = base64.b64encode(HMAC_SECRET).decode("ascii")
+HMAC_KEY_ID = "key-1"
 SECRET_VALUES = (
     "sk-test-do-not-log",
     PRIVATE_INPUT,
@@ -83,6 +94,12 @@ def failure_event(
     }
 
 
+
+
+def configure_authentication_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(HMAC_KEY_ENV_NAME, HMAC_SECRET_B64)
+    monkeypatch.setenv(HMAC_KEY_ID_ENV_NAME, HMAC_KEY_ID)
+
 def write_jsonl(path: Path, *events: dict[str, object]) -> None:
     path.write_text(
         "".join(json.dumps(event, ensure_ascii=False) + "\n" for event in events),
@@ -99,6 +116,16 @@ def configure_log(
     write_jsonl(path, *events)
     monkeypatch.setattr(script, "AUDIT_LOG_PATH", path)
     return path
+
+
+def valid_json_for_script() -> str:
+    from app.audit_report import (
+        ParsedAuditEvents,
+        build_audit_report,
+        format_audit_report_json,
+    )
+
+    return format_audit_report_json(build_audit_report(ParsedAuditEvents(successes=(), failures=())))
 
 
 def run_main(
@@ -1305,3 +1332,393 @@ def test_verify_failure_does_not_modify_report_or_checksum(
 
     assert output_path.read_text(encoding="utf-8") == report_before
     assert checksum_path.read_text(encoding="utf-8") == checksum_before
+
+
+
+def test_authenticate_export_creates_json_checksum_and_hmac(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    ) == 0
+
+    assert output_path.is_file()
+    assert checksum_path_for(output_path).is_file()
+    assert authentication_path_for(output_path).is_file()
+
+
+def test_authenticate_export_hmac_verifies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    verify_report_authenticity(report_path=output_path, keyring={HMAC_KEY_ID: HMAC_SECRET})
+
+
+def test_authenticate_export_success_output_includes_authentication_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    output = capsys.readouterr().out
+
+    assert "Algorithm: hmac-sha256" in output
+    assert f"Key ID: {HMAC_KEY_ID}" in output
+    assert "HMAC:" in output
+    assert HMAC_SECRET_B64 not in output
+
+
+def test_authenticate_export_sidecar_omits_secret(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    sidecar = authentication_path_for(output_path).read_text(encoding="utf-8")
+    assert HMAC_SECRET_B64 not in sidecar
+    assert HMAC_SECRET.decode() not in sidecar
+
+
+def test_authenticate_without_output_exits_with_code_two(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_authentication_key(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--format", "json", "--authenticate"])
+
+    assert exc_info.value.code == 2
+
+
+def test_authenticate_with_text_format_exits_with_code_two(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--format", "text", "--output", str(tmp_path / "report.json"), "--authenticate"])
+
+    assert exc_info.value.code == 2
+
+
+def test_authenticate_missing_key_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv(HMAC_KEY_ENV_NAME, raising=False)
+    monkeypatch.delenv(HMAC_KEY_ID_ENV_NAME, raising=False)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    ) == 5
+
+
+def test_authenticate_invalid_key_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv(HMAC_KEY_ENV_NAME, "not-base64!")
+    monkeypatch.setenv(HMAC_KEY_ID_ENV_NAME, HMAC_KEY_ID)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    ) == 5
+
+
+def test_hmac_export_failure_keeps_json_and_checksum(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    configure_log(monkeypatch, tmp_path, success_event())
+    output_path = tmp_path / "audit-report.json"
+
+    def fail_export(**kwargs: object) -> None:
+        Path(kwargs["path"]).write_text(valid_json_for_script(), encoding="utf-8")
+        checksum_path_for(Path(kwargs["path"])).write_text(
+            f"{'a' * 64}  audit-report.json\n",
+            encoding="utf-8",
+        )
+        raise AuthenticationExportError("PRIVATE-HMAC-SECRET")
+
+    monkeypatch.setattr(script, "export_json_report_with_authentication", fail_export)
+
+    assert script.main(["--format", "json", "--output", str(output_path), "--authenticate"]) == 5
+    assert output_path.exists()
+    assert checksum_path_for(output_path).exists()
+
+
+def test_hmac_export_failure_outputs_abort_without_success(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def fail_export(**kwargs: object) -> None:
+        raise AuthenticationExportError("PRIVATE-HMAC-SECRET")
+
+    monkeypatch.setattr(script, "export_json_report_with_authentication", fail_export)
+    script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json"), "--authenticate"])
+    output = capsys.readouterr().out
+
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert "Audit report exported successfully." not in output
+    assert "PRIVATE-HMAC-SECRET" not in output
+
+
+def test_verify_authenticity_success_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 0
+
+
+def test_verify_authenticity_outputs_success_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    capsys.readouterr()
+
+    script.main(["--verify-authenticity", str(output_path)])
+    output = capsys.readouterr().out
+
+    assert "Audit report authenticity verified." in output
+    assert f"Key ID: {HMAC_KEY_ID}" in output
+    assert "HMAC:" in output
+    assert HMAC_SECRET_B64 not in output
+
+
+def test_verify_authenticity_succeeds_without_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", tmp_path / "missing.jsonl")
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 0
+
+
+def test_verify_authenticity_does_not_read_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+
+    def fail_read(*args: object, **kwargs: object) -> object:
+        raise AssertionError("read_audit_events must not be called")
+
+    monkeypatch.setattr(script, "read_audit_events", fail_read)
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 0
+
+
+def test_verify_authenticity_changed_json_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    output_path.write_text(output_path.read_text(encoding="utf-8").replace("gpt-test", "gpt-x"), encoding="utf-8")
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+def test_verify_authenticity_different_secret_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    monkeypatch.setenv(HMAC_KEY_ENV_NAME, base64.b64encode(b"t" * 32).decode("ascii"))
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+def test_verify_authenticity_unknown_key_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    monkeypatch.setenv(HMAC_KEY_ID_ENV_NAME, "other-key")
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+def test_verify_authenticity_malformed_hmac_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    authentication_path_for(output_path).write_text("PRIVATE-HMAC-SECRET", encoding="utf-8")
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+def test_verify_authenticity_missing_hmac_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    authentication_path_for(output_path).unlink()
+
+    assert script.main(["--verify-authenticity", str(output_path)]) == 5
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--verify", "report.json", "--verify-authenticity", "report.json"],
+        ["--verify-authenticity", "report.json", "--output", "out.json"],
+        ["--verify-authenticity", "report.json", "--authenticate"],
+        ["--verify-authenticity", "report.json", "--since", "2026-08-02T00:00:00+00:00"],
+        ["--verify-authenticity", "report.json", "--until", "2026-08-02T00:00:00+00:00"],
+        ["--verify-authenticity", "report.json", "--model", "gpt-5"],
+        ["--verify-authenticity", "report.json", "--status", "success"],
+        ["--verify-authenticity", "report.json", "--format", "json"],
+    ],
+)
+def test_verify_authenticity_rejects_invalid_combinations(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_verify_authenticity_failure_header_and_secret_omission(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    authentication_path_for(output_path).write_text("PRIVATE-HMAC-SECRET", encoding="utf-8")
+    capsys.readouterr()
+
+    script.main(["--verify-authenticity", str(output_path)])
+    output = capsys.readouterr().out
+
+    assert "[ERROR] Audit report authenticity verification failed" in output
+    assert "PRIVATE-HMAC-SECRET" not in output
+    assert HMAC_SECRET_B64 not in output
+
+
+def test_verify_authenticity_failure_does_not_modify_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate"],
+    )
+    auth_path = authentication_path_for(output_path)
+    auth_path.write_text("PRIVATE-HMAC-SECRET", encoding="utf-8")
+    report_before = output_path.read_text(encoding="utf-8")
+    auth_before = auth_path.read_text(encoding="utf-8")
+
+    script.main(["--verify-authenticity", str(output_path)])
+
+    assert output_path.read_text(encoding="utf-8") == report_before
+    assert auth_path.read_text(encoding="utf-8") == auth_before

@@ -146,3 +146,43 @@ class ReportIntegrityMismatchError(ReportIntegrityError):
 
 class ChecksumExportError(ReportIntegrityError):
     """Raised when a checksum sidecar cannot be written safely."""
+
+
+class ReportAuthenticityError(AgenticAILabError):
+    """Base exception for audit report authenticity errors."""
+
+
+class MissingAuthenticationKeyError(ReportAuthenticityError):
+    """Raised when an authentication key is missing."""
+
+
+class InvalidAuthenticationKeyError(ReportAuthenticityError):
+    """Raised when an authentication key is invalid."""
+
+
+class InvalidAuthenticationKeyIdError(ReportAuthenticityError):
+    """Raised when an authentication key ID is invalid."""
+
+
+class ReportAuthenticationReadError(ReportAuthenticityError):
+    """Raised when an authentication sidecar or report cannot be read."""
+
+
+class InvalidAuthenticationFormatError(ReportAuthenticityError):
+    """Raised when an authentication sidecar has an invalid format."""
+
+
+class AuthenticationFilenameMismatchError(ReportAuthenticityError):
+    """Raised when an authentication sidecar references a different report."""
+
+
+class UnknownAuthenticationKeyError(ReportAuthenticityError):
+    """Raised when an authentication key ID is not available."""
+
+
+class ReportAuthenticityMismatchError(ReportAuthenticityError):
+    """Raised when an authentication code does not match."""
+
+
+class AuthenticationExportError(ReportAuthenticityError):
+    """Raised when an authentication sidecar cannot be written safely."""

@@ -12,14 +12,22 @@ from app.exceptions import (
     AuditLogParseError,
     AuditLogReadError,
     AuditReportValidationError,
+    AuthenticationExportError,
+    AuthenticationFilenameMismatchError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     InvalidAuditEventError,
+    InvalidAuthenticationFormatError,
+    InvalidAuthenticationKeyError,
+    InvalidAuthenticationKeyIdError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
+    MissingAuthenticationKeyError,
     MissingSchemaMigrationError,
+    ReportAuthenticationReadError,
+    ReportAuthenticityMismatchError,
     ReportExportWriteError,
     ReportIntegrityMismatchError,
     ReportIntegrityReadError,
@@ -33,12 +41,14 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    UnknownAuthenticationKeyError,
     UnsupportedAuditSchemaError,
     UnsupportedSchemaVersionError,
 )
 from app.recovery import RecoveryAction, RecoveryDecision, decide_recovery
 
 SENSITIVE_TEXT = "sk-test-sensitive-user-input"
+PRIVATE_HMAC_SECRET = "PRIVATE-HMAC-SECRET"
 
 
 def make_request() -> httpx.Request:
@@ -69,6 +79,7 @@ def assert_decision(
     assert decision.action is action
     assert decision.reason
     assert SENSITIVE_TEXT not in decision.reason
+    assert PRIVATE_HMAC_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -167,6 +178,15 @@ def test_recovery_decision_is_frozen() -> None:
         (ChecksumFilenameMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ReportIntegrityMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ChecksumExportError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+        (MissingAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (InvalidAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (InvalidAuthenticationKeyIdError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (ReportAuthenticationReadError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (InvalidAuthenticationFormatError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (AuthenticationFilenameMismatchError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (UnknownAuthenticationKeyError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (ReportAuthenticityMismatchError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
+        (AuthenticationExportError(PRIVATE_HMAC_SECRET), False, RecoveryAction.ABORT),
         (AttemptBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TokenBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (TimeBudgetExceededError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),

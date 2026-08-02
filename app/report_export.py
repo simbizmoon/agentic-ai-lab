@@ -8,6 +8,13 @@ from tempfile import NamedTemporaryFile
 
 from app.audit_report import validate_audit_report_json
 from app.exceptions import InvalidReportExportPathError, ReportExportWriteError
+from app.report_authenticity import (
+    ReportAuthentication,
+    ReportAuthenticationKey,
+    authentication_path_for,
+    build_report_authentication,
+    export_authentication_file,
+)
 from app.report_integrity import (
     ReportChecksum,
     build_report_checksum,
@@ -83,3 +90,21 @@ def export_json_report_with_checksum(
         checksum=checksum,
     )
     return checksum
+
+
+def export_json_report_with_authentication(
+    *,
+    path: Path,
+    json_text: str,
+    key: ReportAuthenticationKey,
+) -> tuple[ReportChecksum, ReportAuthentication]:
+    checksum = export_json_report_with_checksum(path=path, json_text=json_text)
+    authentication = build_report_authentication(
+        report_path=path,
+        key=key,
+    )
+    export_authentication_file(
+        authentication_path=authentication_path_for(path),
+        authentication=authentication,
+    )
+    return checksum, authentication

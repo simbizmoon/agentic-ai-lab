@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,9 +21,22 @@ from app.audit_report import (
     read_audit_events,
     render_audit_report,
 )
-from app.exceptions import AuditLogError, ReportExportError, ReportIntegrityError
+from app.exceptions import (
+    AuditLogError,
+    ReportAuthenticityError,
+    ReportExportError,
+    ReportIntegrityError,
+)
 from app.recovery import decide_recovery
-from app.report_export import export_json_report_with_checksum
+from app.report_authenticity import (
+    authentication_path_for,
+    load_authentication_key,
+    verify_report_authenticity,
+)
+from app.report_export import (
+    export_json_report_with_authentication,
+    export_json_report_with_checksum,
+)
 from app.report_integrity import checksum_path_for, verify_report_integrity
 
 AUDIT_LOG_PATH = PROJECT_ROOT / "logs" / "structured_analysis.jsonl"
@@ -74,16 +88,33 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Verify an exported JSON audit report and checksum sidecar.",
     )
+    parser.add_argument(
+        "--authenticate",
+        action="store_true",
+        help="Create an HMAC authentication sidecar for a JSON export.",
+    )
+    parser.add_argument(
+        "--verify-authenticity",
+        type=Path,
+        help="Verify an exported JSON audit report and HMAC sidecar.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.verify is not None and args.verify_authenticity is not None:
+        parser.error("--verify cannot be used with --verify-authenticity")
     if args.verify is not None:
         _validate_verify_args(parser, args)
         return _run_verify(args.verify)
+    if args.verify_authenticity is not None:
+        _validate_authenticity_verify_args(parser, args)
+        return _run_verify_authenticity(args.verify_authenticity)
 
+    if args.authenticate and args.output is None:
+        parser.error("--authenticate requires --output")
     if args.output is not None and args.format != AuditReportFormat.JSON.value:
         parser.error("--output requires --format json")
 
@@ -110,6 +141,23 @@ def main(argv: list[str] | None = None) -> int:
             report_format=AuditReportFormat(args.format),
         )
         if args.output is not None:
+            if args.authenticate:
+                key = load_authentication_key(environ=os.environ)
+                checksum, authentication = export_json_report_with_authentication(
+                    path=args.output,
+                    json_text=rendered_report,
+                    key=key,
+                )
+                print("Audit report exported successfully.")
+                print(f"Output: {args.output}")
+                print(f"Checksum: {checksum_path_for(args.output)}")
+                print(f"SHA-256: {checksum.digest}")
+                print(f"Authentication: {authentication_path_for(args.output)}")
+                print(f"Algorithm: {authentication.algorithm}")
+                print(f"Key ID: {authentication.key_id}")
+                print(f"HMAC: {authentication.digest}")
+                return 0
+
             checksum = export_json_report_with_checksum(
                 path=args.output,
                 json_text=rendered_report,
@@ -122,7 +170,12 @@ def main(argv: list[str] | None = None) -> int:
 
         print(rendered_report)
         return 0
-    except (AuditLogError, ReportExportError, ReportIntegrityError) as error:
+    except (
+        AuditLogError,
+        ReportAuthenticityError,
+        ReportExportError,
+        ReportIntegrityError,
+    ) as error:
         _print_recovery_error(
             header="[ERROR] Audit report generation failed",
             error=error,
@@ -136,6 +189,8 @@ def _validate_verify_args(
 ) -> None:
     if args.output is not None:
         parser.error("--verify cannot be used with --output")
+    if args.authenticate:
+        parser.error("--verify cannot be used with --authenticate")
     if args.since is not None:
         parser.error("--verify cannot be used with --since")
     if args.until is not None:
@@ -146,6 +201,26 @@ def _validate_verify_args(
         parser.error("--verify cannot be used with --status")
     if args.format == AuditReportFormat.JSON.value:
         parser.error("--verify cannot be used with --format json")
+
+
+def _validate_authenticity_verify_args(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+) -> None:
+    if args.output is not None:
+        parser.error("--verify-authenticity cannot be used with --output")
+    if args.authenticate:
+        parser.error("--verify-authenticity cannot be used with --authenticate")
+    if args.since is not None:
+        parser.error("--verify-authenticity cannot be used with --since")
+    if args.until is not None:
+        parser.error("--verify-authenticity cannot be used with --until")
+    if args.model is not None:
+        parser.error("--verify-authenticity cannot be used with --model")
+    if args.status != AuditStatusFilter.ALL.value:
+        parser.error("--verify-authenticity cannot be used with --status")
+    if args.format == AuditReportFormat.JSON.value:
+        parser.error("--verify-authenticity cannot be used with --format json")
 
 
 def _run_verify(verify_path: Path) -> int:
@@ -162,6 +237,29 @@ def _run_verify(verify_path: Path) -> int:
     print(f"File: {verify_path}")
     print(f"Checksum: {checksum_path_for(verify_path)}")
     print(f"SHA-256: {result.digest}")
+    return 0
+
+
+def _run_verify_authenticity(verify_path: Path) -> int:
+    try:
+        key = load_authentication_key(environ=os.environ)
+        result = verify_report_authenticity(
+            report_path=verify_path,
+            keyring={key.key_id: key.secret},
+        )
+    except (AuditLogError, ReportAuthenticityError) as error:
+        _print_recovery_error(
+            header="[ERROR] Audit report authenticity verification failed",
+            error=error,
+        )
+        return 5
+
+    print("Audit report authenticity verified.")
+    print(f"File: {verify_path}")
+    print(f"Authentication: {authentication_path_for(verify_path)}")
+    print(f"Algorithm: {result.algorithm}")
+    print(f"Key ID: {result.key_id}")
+    print(f"HMAC: {result.digest}")
     return 0
 
 

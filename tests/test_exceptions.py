@@ -5,15 +5,24 @@ from app.exceptions import (
     AuditLogParseError,
     AuditLogReadError,
     AuditReportValidationError,
+    AuthenticationExportError,
+    AuthenticationFilenameMismatchError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     ExecutionBudgetError,
     InvalidAuditEventError,
+    InvalidAuthenticationFormatError,
+    InvalidAuthenticationKeyError,
+    InvalidAuthenticationKeyIdError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
+    MissingAuthenticationKeyError,
     MissingSchemaMigrationError,
+    ReportAuthenticationReadError,
+    ReportAuthenticityError,
+    ReportAuthenticityMismatchError,
     ReportExportError,
     ReportExportWriteError,
     ReportIntegrityError,
@@ -31,6 +40,7 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    UnknownAuthenticationKeyError,
     UnsupportedAuditSchemaError,
     UnsupportedSchemaVersionError,
 )
@@ -227,3 +237,39 @@ def test_concrete_report_integrity_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 6
+
+
+def test_report_authenticity_error_inherits_from_project_error() -> None:
+    assert issubclass(ReportAuthenticityError, AgenticAILabError)
+
+
+def test_concrete_report_authenticity_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        MissingAuthenticationKeyError,
+        InvalidAuthenticationKeyError,
+        InvalidAuthenticationKeyIdError,
+        ReportAuthenticationReadError,
+        InvalidAuthenticationFormatError,
+        AuthenticationFilenameMismatchError,
+        UnknownAuthenticationKeyError,
+        ReportAuthenticityMismatchError,
+        AuthenticationExportError,
+    ):
+        assert issubclass(exception_type, ReportAuthenticityError)
+
+
+def test_concrete_report_authenticity_errors_are_distinct_classes() -> None:
+    exception_types = {
+        ReportAuthenticityError,
+        MissingAuthenticationKeyError,
+        InvalidAuthenticationKeyError,
+        InvalidAuthenticationKeyIdError,
+        ReportAuthenticationReadError,
+        InvalidAuthenticationFormatError,
+        AuthenticationFilenameMismatchError,
+        UnknownAuthenticationKeyError,
+        ReportAuthenticityMismatchError,
+        AuthenticationExportError,
+    }
+
+    assert len(exception_types) == 10
