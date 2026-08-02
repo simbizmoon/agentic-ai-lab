@@ -219,6 +219,7 @@ class TransparencyLogVerificationResult:
     root_transition_count: int
     signing_key_manifest_count: int
     entries_by_identifier: Mapping[str, TransparencyLogInclusionResult]
+    entry_hashes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -405,6 +406,7 @@ def _verify_transparency_log_unlocked(*, log_path: Path, state_path: Path) -> Tr
         raise TransparencyLogReadError(_READ_MESSAGE) from error
 
     entries: dict[str, TransparencyLogInclusionResult] = {}
+    entry_hashes: list[str] = []
     previous_hash: str | None = None
     root_count = 0
     manifest_count = 0
@@ -441,6 +443,7 @@ def _verify_transparency_log_unlocked(*, log_path: Path, state_path: Path) -> Tr
                     artifact_sha256=entry.artifact_sha256,
                 )
                 entries[entry.artifact_identifier] = inclusion
+                entry_hashes.append(entry.entry_hash)
                 if entry.artifact_type is TransparencyLogEntryType.ROOT_TRANSITION:
                     root_count += 1
                 else:
@@ -464,6 +467,7 @@ def _verify_transparency_log_unlocked(*, log_path: Path, state_path: Path) -> Tr
         root_transition_count=root_count,
         signing_key_manifest_count=manifest_count,
         entries_by_identifier=MappingProxyType(entries),
+        entry_hashes=tuple(entry_hashes),
     )
 
 
@@ -477,6 +481,7 @@ def _empty_result() -> TransparencyLogVerificationResult:
         root_transition_count=0,
         signing_key_manifest_count=0,
         entries_by_identifier=MappingProxyType({}),
+        entry_hashes=(),
     )
 
 

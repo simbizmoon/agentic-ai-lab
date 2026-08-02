@@ -5,6 +5,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
@@ -33,6 +34,9 @@ from app.exceptions import (
     ReportArchiveExportError,
     ReportBundleExportError,
     ReportExportWriteError,
+    TransparencyCheckpointConsistencyRequiredError,
+    TransparencyCheckpointRollbackError,
+    TransparencyCheckpointSplitViewError,
 )
 from app.manifest_trust_state import (
     MANIFEST_TRUST_STATE_ENV_NAME,
@@ -81,6 +85,7 @@ HMAC_SECRET_B64 = base64.b64encode(HMAC_SECRET).decode("ascii")
 HMAC_KEY_ID = "key-1"
 SIGNATURE_KEY_ID = "sig-key-1"
 ROOT_KEY_ID = "root-key-1"
+TEST_SIGNATURE_CONFIGURED_ENV_NAME = "AIRA_TEST_SIGNATURE_CONFIGURED"
 _ROOT_PRIVATE = Ed25519PrivateKey.generate()
 ROOT_PRIVATE_KEY_BYTES = _ROOT_PRIVATE.private_bytes(
     encoding=serialization.Encoding.Raw,
@@ -257,6 +262,7 @@ def configure_root_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def configure_signature_key(monkeypatch: pytest.MonkeyPatch) -> None:
     configure_root_key(monkeypatch)
+    monkeypatch.setenv(TEST_SIGNATURE_CONFIGURED_ENV_NAME, "1")
     monkeypatch.setenv(ED25519_PRIVATE_KEY_ENV_NAME, SIGNATURE_PRIVATE_KEY_B64)
     monkeypatch.setenv(ED25519_SIGNING_KEY_ID_ENV_NAME, SIGNATURE_KEY_ID)
     monkeypatch.setenv(
@@ -374,8 +380,7 @@ def configure_log(
     *events: dict[str, object],
 ) -> Path:
     if (
-        ED25519_PUBLIC_TRUST_STORE_ENV_NAME in os.environ
-        and ROOT_ED25519_PUBLIC_KEY_ENV_NAME in os.environ
+        os.environ.get(TEST_SIGNATURE_CONFIGURED_ENV_NAME) == "1"
         and SIGNING_KEY_MANIFEST_PATH_ENV_NAME not in os.environ
     ):
         write_signing_key_manifest(monkeypatch, tmp_path)
@@ -3104,3 +3109,582 @@ def test_manifest_failure_blocks_archive_signature_verify(
     assert "[ERROR] Audit report archive signature verification failed" in output
     assert "Action: abort" in output
     assert SIGNATURE_PUBLIC_KEY_B64 not in output
+
+
+def test_create_checkpoint_accepts_transparency_log_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(script, "_run_create_transparency_checkpoint", lambda args, parser: 0)
+
+    assert script.main([
+        "--create-transparency-checkpoint",
+        str(tmp_path / "checkpoint.json"),
+        "--transparency-log",
+        str(tmp_path / "transparency.jsonl"),
+        "--transparency-log-state",
+        str(tmp_path / "transparency-state.json"),
+        "--transparency-log-id",
+        "local-log",
+    ]) == 0
+
+    assert "transparency log options require a transparency-capable mode" not in capsys.readouterr().err
+
+
+def test_verify_checkpoint_accepts_transparency_log_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(script, "_run_verify_transparency_checkpoint_file", lambda args, parser: 0)
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint.json"),
+        "--transparency-log",
+        str(tmp_path / "transparency.jsonl"),
+        "--transparency-log-state",
+        str(tmp_path / "transparency-state.json"),
+    ]) == 0
+
+    assert "transparency log options require a transparency-capable mode" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("mode_option", "runner_name", "extra_args"),
+    [
+        (
+            "--create-inclusion-proof",
+            "_run_create_inclusion_proof",
+            ["--transparency-checkpoint", "checkpoint.json", "--artifact-identifier", "artifact-1"],
+        ),
+        ("--create-consistency-proof", "_run_create_consistency_proof", []),
+    ],
+)
+def test_proof_creation_modes_accept_transparency_log_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mode_option: str,
+    runner_name: str,
+    extra_args: list[str],
+) -> None:
+    monkeypatch.setattr(script, runner_name, lambda args, parser: 0)
+
+    assert script.main([
+        mode_option,
+        str(tmp_path / "proof.json"),
+        "--transparency-log",
+        str(tmp_path / "transparency.jsonl"),
+        "--transparency-log-state",
+        str(tmp_path / "transparency-state.json"),
+        *extra_args,
+    ]) == 0
+
+    assert "transparency log options require a transparency-capable mode" not in capsys.readouterr().err
+
+
+def test_report_mode_still_rejects_transparency_log_options(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main([
+            "--transparency-log",
+            str(tmp_path / "transparency.jsonl"),
+        ])
+
+    assert exc_info.value.code == 2
+    assert "transparency log options require a transparency-capable mode" in capsys.readouterr().err
+
+def test_create_inclusion_proof_uses_transparency_checkpoint_reference(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    proof_path = tmp_path / "proof.json"
+    seen: dict[str, Path] = {}
+    inclusion = SimpleNamespace(sequence=7)
+
+    def fake_verify_checkpoint(*, checkpoint_path: Path, **kwargs: object) -> object:
+        seen["checkpoint"] = checkpoint_path
+        return SimpleNamespace(tree_size=10)
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", fake_verify_checkpoint)
+    monkeypatch.setattr(
+        script,
+        "verify_transparency_log",
+        lambda **kwargs: SimpleNamespace(entries_by_identifier={"artifact-1": inclusion}),
+    )
+    monkeypatch.setattr(
+        script,
+        "generate_checkpoint_inclusion_proof",
+        lambda **kwargs: SimpleNamespace(tree_size=10, sequence=7),
+    )
+    monkeypatch.setattr(script, "export_transparency_inclusion_proof", lambda **kwargs: None)
+
+    assert script.main([
+        "--create-inclusion-proof",
+        str(proof_path),
+        "--transparency-checkpoint",
+        str(checkpoint_path),
+        "--transparency-log",
+        str(tmp_path / "transparency.jsonl"),
+        "--transparency-log-state",
+        str(tmp_path / "transparency-state.json"),
+        "--artifact-identifier",
+        "artifact-1",
+    ]) == 0
+
+    assert seen["checkpoint"] == checkpoint_path
+    assert "Transparency inclusion proof created." in capsys.readouterr().out
+
+
+def test_verify_inclusion_proof_uses_transparency_checkpoint_reference(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    proof_path = tmp_path / "proof.json"
+    seen: dict[str, Path] = {}
+
+    def fake_verify_checkpoint(*, checkpoint_path: Path, **kwargs: object) -> object:
+        seen["checkpoint"] = checkpoint_path
+        return SimpleNamespace(tree_size=10)
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", fake_verify_checkpoint)
+    monkeypatch.setattr(script, "load_transparency_inclusion_proof", lambda **kwargs: object())
+    monkeypatch.setattr(
+        script,
+        "verify_checkpoint_inclusion_proof",
+        lambda **kwargs: SimpleNamespace(log_id="local-log", tree_size=10, sequence=7),
+    )
+
+    assert script.main([
+        "--verify-inclusion-proof",
+        str(proof_path),
+        "--transparency-checkpoint",
+        str(checkpoint_path),
+    ]) == 0
+
+    assert seen["checkpoint"] == checkpoint_path
+    assert "Transparency inclusion proof verified." in capsys.readouterr().out
+
+
+def test_create_inclusion_proof_requires_transparency_checkpoint(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main([
+            "--create-inclusion-proof",
+            str(tmp_path / "proof.json"),
+            "--transparency-log",
+            str(tmp_path / "transparency.jsonl"),
+            "--transparency-log-state",
+            str(tmp_path / "transparency-state.json"),
+            "--artifact-identifier",
+            "artifact-1",
+        ])
+
+    assert exc_info.value.code == 2
+    assert "--create-inclusion-proof requires --transparency-checkpoint" in capsys.readouterr().err
+
+
+def test_verify_inclusion_proof_requires_transparency_checkpoint(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--verify-inclusion-proof", str(tmp_path / "proof.json")])
+
+    assert exc_info.value.code == 2
+    assert "--verify-inclusion-proof requires --transparency-checkpoint" in capsys.readouterr().err
+
+
+def test_unrelated_mode_rejects_transparency_checkpoint_reference(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--transparency-checkpoint", str(tmp_path / "checkpoint.json")])
+
+    assert exc_info.value.code == 2
+    assert "--transparency-checkpoint can only be used with inclusion proof modes" in capsys.readouterr().err
+
+
+def test_standalone_verify_checkpoint_still_uses_independent_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    checkpoint_path = tmp_path / "checkpoint.json"
+    seen: dict[str, Path] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["verify_checkpoint"] = args.verify_transparency_checkpoint
+        return 0
+
+    monkeypatch.setattr(script, "_run_verify_transparency_checkpoint_file", fake_runner)
+
+    assert script.main(["--verify-transparency-checkpoint", str(checkpoint_path)]) == 0
+    assert seen["verify_checkpoint"] == checkpoint_path
+
+
+def test_create_inclusion_proof_and_standalone_verify_checkpoint_conflict(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main([
+            "--create-inclusion-proof",
+            str(tmp_path / "proof.json"),
+            "--verify-transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--transparency-log",
+            str(tmp_path / "transparency.jsonl"),
+            "--transparency-log-state",
+            str(tmp_path / "transparency-state.json"),
+            "--artifact-identifier",
+            "artifact-1",
+        ])
+
+    assert exc_info.value.code == 2
+    assert "only one verify mode can be used at a time" in capsys.readouterr().err
+
+def test_checkpoint_state_update_uses_consistency_proof_for_larger_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint = SimpleNamespace(
+        checkpoint_version=1,
+        log_id="local-log",
+        tree_size=2,
+        root_hash="b" * 64,
+        last_entry_hash="2" * 64,
+        issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        log_signing_key_id="log-key",
+        checkpoint_sha256="d" * 64,
+    )
+    stored = SimpleNamespace(
+        log_id="local-log",
+        highest_tree_size=1,
+        highest_root_hash="a" * 64,
+    )
+    verified_consistency = object()
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", lambda **kwargs: checkpoint)
+    monkeypatch.setattr(script, "load_transparency_checkpoint_state", lambda **kwargs: stored)
+    monkeypatch.setattr(script, "load_transparency_consistency_proof", lambda **kwargs: "proof")
+
+    def fake_verify_consistency(*, old_checkpoint: object, new_checkpoint: object, proof: object) -> object:
+        seen["old_tree_size"] = old_checkpoint.tree_size
+        seen["old_root_hash"] = old_checkpoint.root_hash
+        seen["new_checkpoint"] = new_checkpoint
+        seen["proof"] = proof
+        return verified_consistency
+
+    def fake_apply_state(*, consistency_proof: object, **kwargs: object) -> object:
+        seen["applied_consistency"] = consistency_proof
+        return SimpleNamespace(state_updated=True)
+
+    monkeypatch.setattr(script, "verify_checkpoint_consistency_proof", fake_verify_consistency)
+    monkeypatch.setattr(script, "apply_verified_checkpoint_to_state", fake_apply_state)
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint-2.json"),
+        "--transparency-log",
+        str(tmp_path / "log.jsonl"),
+        "--transparency-log-state",
+        str(tmp_path / "log-state.json"),
+        "--checkpoint-state",
+        str(tmp_path / "checkpoint-state.json"),
+        "--consistency-proof",
+        str(tmp_path / "consistency.json"),
+        "--update-checkpoint-state",
+    ]) == 0
+
+    assert seen == {
+        "old_tree_size": 1,
+        "old_root_hash": "a" * 64,
+        "new_checkpoint": checkpoint,
+        "proof": "proof",
+        "applied_consistency": verified_consistency,
+    }
+    assert "Checkpoint State Updated: true" in capsys.readouterr().out
+
+
+def test_larger_checkpoint_state_update_without_proof_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint = SimpleNamespace(
+        checkpoint_version=1,
+        log_id="local-log",
+        tree_size=2,
+        root_hash="b" * 64,
+        last_entry_hash="2" * 64,
+        issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        log_signing_key_id="log-key",
+        checkpoint_sha256="d" * 64,
+    )
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", lambda **kwargs: checkpoint)
+    monkeypatch.setattr(script, "load_transparency_checkpoint_state", lambda **kwargs: SimpleNamespace(highest_tree_size=1))
+    monkeypatch.setattr(
+        script,
+        "apply_verified_checkpoint_to_state",
+        lambda **kwargs: (_ for _ in ()).throw(
+            TransparencyCheckpointConsistencyRequiredError("PRIVATE-CHECKPOINT")
+        ),
+    )
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint-2.json"),
+        "--checkpoint-state",
+        str(tmp_path / "checkpoint-state.json"),
+        "--update-checkpoint-state",
+    ]) == 5
+
+    output = capsys.readouterr().out
+    assert "[ERROR] Transparency checkpoint verification failed" in output
+    assert "PRIVATE-CHECKPOINT" not in output
+
+
+def test_checkpoint_state_tofu_does_not_require_consistency_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    checkpoint = SimpleNamespace(
+        checkpoint_version=1,
+        log_id="local-log",
+        tree_size=1,
+        root_hash="a" * 64,
+        last_entry_hash="1" * 64,
+        issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        log_signing_key_id="log-key",
+        checkpoint_sha256="c" * 64,
+    )
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", lambda **kwargs: checkpoint)
+    monkeypatch.setattr(script, "load_transparency_checkpoint_state", lambda **kwargs: None)
+
+    def fake_apply_state(*, consistency_proof: object, **kwargs: object) -> object:
+        seen["consistency"] = consistency_proof
+        return SimpleNamespace(state_updated=True)
+
+    monkeypatch.setattr(script, "apply_verified_checkpoint_to_state", fake_apply_state)
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint-1.json"),
+        "--checkpoint-state",
+        str(tmp_path / "checkpoint-state.json"),
+        "--update-checkpoint-state",
+    ]) == 0
+    assert seen["consistency"] is None
+
+
+def test_same_checkpoint_state_update_does_not_require_consistency_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    checkpoint = SimpleNamespace(
+        checkpoint_version=1,
+        log_id="local-log",
+        tree_size=1,
+        root_hash="a" * 64,
+        last_entry_hash="1" * 64,
+        issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        log_signing_key_id="log-key",
+        checkpoint_sha256="c" * 64,
+    )
+    stored = SimpleNamespace(
+        log_id="local-log",
+        highest_tree_size=1,
+        highest_root_hash="a" * 64,
+    )
+    seen: dict[str, object] = {}
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", lambda **kwargs: checkpoint)
+    monkeypatch.setattr(script, "load_transparency_checkpoint_state", lambda **kwargs: stored)
+
+    def fake_apply_state(*, consistency_proof: object, **kwargs: object) -> object:
+        seen["consistency"] = consistency_proof
+        return SimpleNamespace(state_updated=False)
+
+    monkeypatch.setattr(script, "apply_verified_checkpoint_to_state", fake_apply_state)
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint-1.json"),
+        "--checkpoint-state",
+        str(tmp_path / "checkpoint-state.json"),
+        "--update-checkpoint-state",
+    ]) == 0
+    assert seen["consistency"] is None
+
+
+def test_unrelated_mode_rejects_consistency_proof_reference(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--consistency-proof", str(tmp_path / "consistency.json")])
+
+    assert exc_info.value.code == 2
+    assert "--consistency-proof can only be used with checkpoint state update" in capsys.readouterr().err
+
+
+def test_no_update_checkpoint_state_rejects_consistency_proof_reference(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main([
+            "--verify-transparency-checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--checkpoint-state",
+            str(tmp_path / "checkpoint-state.json"),
+            "--consistency-proof",
+            str(tmp_path / "consistency.json"),
+            "--no-update-checkpoint-state",
+        ])
+
+    assert exc_info.value.code == 2
+    assert "--consistency-proof cannot be used with --no-update-checkpoint-state" in capsys.readouterr().err
+
+
+def test_standalone_verify_consistency_proof_remains_independent_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    seen: dict[str, Path] = {}
+
+    def fake_runner(args: object, parser: object) -> int:
+        seen["proof"] = args.verify_consistency_proof
+        return 0
+
+    monkeypatch.setattr(script, "_run_verify_consistency_proof", fake_runner)
+
+    assert script.main([
+        "--verify-consistency-proof",
+        str(tmp_path / "consistency.json"),
+        "--old-checkpoint",
+        str(tmp_path / "checkpoint-1.json"),
+        "--new-checkpoint",
+        str(tmp_path / "checkpoint-2.json"),
+    ]) == 0
+    assert seen["proof"] == tmp_path / "consistency.json"
+
+
+def test_checkpoint_state_rollback_still_returns_five_with_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint = SimpleNamespace(
+        checkpoint_version=1,
+        log_id="local-log",
+        tree_size=1,
+        root_hash="a" * 64,
+        last_entry_hash="1" * 64,
+        issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        log_signing_key_id="log-key",
+        checkpoint_sha256="c" * 64,
+    )
+    stored = SimpleNamespace(
+        log_id="local-log",
+        highest_tree_size=2,
+        highest_root_hash="b" * 64,
+    )
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", lambda **kwargs: checkpoint)
+    monkeypatch.setattr(script, "load_transparency_checkpoint_state", lambda **kwargs: stored)
+    monkeypatch.setattr(
+        script,
+        "load_transparency_consistency_proof",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("proof should not hide rollback")),
+    )
+    monkeypatch.setattr(
+        script,
+        "apply_verified_checkpoint_to_state",
+        lambda **kwargs: (_ for _ in ()).throw(
+            TransparencyCheckpointRollbackError("PRIVATE-CHECKPOINT")
+        ),
+    )
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint-1.json"),
+        "--checkpoint-state",
+        str(tmp_path / "checkpoint-state.json"),
+        "--consistency-proof",
+        str(tmp_path / "consistency.json"),
+        "--update-checkpoint-state",
+    ]) == 5
+
+    output = capsys.readouterr().out
+    assert "[ERROR] Transparency checkpoint verification failed" in output
+    assert "PRIVATE-CHECKPOINT" not in output
+
+
+def test_checkpoint_state_same_size_conflict_still_returns_five_with_proof(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkpoint = SimpleNamespace(
+        checkpoint_version=1,
+        log_id="local-log",
+        tree_size=2,
+        root_hash="c" * 64,
+        last_entry_hash="2" * 64,
+        issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        log_signing_key_id="log-key",
+        checkpoint_sha256="d" * 64,
+    )
+    stored = SimpleNamespace(
+        log_id="local-log",
+        highest_tree_size=2,
+        highest_root_hash="b" * 64,
+    )
+
+    monkeypatch.setattr(script, "verify_transparency_checkpoint", lambda **kwargs: checkpoint)
+    monkeypatch.setattr(script, "load_transparency_checkpoint_state", lambda **kwargs: stored)
+    monkeypatch.setattr(
+        script,
+        "load_transparency_consistency_proof",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("proof should not hide split-view")),
+    )
+    monkeypatch.setattr(
+        script,
+        "apply_verified_checkpoint_to_state",
+        lambda **kwargs: (_ for _ in ()).throw(
+            TransparencyCheckpointSplitViewError("PRIVATE-CHECKPOINT")
+        ),
+    )
+
+    assert script.main([
+        "--verify-transparency-checkpoint",
+        str(tmp_path / "checkpoint-2.json"),
+        "--checkpoint-state",
+        str(tmp_path / "checkpoint-state.json"),
+        "--consistency-proof",
+        str(tmp_path / "consistency.json"),
+        "--update-checkpoint-state",
+    ]) == 5
+
+    output = capsys.readouterr().out
+    assert "[ERROR] Transparency checkpoint verification failed" in output
+    assert "PRIVATE-CHECKPOINT" not in output

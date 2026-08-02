@@ -173,6 +173,32 @@ def test_register_second_entry_links_previous_hash(tmp_path: Path) -> None:
     assert lines[1]["previous_entry_hash"] == first.inclusion.entry_hash
 
 
+def test_verified_log_exposes_entry_hashes_in_sequence_order(tmp_path: Path) -> None:
+    log_path, state_path = paths(tmp_path)
+    root_artifact = transparency_artifact_from_verified_root_transition(root_result())
+    manifest_artifact = transparency_artifact_from_verified_signing_key_manifest(manifest_result())
+
+    first = register_verified_artifact(
+        log_path=log_path,
+        state_path=state_path,
+        artifact=root_artifact,
+        recorded_at=RECORDED_AT,
+    )
+    second = register_verified_artifact(
+        log_path=log_path,
+        state_path=state_path,
+        artifact=manifest_artifact,
+        recorded_at=RECORDED_AT,
+    )
+
+    verification = verify_transparency_log(log_path=log_path, state_path=state_path)
+
+    assert verification.entry_hashes == (
+        first.inclusion.entry_hash,
+        second.inclusion.entry_hash,
+    )
+
+
 def test_register_same_artifact_is_idempotent(tmp_path: Path) -> None:
     log_path, state_path = paths(tmp_path)
     artifact = transparency_artifact_from_verified_root_transition(root_result())

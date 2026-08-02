@@ -124,6 +124,20 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    TransparencyCheckpointConsistencyRequiredError,
+    TransparencyCheckpointExportError,
+    TransparencyCheckpointLogMismatchError,
+    TransparencyCheckpointReadError,
+    TransparencyCheckpointRollbackError,
+    TransparencyCheckpointSignatureError,
+    TransparencyCheckpointSplitViewError,
+    TransparencyCheckpointStateExportError,
+    TransparencyCheckpointStateLockError,
+    TransparencyCheckpointStateReadError,
+    TransparencyCheckpointStateValidationError,
+    TransparencyCheckpointValidationError,
+    TransparencyConsistencyProofMismatchError,
+    TransparencyInclusionProofMismatchError,
     TransparencyLogConflictError,
     TransparencyLogDivergenceError,
     TransparencyLogReadError,
@@ -133,6 +147,9 @@ from app.exceptions import (
     TransparencyLogStateValidationError,
     TransparencyLogValidationError,
     TransparencyLogWriteError,
+    TransparencyMerkleProofExportError,
+    TransparencyMerkleProofReadError,
+    TransparencyMerkleProofValidationError,
     UnexpectedReportArchiveMemberError,
     UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
@@ -155,6 +172,7 @@ PRIVATE_ROOT_SECRET = "PRIVATE-ROOT-SECRET"
 PRIVATE_MANIFEST_SECRET = "PRIVATE-MANIFEST-SECRET"
 PRIVATE_MANIFEST_STATE_SECRET = "PRIVATE-MANIFEST-STATE-SECRET"
 PRIVATE_TRANSPARENCY_SECRET = "PRIVATE-TRANSPARENCY-LOG"
+PRIVATE_CHECKPOINT_SECRET = "PRIVATE-CHECKPOINT-PROOF"
 
 
 def make_request() -> httpx.Request:
@@ -194,6 +212,7 @@ def assert_decision(
     assert PRIVATE_ROOT_SECRET not in decision.reason
     assert PRIVATE_MANIFEST_SECRET not in decision.reason
     assert PRIVATE_TRANSPARENCY_SECRET not in decision.reason
+    assert PRIVATE_CHECKPOINT_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -535,4 +554,35 @@ def test_transparency_log_errors_are_abort_without_secret(error: BaseException) 
     assert decision.action is RecoveryAction.ABORT
     assert decision.reason
     assert PRIVATE_TRANSPARENCY_SECRET not in decision.reason
+    assert "a" * 64 not in decision.reason
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TransparencyMerkleProofReadError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyMerkleProofValidationError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyMerkleProofExportError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyInclusionProofMismatchError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyConsistencyProofMismatchError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointReadError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointValidationError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointSignatureError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointExportError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointLogMismatchError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointStateReadError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointStateValidationError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointStateExportError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointStateLockError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointRollbackError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointSplitViewError(PRIVATE_CHECKPOINT_SECRET),
+        TransparencyCheckpointConsistencyRequiredError(PRIVATE_CHECKPOINT_SECRET),
+    ],
+)
+def test_transparency_checkpoint_errors_are_abort_without_secret(error: BaseException) -> None:
+    decision = decide_recovery(error)
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert PRIVATE_CHECKPOINT_SECRET not in decision.reason
     assert "a" * 64 not in decision.reason

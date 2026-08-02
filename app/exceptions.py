@@ -513,6 +513,86 @@ class UnloggedSigningKeyManifestError(TransparencyLogError):
     """Raised when a signing key manifest is not registered in transparency log."""
 
 
+class TransparencyMerkleError(AgenticAILabError):
+    """Base exception for transparency Merkle proof errors."""
+
+
+class TransparencyMerkleProofReadError(TransparencyMerkleError):
+    """Raised when a transparency Merkle proof cannot be read."""
+
+
+class TransparencyMerkleProofValidationError(TransparencyMerkleError):
+    """Raised when a transparency Merkle proof is structurally invalid."""
+
+
+class TransparencyMerkleProofExportError(TransparencyMerkleError):
+    """Raised when a transparency Merkle proof cannot be exported safely."""
+
+
+class TransparencyInclusionProofMismatchError(TransparencyMerkleError):
+    """Raised when a transparency inclusion proof does not match a checkpoint."""
+
+
+class TransparencyConsistencyProofMismatchError(TransparencyMerkleError):
+    """Raised when a transparency consistency proof does not match checkpoints."""
+
+
+class TransparencyCheckpointError(AgenticAILabError):
+    """Base exception for transparency checkpoint errors."""
+
+
+class TransparencyCheckpointReadError(TransparencyCheckpointError):
+    """Raised when a transparency checkpoint cannot be read."""
+
+
+class TransparencyCheckpointValidationError(TransparencyCheckpointError):
+    """Raised when a transparency checkpoint is invalid."""
+
+
+class TransparencyCheckpointSignatureError(TransparencyCheckpointError):
+    """Raised when a transparency checkpoint signature is invalid."""
+
+
+class TransparencyCheckpointExportError(TransparencyCheckpointError):
+    """Raised when a transparency checkpoint cannot be exported safely."""
+
+
+class TransparencyCheckpointLogMismatchError(TransparencyCheckpointError):
+    """Raised when a transparency checkpoint does not match the JSONL log."""
+
+
+class TransparencyCheckpointStateError(AgenticAILabError):
+    """Base exception for transparency checkpoint state errors."""
+
+
+class TransparencyCheckpointStateReadError(TransparencyCheckpointStateError):
+    """Raised when checkpoint state cannot be read."""
+
+
+class TransparencyCheckpointStateValidationError(TransparencyCheckpointStateError):
+    """Raised when checkpoint state is invalid."""
+
+
+class TransparencyCheckpointStateExportError(TransparencyCheckpointStateError):
+    """Raised when checkpoint state cannot be exported safely."""
+
+
+class TransparencyCheckpointStateLockError(TransparencyCheckpointStateError):
+    """Raised when checkpoint state cannot be locked."""
+
+
+class TransparencyCheckpointRollbackError(TransparencyCheckpointStateError):
+    """Raised when a checkpoint would roll back the witnessed tree size."""
+
+
+class TransparencyCheckpointSplitViewError(TransparencyCheckpointStateError):
+    """Raised when a checkpoint conflicts at an already witnessed tree size."""
+
+
+class TransparencyCheckpointConsistencyRequiredError(TransparencyCheckpointStateError):
+    """Raised when a larger checkpoint lacks a consistency proof."""
+
+
 class RootTransitionError(AgenticAILabError):
     """Base exception for root key transition errors."""
 

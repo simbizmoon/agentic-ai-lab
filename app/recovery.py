@@ -35,8 +35,11 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    TransparencyCheckpointError,
+    TransparencyCheckpointStateError,
     TransparencyLogError,
     TransparencyLogStateError,
+    TransparencyMerkleError,
 )
 
 
@@ -212,6 +215,27 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The exported audit report failed an integrity check.",
         )
 
+
+    if isinstance(error, TransparencyCheckpointStateError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency checkpoint state could not be verified or updated safely.",
+        )
+
+    if isinstance(error, TransparencyCheckpointError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency checkpoint could not be created or verified safely.",
+        )
+
+    if isinstance(error, TransparencyMerkleError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The transparency Merkle proof could not be verified safely.",
+        )
 
     if isinstance(error, TransparencyLogStateError):
         return RecoveryDecision(

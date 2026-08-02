@@ -7,6 +7,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -51,8 +52,11 @@ from app.exceptions import (
     SigningKeyManifestError,
     SigningKeyManifestReadError,
     SigningKeyManifestValidationError,
+    TransparencyCheckpointError,
+    TransparencyCheckpointStateError,
     TransparencyLogError,
     TransparencyLogStateError,
+    TransparencyMerkleError,
 )
 from app.manifest_trust_state import (
     MANIFEST_TRUST_STATE_ENV_NAME,
@@ -124,6 +128,20 @@ from app.signing_key_manifest import (
     verify_signing_key_manifest_with_root_state,
     verify_signing_key_manifest_with_root_state_and_transparency,
 )
+from app.transparency_checkpoint import (
+    TransparencyCheckpointVerificationMode,
+    checkpoint_signature_path_for,
+    create_transparency_checkpoint,
+    generate_checkpoint_consistency_proof,
+    generate_checkpoint_inclusion_proof,
+    verify_checkpoint_consistency_proof,
+    verify_checkpoint_inclusion_proof,
+    verify_transparency_checkpoint,
+)
+from app.transparency_checkpoint_state import (
+    apply_verified_checkpoint_to_state,
+    load_transparency_checkpoint_state,
+)
 from app.transparency_log import (
     TRANSPARENCY_LOG_PATH_ENV_NAME,
     TRANSPARENCY_LOG_STATE_PATH_ENV_NAME,
@@ -134,6 +152,12 @@ from app.transparency_log import (
     require_transparency_entry,
     transparency_artifact_from_verified_root_transition,
     verify_transparency_log,
+)
+from app.transparency_merkle import (
+    export_transparency_consistency_proof,
+    export_transparency_inclusion_proof,
+    load_transparency_consistency_proof,
+    load_transparency_inclusion_proof,
 )
 
 _MONKEYPATCH_COMPATIBILITY_EXPORTS = (
@@ -218,6 +242,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--show-transparency-log", type=Path)
     parser.add_argument("--register-transparency-entry", action="store_true")
     parser.add_argument("--require-transparency-entry", action="store_true")
+    parser.add_argument("--transparency-log-id")
+    parser.add_argument("--create-transparency-checkpoint", type=Path)
+    parser.add_argument("--verify-transparency-checkpoint", type=Path)
+    parser.add_argument("--transparency-checkpoint", type=Path)
+    parser.add_argument("--show-transparency-checkpoint", type=Path)
+    parser.add_argument("--checkpoint-state", type=Path)
+    parser.add_argument("--update-checkpoint-state", action="store_true")
+    parser.add_argument("--no-update-checkpoint-state", action="store_true")
+    parser.add_argument("--create-inclusion-proof", type=Path)
+    parser.add_argument("--verify-inclusion-proof", type=Path)
+    parser.add_argument("--artifact-identifier")
+    parser.add_argument("--create-consistency-proof", type=Path)
+    parser.add_argument("--verify-consistency-proof", type=Path)
+    parser.add_argument("--consistency-proof", type=Path)
+    parser.add_argument("--old-checkpoint", type=Path)
+    parser.add_argument("--new-checkpoint", type=Path)
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -236,6 +276,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _validate_mode_args(parser, args)
 
+    if args.create_transparency_checkpoint is not None:
+        return _run_create_transparency_checkpoint(args, parser)
+    if args.verify_transparency_checkpoint is not None:
+        return _run_verify_transparency_checkpoint_file(args, parser)
+    if args.show_transparency_checkpoint is not None:
+        return _run_show_transparency_checkpoint(args, parser)
+    if args.create_inclusion_proof is not None:
+        return _run_create_inclusion_proof(args, parser)
+    if args.verify_inclusion_proof is not None:
+        return _run_verify_inclusion_proof(args, parser)
+    if args.create_consistency_proof is not None:
+        return _run_create_consistency_proof(args, parser)
+    if args.verify_consistency_proof is not None:
+        return _run_verify_consistency_proof(args, parser)
     if args.show_transparency_log is not None:
         return _run_show_transparency_log(args.show_transparency_log, args, parser)
     if args.verify_transparency_log is not None:
@@ -332,6 +386,13 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.apply_root_transition,
         args.verify_transparency_log,
         args.show_transparency_log,
+        args.create_transparency_checkpoint,
+        args.verify_transparency_checkpoint,
+        args.show_transparency_checkpoint,
+        args.create_inclusion_proof,
+        args.verify_inclusion_proof,
+        args.create_consistency_proof,
+        args.verify_consistency_proof,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
@@ -486,6 +547,7 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     transparency_options_used = (
         args.transparency_log is not None
         or args.transparency_log_state is not None
+        or args.transparency_log_id is not None
         or args.register_transparency_entry
         or args.require_transparency_entry
     )
@@ -496,6 +558,13 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         or args.verify_archive_signature is not None
         or args.verify_archive is not None
         or (args.archive and args.authenticate and args.output is not None)
+        or args.create_transparency_checkpoint is not None
+        or args.verify_transparency_checkpoint is not None
+        or args.show_transparency_checkpoint is not None
+        or args.create_inclusion_proof is not None
+        or args.verify_inclusion_proof is not None
+        or args.create_consistency_proof is not None
+        or args.verify_consistency_proof is not None
     )
     if transparency_options_used and not transparency_capable_mode:
         parser.error("transparency log options require a transparency-capable mode")
@@ -506,6 +575,32 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
     )
     if args.register_transparency_entry and not register_capable_mode:
         parser.error("--register-transparency-entry cannot be used in this mode")
+
+    if args.transparency_checkpoint is not None and (
+        args.create_inclusion_proof is None and args.verify_inclusion_proof is None
+    ):
+        parser.error("--transparency-checkpoint can only be used with inclusion proof modes")
+    if args.create_inclusion_proof is not None:
+        if args.transparency_checkpoint is None:
+            parser.error("--create-inclusion-proof requires --transparency-checkpoint")
+        if args.transparency_log is None:
+            parser.error("--create-inclusion-proof requires --transparency-log")
+        if args.transparency_log_state is None:
+            parser.error("--create-inclusion-proof requires --transparency-log-state")
+        if args.artifact_identifier is None:
+            parser.error("--create-inclusion-proof requires --artifact-identifier")
+    if args.verify_inclusion_proof is not None and args.transparency_checkpoint is None:
+        parser.error("--verify-inclusion-proof requires --transparency-checkpoint")
+
+    if args.consistency_proof is not None:
+        if args.no_update_checkpoint_state:
+            parser.error("--consistency-proof cannot be used with --no-update-checkpoint-state")
+        if args.verify_transparency_checkpoint is None:
+            parser.error("--consistency-proof can only be used with checkpoint state update")
+        if args.checkpoint_state is None:
+            parser.error("--consistency-proof requires --checkpoint-state")
+        if not args.update_checkpoint_state:
+            parser.error("--consistency-proof requires --update-checkpoint-state")
 
     if not args.archive and (args.signing_key_manifest is not None or args.minimum_manifest_generation is not None):
         parser.error("signing key manifest options require --archive")
@@ -849,6 +944,207 @@ def _load_current_root_state(
     if state is None:
         raise RootTrustStateError("The root trust state is missing.")
     return state
+
+
+def _resolve_transparency_log_id(args: argparse.Namespace, parser: argparse.ArgumentParser) -> str:
+    if args.transparency_log_id:
+        return args.transparency_log_id
+    env_value = os.environ.get("AUDIT_REPORT_TRANSPARENCY_LOG_ID")
+    if env_value:
+        return env_value
+    parser.error("--transparency-log-id is required")
+    raise AssertionError("unreachable")
+
+
+def _run_create_transparency_checkpoint(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        result = create_transparency_checkpoint(
+            output_path=args.create_transparency_checkpoint,
+            log_path=_resolve_transparency_log_path(args, parser),
+            log_state_path=_resolve_transparency_state_path(args, parser),
+            log_id=_resolve_transparency_log_id(args, parser),
+            issued_at=datetime.now(UTC),
+        )
+    except (TransparencyCheckpointError, TransparencyLogError, TransparencyLogStateError) as error:
+        _print_recovery_error(header="[ERROR] Transparency checkpoint generation failed", error=error)
+        return 5
+    print("Transparency checkpoint created.")
+    print(f"Checkpoint: {args.create_transparency_checkpoint}")
+    print(f"Signature: {checkpoint_signature_path_for(args.create_transparency_checkpoint)}")
+    print(f"Log ID: {result.checkpoint.log_id}")
+    print(f"Tree Size: {result.checkpoint.tree_size}")
+    print(f"Root Hash: {result.checkpoint.root_hash}")
+    print(f"Last Sequence: {result.checkpoint.last_sequence}")
+    print(f"Issued At: {result.checkpoint.issued_at.isoformat()}")
+    print(f"Log Signing Key ID: {result.checkpoint.log_signing_key_id}")
+    print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
+    return 0
+
+
+def _run_verify_transparency_checkpoint_file(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        mode = (
+            TransparencyCheckpointVerificationMode.VERIFY_AGAINST_LOG
+            if args.transparency_log is not None or os.environ.get(TRANSPARENCY_LOG_PATH_ENV_NAME)
+            else TransparencyCheckpointVerificationMode.SIGNATURE_ONLY
+        )
+        result = verify_transparency_checkpoint(
+            checkpoint_path=args.verify_transparency_checkpoint,
+            log_path=_resolve_transparency_log_path(args, parser) if mode is TransparencyCheckpointVerificationMode.VERIFY_AGAINST_LOG else None,
+            log_state_path=_resolve_transparency_state_path(args, parser) if mode is TransparencyCheckpointVerificationMode.VERIFY_AGAINST_LOG else None,
+            mode=mode,
+        )
+        state_result = None
+        if args.update_checkpoint_state:
+            if args.checkpoint_state is None:
+                parser.error("--checkpoint-state is required")
+            consistency = None
+            stored_checkpoint_state = load_transparency_checkpoint_state(
+                path=args.checkpoint_state,
+            )
+            if args.consistency_proof is not None:
+                if stored_checkpoint_state is None:
+                    parser.error("--consistency-proof requires existing --checkpoint-state")
+                if result.tree_size > stored_checkpoint_state.highest_tree_size:
+                    old = SimpleNamespace(
+                        log_id=stored_checkpoint_state.log_id,
+                        tree_size=stored_checkpoint_state.highest_tree_size,
+                        root_hash=stored_checkpoint_state.highest_root_hash,
+                    )
+                    proof = load_transparency_consistency_proof(
+                        path=args.consistency_proof,
+                    )
+                    consistency = verify_checkpoint_consistency_proof(
+                        old_checkpoint=old,
+                        new_checkpoint=result,
+                        proof=proof,
+                    )
+            state_result = apply_verified_checkpoint_to_state(
+                state_path=args.checkpoint_state,
+                checkpoint=result,
+                consistency_proof=consistency,
+                updated_at=datetime.now(UTC),
+            )
+    except (TransparencyCheckpointError, TransparencyCheckpointStateError, TransparencyLogError, TransparencyLogStateError, TransparencyMerkleError) as error:
+        _print_recovery_error(header="[ERROR] Transparency checkpoint verification failed", error=error)
+        return 5
+    _print_checkpoint_result("Transparency checkpoint verified.", result)
+    if state_result is not None:
+        print(f"Checkpoint State Updated: {str(state_result.state_updated).lower()}")
+    return 0
+
+
+def _run_show_transparency_checkpoint(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        result = verify_transparency_checkpoint(
+            checkpoint_path=args.show_transparency_checkpoint,
+            log_path=None,
+            log_state_path=None,
+            mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY,
+        )
+    except TransparencyCheckpointError as error:
+        _print_recovery_error(header="[ERROR] Transparency checkpoint inspection failed", error=error)
+        return 5
+    _print_checkpoint_result("Transparency checkpoint.", result)
+    return 0
+
+
+def _print_checkpoint_result(header: str, result) -> None:
+    print(header)
+    print(f"Log ID: {result.log_id}")
+    print(f"Tree Size: {result.tree_size}")
+    print(f"Root Hash: {result.root_hash}")
+    print(f"Last Entry Hash: {result.last_entry_hash}")
+    print(f"Issued At: {result.issued_at.isoformat()}")
+    print(f"Log Signing Key ID: {result.log_signing_key_id}")
+    print(f"Checkpoint SHA-256: {result.checkpoint_sha256}")
+
+
+def _run_create_inclusion_proof(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        checkpoint = verify_transparency_checkpoint(
+            checkpoint_path=args.transparency_checkpoint,
+            log_path=_resolve_transparency_log_path(args, parser),
+            log_state_path=_resolve_transparency_state_path(args, parser),
+            mode=TransparencyCheckpointVerificationMode.VERIFY_AGAINST_LOG,
+        )
+        verification = verify_transparency_log(log_path=_resolve_transparency_log_path(args, parser), state_path=_resolve_transparency_state_path(args, parser))
+        inclusion = verification.entries_by_identifier.get(args.artifact_identifier)
+        if inclusion is None:
+            raise TransparencyMerkleError("The transparency inclusion proof does not match.")
+        proof = generate_checkpoint_inclusion_proof(
+            checkpoint=checkpoint,
+            log_path=_resolve_transparency_log_path(args, parser),
+            log_state_path=_resolve_transparency_state_path(args, parser),
+            inclusion=inclusion,
+            issued_at=datetime.now(UTC),
+        )
+        export_transparency_inclusion_proof(path=args.create_inclusion_proof, proof=proof)
+    except (TransparencyCheckpointError, TransparencyLogError, TransparencyLogStateError, TransparencyMerkleError) as error:
+        _print_recovery_error(header="[ERROR] Transparency inclusion proof generation failed", error=error)
+        return 5
+    print("Transparency inclusion proof created.")
+    print(f"Proof: {args.create_inclusion_proof}")
+    print(f"Artifact Identifier: {args.artifact_identifier}")
+    print(f"Tree Size: {proof.tree_size}")
+    print(f"Sequence: {proof.sequence}")
+    return 0
+
+
+def _run_verify_inclusion_proof(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    try:
+        checkpoint = verify_transparency_checkpoint(
+            checkpoint_path=args.transparency_checkpoint,
+            log_path=None,
+            log_state_path=None,
+            mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY,
+        )
+        proof = load_transparency_inclusion_proof(path=args.verify_inclusion_proof)
+        result = verify_checkpoint_inclusion_proof(checkpoint=checkpoint, proof=proof)
+    except (TransparencyCheckpointError, TransparencyMerkleError) as error:
+        _print_recovery_error(header="[ERROR] Transparency inclusion proof verification failed", error=error)
+        return 5
+    print("Transparency inclusion proof verified.")
+    print(f"Log ID: {result.log_id}")
+    print(f"Tree Size: {result.tree_size}")
+    print(f"Sequence: {result.sequence}")
+    return 0
+
+
+def _run_create_consistency_proof(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.old_checkpoint is None or args.new_checkpoint is None:
+        parser.error("--create-consistency-proof requires --old-checkpoint and --new-checkpoint")
+    try:
+        old = verify_transparency_checkpoint(checkpoint_path=args.old_checkpoint, log_path=None, log_state_path=None, mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY)
+        new = verify_transparency_checkpoint(checkpoint_path=args.new_checkpoint, log_path=_resolve_transparency_log_path(args, parser), log_state_path=_resolve_transparency_state_path(args, parser), mode=TransparencyCheckpointVerificationMode.VERIFY_AGAINST_LOG)
+        proof = generate_checkpoint_consistency_proof(old_checkpoint=old, new_checkpoint=new, log_path=_resolve_transparency_log_path(args, parser), log_state_path=_resolve_transparency_state_path(args, parser), issued_at=datetime.now(UTC))
+        export_transparency_consistency_proof(path=args.create_consistency_proof, proof=proof)
+    except (TransparencyCheckpointError, TransparencyLogError, TransparencyLogStateError, TransparencyMerkleError) as error:
+        _print_recovery_error(header="[ERROR] Transparency consistency proof generation failed", error=error)
+        return 5
+    print("Transparency consistency proof created.")
+    print(f"Proof: {args.create_consistency_proof}")
+    print(f"Old Tree Size: {proof.old_tree_size}")
+    print(f"New Tree Size: {proof.new_tree_size}")
+    return 0
+
+
+def _run_verify_consistency_proof(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
+    if args.old_checkpoint is None or args.new_checkpoint is None:
+        parser.error("--verify-consistency-proof requires --old-checkpoint and --new-checkpoint")
+    try:
+        old = verify_transparency_checkpoint(checkpoint_path=args.old_checkpoint, log_path=None, log_state_path=None, mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY)
+        new = verify_transparency_checkpoint(checkpoint_path=args.new_checkpoint, log_path=None, log_state_path=None, mode=TransparencyCheckpointVerificationMode.SIGNATURE_ONLY)
+        proof = load_transparency_consistency_proof(path=args.verify_consistency_proof)
+        result = verify_checkpoint_consistency_proof(old_checkpoint=old, new_checkpoint=new, proof=proof)
+    except (TransparencyCheckpointError, TransparencyMerkleError) as error:
+        _print_recovery_error(header="[ERROR] Transparency consistency proof verification failed", error=error)
+        return 5
+    print("Transparency consistency proof verified.")
+    print(f"Log ID: {result.log_id}")
+    print(f"Old Tree Size: {result.old_tree_size}")
+    print(f"New Tree Size: {result.new_tree_size}")
+    return 0
 
 
 def _run_verify_transparency_log(

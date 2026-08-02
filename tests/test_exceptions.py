@@ -125,6 +125,22 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    TransparencyCheckpointConsistencyRequiredError,
+    TransparencyCheckpointError,
+    TransparencyCheckpointExportError,
+    TransparencyCheckpointLogMismatchError,
+    TransparencyCheckpointReadError,
+    TransparencyCheckpointRollbackError,
+    TransparencyCheckpointSignatureError,
+    TransparencyCheckpointSplitViewError,
+    TransparencyCheckpointStateError,
+    TransparencyCheckpointStateExportError,
+    TransparencyCheckpointStateLockError,
+    TransparencyCheckpointStateReadError,
+    TransparencyCheckpointStateValidationError,
+    TransparencyCheckpointValidationError,
+    TransparencyConsistencyProofMismatchError,
+    TransparencyInclusionProofMismatchError,
     TransparencyLogConflictError,
     TransparencyLogDivergenceError,
     TransparencyLogError,
@@ -136,6 +152,10 @@ from app.exceptions import (
     TransparencyLogStateValidationError,
     TransparencyLogValidationError,
     TransparencyLogWriteError,
+    TransparencyMerkleError,
+    TransparencyMerkleProofExportError,
+    TransparencyMerkleProofReadError,
+    TransparencyMerkleProofValidationError,
     UnexpectedReportArchiveMemberError,
     UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
@@ -801,3 +821,68 @@ def test_transparency_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 15
+
+
+def test_transparency_merkle_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencyMerkleError, AgenticAILabError)
+    for exception_type in (
+        TransparencyMerkleProofReadError,
+        TransparencyMerkleProofValidationError,
+        TransparencyMerkleProofExportError,
+        TransparencyInclusionProofMismatchError,
+        TransparencyConsistencyProofMismatchError,
+    ):
+        assert issubclass(exception_type, TransparencyMerkleError)
+
+
+def test_transparency_checkpoint_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencyCheckpointError, AgenticAILabError)
+    for exception_type in (
+        TransparencyCheckpointReadError,
+        TransparencyCheckpointValidationError,
+        TransparencyCheckpointSignatureError,
+        TransparencyCheckpointExportError,
+        TransparencyCheckpointLogMismatchError,
+    ):
+        assert issubclass(exception_type, TransparencyCheckpointError)
+
+
+def test_transparency_checkpoint_state_errors_inherit_from_project_error() -> None:
+    assert issubclass(TransparencyCheckpointStateError, AgenticAILabError)
+    for exception_type in (
+        TransparencyCheckpointStateReadError,
+        TransparencyCheckpointStateValidationError,
+        TransparencyCheckpointStateExportError,
+        TransparencyCheckpointStateLockError,
+        TransparencyCheckpointRollbackError,
+        TransparencyCheckpointSplitViewError,
+        TransparencyCheckpointConsistencyRequiredError,
+    ):
+        assert issubclass(exception_type, TransparencyCheckpointStateError)
+
+
+def test_transparency_merkle_checkpoint_errors_are_distinct_classes() -> None:
+    exception_types = {
+        TransparencyMerkleError,
+        TransparencyMerkleProofReadError,
+        TransparencyMerkleProofValidationError,
+        TransparencyMerkleProofExportError,
+        TransparencyInclusionProofMismatchError,
+        TransparencyConsistencyProofMismatchError,
+        TransparencyCheckpointError,
+        TransparencyCheckpointReadError,
+        TransparencyCheckpointValidationError,
+        TransparencyCheckpointSignatureError,
+        TransparencyCheckpointExportError,
+        TransparencyCheckpointLogMismatchError,
+        TransparencyCheckpointStateError,
+        TransparencyCheckpointStateReadError,
+        TransparencyCheckpointStateValidationError,
+        TransparencyCheckpointStateExportError,
+        TransparencyCheckpointStateLockError,
+        TransparencyCheckpointRollbackError,
+        TransparencyCheckpointSplitViewError,
+        TransparencyCheckpointConsistencyRequiredError,
+    }
+
+    assert len(exception_types) == 20
