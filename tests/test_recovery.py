@@ -457,3 +457,39 @@ def test_manifest_trust_state_errors_are_abort_without_secret(error: BaseExcepti
     assert decision.action is RecoveryAction.ABORT
     assert decision.reason
     assert PRIVATE_MANIFEST_STATE_SECRET not in decision.reason
+
+
+def test_root_transition_error_recovery_is_abort() -> None:
+    from app.exceptions import RootTransitionValidationError
+    from app.recovery import RecoveryAction, decide_recovery
+
+    decision = decide_recovery(RootTransitionValidationError("PRIVATE-ROOT-ERROR"))
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert "PRIVATE-ROOT-ERROR" not in decision.reason
+
+
+def test_root_trust_state_error_recovery_is_abort() -> None:
+    from app.exceptions import RootTrustStateValidationError
+    from app.recovery import RecoveryAction, decide_recovery
+
+    decision = decide_recovery(RootTrustStateValidationError("PRIVATE-ROOT-STATE"))
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert "PRIVATE-ROOT-STATE" not in decision.reason
+
+
+def test_manifest_trust_state_retirement_error_recovery_is_abort() -> None:
+    from app.exceptions import ManifestTrustStateRetirementError
+    from app.recovery import RecoveryAction, decide_recovery
+
+    decision = decide_recovery(ManifestTrustStateRetirementError("PRIVATE-RETIRED-STATE"))
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert "PRIVATE-RETIRED-STATE" not in decision.reason

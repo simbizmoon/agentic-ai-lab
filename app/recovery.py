@@ -16,12 +16,15 @@ from app.exceptions import (
     AuthenticationKeyringError,
     AuthenticationTrustError,
     ManifestTrustStateError,
+    ManifestTrustStateRetirementError,
     ReportArchiveError,
     ReportAuthenticityError,
     ReportBundleError,
     ReportExportError,
     ReportIntegrityError,
     RootSignatureTrustError,
+    RootTransitionError,
+    RootTrustStateError,
     SchemaCompatibilityError,
     SchemaMigrationError,
     SigningKeyManifestError,
@@ -207,6 +210,27 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The exported audit report failed an integrity check.",
         )
 
+
+    if isinstance(error, RootTransitionError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The root transition manifest is invalid or untrusted.",
+        )
+
+    if isinstance(error, RootTrustStateError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The root trust state could not be verified or updated safely.",
+        )
+
+    if isinstance(error, ManifestTrustStateRetirementError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The signing key manifest trust state could not be retired safely.",
+        )
 
     if isinstance(error, ManifestTrustStateError):
         return RecoveryDecision(

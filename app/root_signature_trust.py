@@ -28,6 +28,9 @@ from app.exceptions import (
 ROOT_ED25519_PRIVATE_KEY_ENV_NAME = "AUDIT_REPORT_ROOT_ED25519_PRIVATE_KEY_B64"
 ROOT_ED25519_PUBLIC_KEY_ENV_NAME = "AUDIT_REPORT_ROOT_ED25519_PUBLIC_KEY_B64"
 ROOT_ED25519_KEY_ID_ENV_NAME = "AUDIT_REPORT_ROOT_ED25519_KEY_ID"
+NEXT_ROOT_ED25519_PRIVATE_KEY_ENV_NAME = "AUDIT_REPORT_NEXT_ROOT_ED25519_PRIVATE_KEY_B64"
+NEXT_ROOT_ED25519_PUBLIC_KEY_ENV_NAME = "AUDIT_REPORT_NEXT_ROOT_ED25519_PUBLIC_KEY_B64"
+NEXT_ROOT_ED25519_KEY_ID_ENV_NAME = "AUDIT_REPORT_NEXT_ROOT_ED25519_KEY_ID"
 RAW_ED25519_PRIVATE_KEY_BYTES = 32
 RAW_ED25519_PUBLIC_KEY_BYTES = 32
 
@@ -88,46 +91,34 @@ class TrustedRootSigningPublicKey:
 
 
 def load_root_signing_private_key(*, environ: Mapping[str, str]) -> RootSigningPrivateKey:
-    if not isinstance(environ, Mapping):
-        raise TypeError("environ must be a Mapping")
-    if (
-        ROOT_ED25519_PRIVATE_KEY_ENV_NAME not in environ
-        or ROOT_ED25519_KEY_ID_ENV_NAME not in environ
-        or not environ[ROOT_ED25519_PRIVATE_KEY_ENV_NAME]
-        or not environ[ROOT_ED25519_KEY_ID_ENV_NAME]
-    ):
-        raise MissingRootSigningPrivateKeyError(_MISSING_PRIVATE_MESSAGE)
-    key_id = environ[ROOT_ED25519_KEY_ID_ENV_NAME]
-    if not is_valid_key_id(key_id):
-        raise RootSigningKeyIdError(_INVALID_KEY_ID_MESSAGE)
-    private_key_bytes = _decode_private_key_b64(environ[ROOT_ED25519_PRIVATE_KEY_ENV_NAME])
-    public_key_bytes = _derive_public_key_bytes(private_key_bytes)
-    return RootSigningPrivateKey(
-        key_id=key_id,
-        private_key_bytes=private_key_bytes,
-        public_key_bytes=public_key_bytes,
-        public_key_fingerprint=fingerprint_public_key(public_key_bytes),
+    return _load_private_key(
+        environ=environ,
+        private_env_name=ROOT_ED25519_PRIVATE_KEY_ENV_NAME,
+        key_id_env_name=ROOT_ED25519_KEY_ID_ENV_NAME,
     )
 
 
 def load_trusted_root_public_key(*, environ: Mapping[str, str]) -> TrustedRootSigningPublicKey:
-    if not isinstance(environ, Mapping):
-        raise TypeError("environ must be a Mapping")
-    if (
-        ROOT_ED25519_PUBLIC_KEY_ENV_NAME not in environ
-        or ROOT_ED25519_KEY_ID_ENV_NAME not in environ
-        or not environ[ROOT_ED25519_PUBLIC_KEY_ENV_NAME]
-        or not environ[ROOT_ED25519_KEY_ID_ENV_NAME]
-    ):
-        raise MissingRootSigningPublicKeyError(_MISSING_PUBLIC_MESSAGE)
-    key_id = environ[ROOT_ED25519_KEY_ID_ENV_NAME]
-    if not is_valid_key_id(key_id):
-        raise RootSigningKeyIdError(_INVALID_KEY_ID_MESSAGE)
-    public_key_bytes = _decode_public_key_b64(environ[ROOT_ED25519_PUBLIC_KEY_ENV_NAME])
-    return TrustedRootSigningPublicKey(
-        key_id=key_id,
-        public_key_bytes=public_key_bytes,
-        public_key_fingerprint=fingerprint_public_key(public_key_bytes),
+    return _load_public_key(
+        environ=environ,
+        public_env_name=ROOT_ED25519_PUBLIC_KEY_ENV_NAME,
+        key_id_env_name=ROOT_ED25519_KEY_ID_ENV_NAME,
+    )
+
+
+def load_next_root_signing_private_key(*, environ: Mapping[str, str]) -> RootSigningPrivateKey:
+    return _load_private_key(
+        environ=environ,
+        private_env_name=NEXT_ROOT_ED25519_PRIVATE_KEY_ENV_NAME,
+        key_id_env_name=NEXT_ROOT_ED25519_KEY_ID_ENV_NAME,
+    )
+
+
+def load_next_trusted_root_public_key(*, environ: Mapping[str, str]) -> TrustedRootSigningPublicKey:
+    return _load_public_key(
+        environ=environ,
+        public_env_name=NEXT_ROOT_ED25519_PUBLIC_KEY_ENV_NAME,
+        key_id_env_name=NEXT_ROOT_ED25519_KEY_ID_ENV_NAME,
     )
 
 
@@ -152,6 +143,60 @@ def fingerprint_public_key(public_key_bytes: bytes) -> str:
     if not isinstance(public_key_bytes, bytes):
         raise TypeError("public_key_bytes must be bytes")
     return hashlib.sha256(public_key_bytes).hexdigest()
+
+
+def _load_private_key(
+    *,
+    environ: Mapping[str, str],
+    private_env_name: str,
+    key_id_env_name: str,
+) -> RootSigningPrivateKey:
+    if not isinstance(environ, Mapping):
+        raise TypeError("environ must be a Mapping")
+    if (
+        private_env_name not in environ
+        or key_id_env_name not in environ
+        or not environ[private_env_name]
+        or not environ[key_id_env_name]
+    ):
+        raise MissingRootSigningPrivateKeyError(_MISSING_PRIVATE_MESSAGE)
+    key_id = environ[key_id_env_name]
+    if not is_valid_key_id(key_id):
+        raise RootSigningKeyIdError(_INVALID_KEY_ID_MESSAGE)
+    private_key_bytes = _decode_private_key_b64(environ[private_env_name])
+    public_key_bytes = _derive_public_key_bytes(private_key_bytes)
+    return RootSigningPrivateKey(
+        key_id=key_id,
+        private_key_bytes=private_key_bytes,
+        public_key_bytes=public_key_bytes,
+        public_key_fingerprint=fingerprint_public_key(public_key_bytes),
+    )
+
+
+def _load_public_key(
+    *,
+    environ: Mapping[str, str],
+    public_env_name: str,
+    key_id_env_name: str,
+) -> TrustedRootSigningPublicKey:
+    if not isinstance(environ, Mapping):
+        raise TypeError("environ must be a Mapping")
+    if (
+        public_env_name not in environ
+        or key_id_env_name not in environ
+        or not environ[public_env_name]
+        or not environ[key_id_env_name]
+    ):
+        raise MissingRootSigningPublicKeyError(_MISSING_PUBLIC_MESSAGE)
+    key_id = environ[key_id_env_name]
+    if not is_valid_key_id(key_id):
+        raise RootSigningKeyIdError(_INVALID_KEY_ID_MESSAGE)
+    public_key_bytes = _decode_public_key_b64(environ[public_env_name])
+    return TrustedRootSigningPublicKey(
+        key_id=key_id,
+        public_key_bytes=public_key_bytes,
+        public_key_fingerprint=fingerprint_public_key(public_key_bytes),
+    )
 
 
 def _decode_private_key_b64(value: object) -> bytes:

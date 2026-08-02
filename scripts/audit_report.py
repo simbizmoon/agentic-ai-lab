@@ -46,6 +46,8 @@ from app.exceptions import (
     ReportExportError,
     ReportIntegrityError,
     RootSignatureTrustError,
+    RootTransitionError,
+    RootTrustStateError,
     SigningKeyManifestError,
     SigningKeyManifestReadError,
     SigningKeyManifestValidationError,
@@ -56,12 +58,14 @@ from app.manifest_trust_state import (
     ManifestTrustStateMode,
     apply_manifest_trust_state,
     load_manifest_trust_state,
+    retire_manifest_trust_state,
 )
 from app.recovery import decide_recovery
 from app.report_archive import (
     archive_path_for,
+    verify_archive_signature_with_root_state,
     verify_authenticated_report_archive,
-    verify_signed_authenticated_report_archive_with_manifest_state,
+    verify_signed_authenticated_report_archive_with_root_state,
 )
 from app.report_authenticity import (
     authentication_path_for,
@@ -71,7 +75,7 @@ from app.report_bundle import manifest_path_for, verify_report_bundle
 from app.report_export import (
     export_json_report_archive,
     export_json_report_bundle,
-    export_json_report_signed_archive_with_manifest_state,
+    export_json_report_signed_archive_with_root_state,
     export_json_report_with_checksum,
 )
 from app.report_integrity import (
@@ -80,8 +84,26 @@ from app.report_integrity import (
 )
 from app.root_signature_trust import (
     ensure_root_key_pair_matches,
+    load_next_root_signing_private_key,
+    load_next_trusted_root_public_key,
     load_root_signing_private_key,
     load_trusted_root_public_key,
+)
+from app.root_transition import (
+    build_root_transition_manifest,
+    export_root_transition_manifest,
+    export_root_transition_signature,
+    next_root_signature_path_for,
+    previous_root_signature_path_for,
+    sign_root_transition,
+    verify_root_transition,
+)
+from app.root_trust_state import (
+    ROOT_TRUST_STATE_ENV_NAME,
+    apply_root_transition,
+    initialize_root_trust_state,
+    load_root_trust_state,
+    trusted_root_public_key_from_state,
 )
 from app.signature_trust import (
     RevokedSignatureKeyPolicy,
@@ -97,11 +119,12 @@ from app.signing_key_manifest import (
     sign_signing_key_manifest,
     signing_key_manifest_signature_path_for,
     verify_signing_key_manifest,
-    verify_signing_key_manifest_with_state,
+    verify_signing_key_manifest_with_root_state,
 )
 
 _MONKEYPATCH_COMPATIBILITY_EXPORTS = (
     export_json_report_archive,
+    verify_archive_signature,
     verify_authenticated_report_archive,
 )
 
@@ -163,6 +186,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--require-existing-manifest-state", action="store_true")
     parser.add_argument("--show-manifest-state", type=Path)
     parser.add_argument("--initialize-manifest-state", type=Path)
+    parser.add_argument("--initialize-root-trust-state", type=Path)
+    parser.add_argument("--initial-root-epoch", type=int)
+    parser.add_argument("--show-root-trust-state", type=Path)
+    parser.add_argument("--create-root-transition", type=Path)
+    parser.add_argument("--previous-root-epoch", type=int)
+    parser.add_argument("--next-root-epoch", type=int)
+    parser.add_argument("--root-transition-valid-from", type=parse_cli_datetime)
+    parser.add_argument("--root-transition-valid-until", type=parse_cli_datetime)
+    parser.add_argument("--verify-root-transition", type=Path)
+    parser.add_argument("--apply-root-transition", type=Path)
+    parser.add_argument("--root-trust-state", type=Path)
+    parser.add_argument("--retire-manifest-state", type=Path)
     parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
@@ -181,6 +216,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     _validate_mode_args(parser, args)
 
+    if args.show_root_trust_state is not None:
+        return _run_show_root_trust_state(args.show_root_trust_state)
+    if args.initialize_root_trust_state is not None:
+        return _run_initialize_root_trust_state(args, parser)
+    if args.create_root_transition is not None:
+        return _run_create_root_transition(args, parser)
+    if args.verify_root_transition is not None:
+        return _run_verify_root_transition(args, parser)
+    if args.retire_manifest_state is not None:
+        return _run_retire_manifest_state(args, parser)
+    if args.apply_root_transition is not None:
+        return _run_apply_root_transition(args, parser)
     if args.show_manifest_state is not None:
         return _run_show_manifest_state(args.show_manifest_state)
     if args.initialize_manifest_state is not None:
@@ -213,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest_path=_resolve_signing_key_manifest_path(args, parser),
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             state_path=_resolve_manifest_state_path(args),
+            root_state_path=args.root_trust_state,
             state_mode=_resolve_manifest_state_mode(args),
             require_existing_state=args.require_existing_manifest_state,
             revoked_signature_key_policy=RevokedSignatureKeyPolicy(
@@ -225,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest_path=_resolve_signing_key_manifest_path(args, parser),
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             state_path=_resolve_manifest_state_path(args),
+            root_state_path=args.root_trust_state,
             state_mode=_resolve_manifest_state_mode(args),
             require_existing_state=args.require_existing_manifest_state,
             revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
@@ -247,10 +296,34 @@ def _validate_mode_args(parser: argparse.ArgumentParser, args: argparse.Namespac
         args.create_signing_key_manifest,
         args.show_manifest_state,
         args.initialize_manifest_state,
+        args.show_root_trust_state,
+        args.initialize_root_trust_state,
+        args.create_root_transition,
+        args.verify_root_transition,
+        args.retire_manifest_state,
+        args.apply_root_transition,
         args.verify_archive,
     )
     if sum(value is not None for value in verify_modes) > 1:
         parser.error("only one verify mode can be used at a time")
+
+    root_mode = (
+        args.show_root_trust_state,
+        args.initialize_root_trust_state,
+        args.create_root_transition,
+        args.verify_root_transition,
+        args.retire_manifest_state,
+        args.apply_root_transition,
+    )
+    if any(value is not None for value in root_mode):
+        if args.output is not None or args.authenticate or args.archive:
+            parser.error("root trust modes cannot be used with report export options")
+        if args.since is not None or args.until is not None or args.model is not None:
+            parser.error("root trust modes cannot be used with report filters")
+        if args.status != AuditStatusFilter.ALL.value or args.format == AuditReportFormat.JSON.value:
+            parser.error("root trust modes cannot be used with report filters")
+        if args.signing_key_manifest is not None and args.retire_manifest_state is None:
+            parser.error("--signing-key-manifest is only valid with manifest modes")
 
     hmac_policy_used = args.revoked_key_policy != RevokedKeyPolicy.REJECT.value
     signature_policy_used = (
@@ -450,14 +523,15 @@ def _run_report_generation(args: argparse.Namespace, parser: argparse.ArgumentPa
         ArchiveAuthenticityError,
         ArchiveSignatureError,
         AuditLogError,
-    ManifestTrustStateError,
-    ManifestTrustStateValidationError,
+        ManifestTrustStateError,
+        ManifestTrustStateValidationError,
         ReportArchiveError,
         ReportAuthenticityError,
         ReportBundleError,
         ReportExportError,
         ReportIntegrityError,
         RootSignatureTrustError,
+        RootTrustStateError,
         SigningKeyManifestError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report generation failed", error=error)
@@ -469,7 +543,7 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
     trust_store = load_authentication_trust_store(environ=os.environ)
     if args.archive:
         signing_key = load_archive_signing_private_key(environ=os.environ)
-        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        root_state = _load_current_root_state(args, None)
         (
             checksum,
             authentication,
@@ -478,14 +552,14 @@ def _export_authenticated_report(args: argparse.Namespace, rendered_report: str)
             archive_authentication,
             signature,
             state_decision,
-        ) = export_json_report_signed_archive_with_manifest_state(
+        ) = export_json_report_signed_archive_with_root_state(
             path=args.output,
             json_text=rendered_report,
             trust_store=trust_store,
             authenticated_at=exported_at,
             signing_key=signing_key,
             manifest_path=_resolve_signing_key_manifest_path(args, None),
-            root_public_key=root_public_key,
+            root_state=root_state,
             state_path=_resolve_manifest_state_path(args),
             signed_at=exported_at,
             minimum_generation=_resolve_minimum_manifest_generation(args, None),
@@ -625,6 +699,218 @@ def _print_manifest_state_decision_for_values(
     print(f"State Updated: {str(decision.state_updated).lower()}")
 
 
+def _resolve_root_trust_state_path(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None,
+) -> Path:
+    if args.root_trust_state is not None:
+        return args.root_trust_state
+    env_value = os.environ.get(ROOT_TRUST_STATE_ENV_NAME)
+    if env_value:
+        return Path(env_value)
+    if parser is not None:
+        parser.error("--root-trust-state is required")
+    raise RootTrustStateError("The root trust state is missing.")
+
+
+def _load_current_root_state(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser | None,
+):
+    state = load_root_trust_state(path=_resolve_root_trust_state_path(args, parser))
+    if state is None:
+        raise RootTrustStateError("The root trust state is missing.")
+    return state
+
+
+def _run_show_root_trust_state(state_path: Path) -> int:
+    try:
+        state = load_root_trust_state(path=state_path)
+    except RootTrustStateError as error:
+        _print_recovery_error(
+            header="[ERROR] Root trust state inspection failed",
+            error=error,
+        )
+        return 5
+    if state is None:
+        print("Root trust state is missing.")
+        print(f"State: {state_path}")
+        return 0
+    print("Root trust state.")
+    print(f"State: {state_path}")
+    print(f"State Version: {state.state_version}")
+    print(f"Current Root Epoch: {state.current_root_epoch}")
+    print(f"Current Root Key ID: {state.current_root_key_id}")
+    print(f"Last Transition Generation: {state.last_transition_generation}")
+    if state.last_transition_sha256 is not None:
+        print(f"Last Transition SHA-256: {state.last_transition_sha256}")
+    print(f"Updated At: {state.updated_at.isoformat()}")
+    return 0
+
+
+def _run_initialize_root_trust_state(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    if args.initial_root_epoch is None:
+        parser.error("--initial-root-epoch is required")
+    try:
+        initialized_at = datetime.now(UTC)
+        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        state = initialize_root_trust_state(
+            path=args.initialize_root_trust_state,
+            root_public_key=root_public_key,
+            root_epoch=args.initial_root_epoch,
+            initialized_at=initialized_at,
+        )
+    except (RootSignatureTrustError, RootTrustStateError) as error:
+        _print_recovery_error(
+            header="[ERROR] Root trust state initialization failed",
+            error=error,
+        )
+        return 5
+    print("Root trust state initialized.")
+    print(f"State: {args.initialize_root_trust_state}")
+    print(f"Current Root Epoch: {state.current_root_epoch}")
+    print(f"Current Root Key ID: {state.current_root_key_id}")
+    return 0
+
+
+def _run_create_root_transition(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    if args.previous_root_epoch is None:
+        parser.error("--previous-root-epoch is required")
+    if args.next_root_epoch is None:
+        parser.error("--next-root-epoch is required")
+    if args.root_transition_valid_from is None:
+        parser.error("--root-transition-valid-from is required")
+    if args.root_transition_valid_until is None:
+        parser.error("--root-transition-valid-until is required")
+    try:
+        previous_private = load_root_signing_private_key(environ=os.environ)
+        previous_public = load_trusted_root_public_key(environ=os.environ)
+        next_private = load_next_root_signing_private_key(environ=os.environ)
+        next_public = load_next_trusted_root_public_key(environ=os.environ)
+        ensure_root_key_pair_matches(private_key=previous_private, public_key=previous_public)
+        ensure_root_key_pair_matches(private_key=next_private, public_key=next_public)
+        issued_at = datetime.now(UTC)
+        transition = build_root_transition_manifest(
+            issued_at=issued_at,
+            valid_from=args.root_transition_valid_from,
+            valid_until=args.root_transition_valid_until,
+            previous_root_public_key=previous_public,
+            previous_root_epoch=args.previous_root_epoch,
+            next_root_public_key=next_public,
+            next_root_epoch=args.next_root_epoch,
+        )
+        previous_signature, next_signature = sign_root_transition(
+            transition=transition,
+            previous_root_private_key=previous_private,
+            next_root_private_key=next_private,
+            signed_at=issued_at,
+            filename=args.create_root_transition.name,
+        )
+        export_root_transition_manifest(path=args.create_root_transition, transition=transition)
+        previous_path = previous_root_signature_path_for(args.create_root_transition)
+        next_path = next_root_signature_path_for(args.create_root_transition)
+        export_root_transition_signature(path=previous_path, signature=previous_signature)
+        export_root_transition_signature(path=next_path, signature=next_signature)
+    except (RootSignatureTrustError, RootTransitionError) as error:
+        _print_recovery_error(
+            header="[ERROR] Root transition generation failed",
+            error=error,
+        )
+        return 5
+    print("Root transition created.")
+    print(f"Transition: {args.create_root_transition}")
+    print(f"Previous Root Signature: {previous_path}")
+    print(f"Next Root Signature: {next_path}")
+    print(f"Previous Root Epoch: {transition.previous_root.epoch}")
+    print(f"Next Root Epoch: {transition.next_root.epoch}")
+    print(f"Previous Root Key ID: {transition.previous_root.key_id}")
+    print(f"Next Root Key ID: {transition.next_root.key_id}")
+    return 0
+
+
+def _run_verify_root_transition(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        root_state = _load_current_root_state(args, parser)
+        result = verify_root_transition(
+            transition_path=args.verify_root_transition,
+            current_root=trusted_root_public_key_from_state(root_state),
+            current_root_epoch=root_state.current_root_epoch,
+            verification_time=datetime.now(UTC),
+        )
+    except (RootTransitionError, RootTrustStateError) as error:
+        _print_recovery_error(
+            header="[ERROR] Root transition verification failed",
+            error=error,
+        )
+        return 5
+    print("Root transition verified.")
+    print(f"Transition: {args.verify_root_transition}")
+    print(f"Previous Root Epoch: {result.previous_root_epoch}")
+    print(f"Next Root Epoch: {result.next_root_epoch}")
+    print(f"Previous Root Key ID: {result.previous_root_key_id}")
+    print(f"Next Root Key ID: {result.next_root_key_id}")
+    print(f"Active For Application: {str(result.is_active_for_application).lower()}")
+    return 0
+
+
+def _run_retire_manifest_state(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        root_state = _load_current_root_state(args, parser)
+        retired_path = retire_manifest_trust_state(
+            state_path=args.retire_manifest_state,
+            current_root_state=root_state,
+        )
+    except (ManifestTrustStateError, RootTrustStateError) as error:
+        _print_recovery_error(
+            header="[ERROR] Signing key manifest trust state retirement failed",
+            error=error,
+        )
+        return 5
+    print("Signing key manifest trust state retired.")
+    print(f"Retired State: {retired_path}")
+    print(f"Root Epoch: {root_state.current_root_epoch}")
+    return 0
+
+
+def _run_apply_root_transition(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        result = apply_root_transition(
+            transition_path=args.apply_root_transition,
+            state_path=_resolve_root_trust_state_path(args, parser),
+            application_time=datetime.now(UTC),
+            active_manifest_state_path=_resolve_manifest_state_path(args),
+        )
+    except (ManifestTrustStateError, RootTransitionError, RootTrustStateError) as error:
+        _print_recovery_error(
+            header="[ERROR] Root transition application failed",
+            error=error,
+        )
+        return 5
+    print("Root transition applied.")
+    print(f"Transition: {args.apply_root_transition}")
+    print(f"Previous Root Epoch: {result.previous_root_epoch}")
+    print(f"Next Root Epoch: {result.next_root_epoch}")
+    print(f"Previous Root Key ID: {result.previous_root_key_id}")
+    print(f"Next Root Key ID: {result.next_root_key_id}")
+    print(f"State Updated: {str(result.state_updated).lower()}")
+    return 0
+
+
 def _run_show_manifest_state(state_path: Path) -> int:
     try:
         state = load_manifest_trust_state(path=state_path)
@@ -663,10 +949,10 @@ def _run_initialize_manifest_state(
         return 5
     try:
         verification_time = datetime.now(UTC)
-        root_public_key = load_trusted_root_public_key(environ=os.environ)
+        root_state = _load_current_root_state(args, parser)
         verified = verify_signing_key_manifest(
             manifest_path=_resolve_signing_key_manifest_path(args, parser),
-            root_public_key=root_public_key,
+            root_public_key=trusted_root_public_key_from_state(root_state),
             verification_time=verification_time,
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
         )
@@ -678,7 +964,7 @@ def _run_initialize_manifest_state(
             mode=ManifestTrustStateMode.UPDATE,
             require_existing_state=False,
         )
-    except (ManifestTrustStateError, RootSignatureTrustError, SigningKeyManifestError) as error:
+    except (ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError) as error:
         _print_recovery_error(
             header="[ERROR] Signing key manifest trust state initialization failed",
             error=error,
@@ -747,17 +1033,17 @@ def _run_verify_signing_key_manifest(
 ) -> int:
     try:
         verification_time = datetime.now(UTC)
-        root_public_key = load_trusted_root_public_key(environ=os.environ)
-        verified, state_decision = verify_signing_key_manifest_with_state(
+        root_state = _load_current_root_state(args, parser)
+        verified, state_decision = verify_signing_key_manifest_with_root_state(
             manifest_path=args.verify_signing_key_manifest,
-            root_public_key=root_public_key,
+            root_state=root_state,
             verification_time=verification_time,
             state_path=_resolve_manifest_state_path(args),
             minimum_generation=_resolve_minimum_manifest_generation(args, parser),
             state_mode=_resolve_manifest_state_mode(args),
             require_existing_state=args.require_existing_manifest_state,
         )
-    except (ManifestTrustStateError, RootSignatureTrustError, SigningKeyManifestError) as error:
+    except (ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError) as error:
         _print_recovery_error(
             header="[ERROR] Archive signing key manifest verification failed",
             error=error,
@@ -878,29 +1164,26 @@ def _run_verify_archive_signature(
     manifest_path: Path,
     minimum_generation: int,
     state_path: Path | None,
+    root_state_path: Path | None,
     state_mode: ManifestTrustStateMode,
     require_existing_state: bool,
     revoked_signature_key_policy: RevokedSignatureKeyPolicy,
 ) -> int:
     try:
         verification_time = datetime.now(UTC)
-        root_public_key = load_trusted_root_public_key(environ=os.environ)
-        verified_manifest, state_decision = verify_signing_key_manifest_with_state(
+        root_state = _load_current_root_state(argparse.Namespace(root_trust_state=root_state_path), None)
+        result, _verified_manifest, state_decision = verify_archive_signature_with_root_state(
+            archive_path=verify_path,
             manifest_path=manifest_path,
-            root_public_key=root_public_key,
+            root_state=root_state,
             verification_time=verification_time,
             state_path=state_path,
             minimum_generation=minimum_generation,
             state_mode=state_mode,
             require_existing_state=require_existing_state,
+            revoked_signature_key_policy=revoked_signature_key_policy,
         )
-        result = verify_archive_signature(
-            archive_path=verify_path,
-            signature_trust_store=verified_manifest.trust_store,
-            verification_time=verification_time,
-            revoked_key_policy=revoked_signature_key_policy,
-        )
-    except (ArchiveSignatureError, RootSignatureTrustError, SigningKeyManifestError) as error:
+    except (ArchiveSignatureError, ManifestTrustStateError, RootSignatureTrustError, RootTrustStateError, SigningKeyManifestError) as error:
         _print_recovery_error(
             header="[ERROR] Audit report archive signature verification failed",
             error=error,
@@ -930,6 +1213,7 @@ def _run_verify_archive(
     manifest_path: Path,
     minimum_generation: int,
     state_path: Path | None,
+    root_state_path: Path | None,
     state_mode: ManifestTrustStateMode,
     require_existing_state: bool,
     revoked_key_policy: RevokedKeyPolicy,
@@ -938,12 +1222,12 @@ def _run_verify_archive(
     try:
         verification_time = datetime.now(UTC)
         trust_store = load_authentication_trust_store(environ=os.environ)
-        root_public_key = load_trusted_root_public_key(environ=os.environ)
-        result, verified_manifest, state_decision = verify_signed_authenticated_report_archive_with_manifest_state(
+        root_state = _load_current_root_state(argparse.Namespace(root_trust_state=root_state_path), None)
+        result, verified_manifest, state_decision = verify_signed_authenticated_report_archive_with_root_state(
             archive_path=verify_path,
             trust_store=trust_store,
             manifest_path=manifest_path,
-            root_public_key=root_public_key,
+            root_state=root_state,
             verification_time=verification_time,
             state_path=state_path,
             minimum_generation=minimum_generation,
@@ -956,13 +1240,14 @@ def _run_verify_archive(
         ArchiveAuthenticityError,
         ArchiveSignatureError,
         AuditLogError,
-    ManifestTrustStateError,
-    ManifestTrustStateValidationError,
+        ManifestTrustStateError,
+        ManifestTrustStateValidationError,
         ReportArchiveError,
         ReportAuthenticityError,
         ReportBundleError,
         ReportIntegrityError,
         RootSignatureTrustError,
+        RootTrustStateError,
         SigningKeyManifestError,
     ) as error:
         _print_recovery_error(header="[ERROR] Audit report archive verification failed", error=error)

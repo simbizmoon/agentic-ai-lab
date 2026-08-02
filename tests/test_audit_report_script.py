@@ -52,6 +52,7 @@ from app.root_signature_trust import (
     load_root_signing_private_key,
     load_trusted_root_public_key,
 )
+from app.root_trust_state import ROOT_TRUST_STATE_ENV_NAME, initialize_root_trust_state
 from app.signature_trust import (
     ED25519_PRIVATE_KEY_ENV_NAME,
     ED25519_PUBLIC_TRUST_STORE_ENV_NAME,
@@ -291,6 +292,15 @@ def write_signing_key_manifest(
         MANIFEST_TRUST_STATE_ENV_NAME,
         str(tmp_path / "signing-key-manifest-state.json"),
     )
+    root_state_path = tmp_path / "root-trust-state.json"
+    if not root_state_path.exists():
+        initialize_root_trust_state(
+            path=root_state_path,
+            root_public_key=root_public_key,
+            root_epoch=1,
+            initialized_at=AUTHENTICATED_AT,
+        )
+    monkeypatch.setenv(ROOT_TRUST_STATE_ENV_NAME, str(root_state_path))
     return manifest_path
 
 
@@ -2671,7 +2681,7 @@ def test_archive_export_failure_keeps_bundle_files(
         )
         raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report_signed_archive_with_manifest_state", fail_archive)
+    monkeypatch.setattr(script, "export_json_report_signed_archive_with_root_state", fail_archive)
 
     assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 5
     output = capsys.readouterr().out
@@ -3008,7 +3018,7 @@ def test_create_signing_key_manifest_mode_writes_manifest_and_signature(
     assert SIGNATURE_PUBLIC_KEY_B64 not in output
 
 
-def test_verify_signing_key_manifest_mode_uses_root_public_only(
+def test_verify_signing_key_manifest_mode_uses_root_state_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

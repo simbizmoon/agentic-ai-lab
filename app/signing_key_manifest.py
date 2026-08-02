@@ -48,6 +48,10 @@ from app.manifest_trust_state import (
 )
 from app.report_integrity import is_valid_sha256_digest
 from app.root_signature_trust import RootSigningPrivateKey, TrustedRootSigningPublicKey
+from app.root_trust_state import (
+    RootTrustStatePayload,
+    trusted_root_public_key_from_state,
+)
 from app.signature_trust import (
     ED25519_RAW_PUBLIC_KEY_BYTES,
     ED25519_SIGNATURE_BYTES,
@@ -562,6 +566,33 @@ def verify_signing_key_manifest_with_state(
         require_existing_state=require_existing_state,
     )
     return verified_manifest, state_decision
+
+
+def verify_signing_key_manifest_with_root_state(
+    *,
+    manifest_path: Path,
+    root_state: RootTrustStatePayload,
+    verification_time: datetime,
+    state_path: Path | None,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    signature_path: Path | None = None,
+    maximum_clock_skew: timedelta = MAX_KEY_MANIFEST_CLOCK_SKEW,
+) -> tuple[VerifiedSigningKeyManifest, ManifestTrustStateDecision]:
+    if not isinstance(root_state, RootTrustStatePayload):
+        raise TypeError("root_state must be a RootTrustStatePayload")
+    return verify_signing_key_manifest_with_state(
+        manifest_path=manifest_path,
+        root_public_key=trusted_root_public_key_from_state(root_state),
+        verification_time=verification_time,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+        signature_path=signature_path,
+        maximum_clock_skew=maximum_clock_skew,
+    )
 
 
 def _entry_from_trusted_key(key: TrustedArchiveSigningPublicKey) -> SigningKeyManifestEntry:

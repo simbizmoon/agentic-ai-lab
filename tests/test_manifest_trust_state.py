@@ -260,3 +260,48 @@ def test_format_contains_public_digest_only() -> None:
     assert is_valid_sha256_digest(MANIFEST_DIGEST)
     assert MANIFEST_DIGEST in rendered
     assert "PRIVATE-STATE" not in rendered
+
+
+def test_retire_manifest_trust_state_moves_active_state(tmp_path: Path) -> None:
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from app.manifest_trust_state import retire_manifest_trust_state
+    from app.root_signature_trust import (
+        TrustedRootSigningPublicKey,
+        fingerprint_public_key,
+    )
+    from app.root_trust_state import build_initial_root_trust_state
+
+    private = Ed25519PrivateKey.generate()
+    public = private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    root = TrustedRootSigningPublicKey(
+        key_id="root-key",
+        public_key_bytes=public,
+        public_key_fingerprint=fingerprint_public_key(public),
+    )
+    state_path = tmp_path / "manifest-state.json"
+    manifest_state = ManifestTrustStatePayload(
+        state_version=MANIFEST_TRUST_STATE_VERSION,
+        state_type=MANIFEST_TRUST_STATE_TYPE,
+        root_key_id=root.key_id,
+        root_key_fingerprint=root.public_key_fingerprint,
+        highest_generation=1,
+        manifest_sha256="a" * 64,
+        manifest_issued_at=datetime(2026, 8, 2, tzinfo=UTC),
+        verified_at=datetime(2026, 8, 2, tzinfo=UTC),
+    )
+    export_manifest_trust_state(path=state_path, state=manifest_state)
+    root_state = build_initial_root_trust_state(
+        root_public_key=root,
+        root_epoch=1,
+        initialized_at=datetime(2026, 8, 2, tzinfo=UTC),
+    )
+
+    retired_path = retire_manifest_trust_state(state_path=state_path, current_root_state=root_state)
+
+    assert retired_path.exists()
+    assert not state_path.exists()

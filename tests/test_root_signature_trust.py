@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from dataclasses import FrozenInstanceError
 
 import pytest
@@ -16,6 +17,9 @@ from app.exceptions import (
     RootSigningKeyMismatchError,
 )
 from app.root_signature_trust import (
+    NEXT_ROOT_ED25519_KEY_ID_ENV_NAME,
+    NEXT_ROOT_ED25519_PRIVATE_KEY_ENV_NAME,
+    NEXT_ROOT_ED25519_PUBLIC_KEY_ENV_NAME,
     RAW_ED25519_PRIVATE_KEY_BYTES,
     RAW_ED25519_PUBLIC_KEY_BYTES,
     ROOT_ED25519_KEY_ID_ENV_NAME,
@@ -25,6 +29,8 @@ from app.root_signature_trust import (
     TrustedRootSigningPublicKey,
     ensure_root_key_pair_matches,
     fingerprint_public_key,
+    load_next_root_signing_private_key,
+    load_next_trusted_root_public_key,
     load_root_signing_private_key,
     load_trusted_root_public_key,
 )
@@ -168,3 +174,38 @@ def test_root_key_id_validation_and_frozen_model() -> None:
     )
     with pytest.raises(FrozenInstanceError):
         loaded.key_id = "changed"  # type: ignore[misc]
+
+
+def test_next_root_private_key_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    private_key = Ed25519PrivateKey.generate()
+    private_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    public_bytes = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    monkeypatch.setenv(NEXT_ROOT_ED25519_PRIVATE_KEY_ENV_NAME, base64.b64encode(private_bytes).decode("ascii"))
+    monkeypatch.setenv(NEXT_ROOT_ED25519_KEY_ID_ENV_NAME, "next-root")
+
+    key = load_next_root_signing_private_key(environ=os.environ)
+
+    assert key.key_id == "next-root"
+    assert key.public_key_bytes == public_bytes
+
+
+def test_next_root_public_key_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    private_key = Ed25519PrivateKey.generate()
+    public_bytes = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    monkeypatch.setenv(NEXT_ROOT_ED25519_PUBLIC_KEY_ENV_NAME, base64.b64encode(public_bytes).decode("ascii"))
+    monkeypatch.setenv(NEXT_ROOT_ED25519_KEY_ID_ENV_NAME, "next-root")
+
+    key = load_next_trusted_root_public_key(environ=os.environ)
+
+    assert key.key_id == "next-root"
+    assert key.public_key_bytes == public_bytes

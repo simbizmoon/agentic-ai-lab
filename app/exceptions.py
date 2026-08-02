@@ -453,6 +453,82 @@ class RootSigningKeyMismatchError(RootSignatureTrustError):
     """Raised when root private and public keys do not match."""
 
 
+class RootTransitionError(AgenticAILabError):
+    """Base exception for root key transition errors."""
+
+
+class RootTransitionReadError(RootTransitionError):
+    """Raised when a root transition file cannot be read."""
+
+
+class RootTransitionValidationError(RootTransitionError):
+    """Raised when a root transition contract is invalid."""
+
+
+class RootTransitionExportError(RootTransitionError):
+    """Raised when a root transition file cannot be written safely."""
+
+
+class RootTransitionSignatureVerificationError(RootTransitionError):
+    """Raised when a root transition signature cannot be verified."""
+
+
+class RootTransitionDigestMismatchError(RootTransitionError):
+    """Raised when root transition digest metadata does not match."""
+
+
+class RootTransitionMetadataMismatchError(RootTransitionError):
+    """Raised when root transition metadata is inconsistent."""
+
+
+class RootTransitionExpiredError(RootTransitionError):
+    """Raised when a root transition has expired."""
+
+
+class RootTransitionFromFutureError(RootTransitionError):
+    """Raised when a root transition time is too far in the future."""
+
+
+class RootTransitionNotYetValidError(RootTransitionError):
+    """Raised when a root transition is not active for application."""
+
+
+class RootTrustStateError(AgenticAILabError):
+    """Base exception for persistent root trust state errors."""
+
+
+class RootTrustStateReadError(RootTrustStateError):
+    """Raised when root trust state cannot be read."""
+
+
+class RootTrustStateValidationError(RootTrustStateError):
+    """Raised when root trust state is invalid."""
+
+
+class RootTrustStateExportError(RootTrustStateError):
+    """Raised when root trust state cannot be written safely."""
+
+
+class RootTrustStateLockError(RootTrustStateError):
+    """Raised when root trust state cannot be locked safely."""
+
+
+class RootTrustStateAlreadyExistsError(RootTrustStateError):
+    """Raised when initial root trust state already exists."""
+
+
+class MissingRootTrustStateError(RootTrustStateError):
+    """Raised when required root trust state is missing."""
+
+
+class RootTrustStateEpochError(RootTrustStateError):
+    """Raised when root trust state epoch policy is violated."""
+
+
+class ActiveManifestTrustStateBlocksRootTransitionError(RootTrustStateError):
+    """Raised when an active signing key manifest state blocks root transition."""
+
+
 class ManifestTrustStateError(AgenticAILabError):
     """Base exception for signing key manifest trust state errors."""
 
@@ -487,6 +563,10 @@ class ManifestTrustStateGenerationConflictError(ManifestTrustStateError):
 
 class ManifestTrustStatePathError(ManifestTrustStateError):
     """Raised when a trust state path is required but unavailable."""
+
+
+class ManifestTrustStateRetirementError(ManifestTrustStateError):
+    """Raised when signing key manifest trust state cannot be retired safely."""
 
 
 class SigningKeyManifestError(AgenticAILabError):

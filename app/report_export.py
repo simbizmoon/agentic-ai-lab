@@ -43,9 +43,11 @@ from app.report_integrity import (
     export_checksum_file,
 )
 from app.root_signature_trust import TrustedRootSigningPublicKey
+from app.root_trust_state import RootTrustStatePayload
 from app.signature_trust import ArchiveSignatureTrustStore, ArchiveSigningPrivateKey
 from app.signing_key_manifest import (
     VerifiedSigningKeyManifest,
+    verify_signing_key_manifest_with_root_state,
     verify_signing_key_manifest_with_state,
 )
 
@@ -316,6 +318,64 @@ def export_json_report_signed_archive_with_manifest_state(
     verified_manifest, state_decision = verify_signing_key_manifest_with_state(
         manifest_path=manifest_path,
         root_public_key=root_public_key,
+        verification_time=signed_at,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+    )
+    checksum, authentication, manifest, archive, archive_authentication, signature = (
+        export_json_report_signed_archive_with_manifest(
+            path=path,
+            json_text=json_text,
+            trust_store=trust_store,
+            authenticated_at=authenticated_at,
+            signing_key=signing_key,
+            verified_manifest=verified_manifest,
+            signed_at=signed_at,
+            archive_path=archive_path,
+        )
+    )
+    return (
+        checksum,
+        authentication,
+        manifest,
+        archive,
+        archive_authentication,
+        signature,
+        state_decision,
+    )
+
+
+def export_json_report_signed_archive_with_root_state(
+    *,
+    path: Path,
+    json_text: str,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    signing_key: ArchiveSigningPrivateKey,
+    manifest_path: Path,
+    root_state: RootTrustStatePayload,
+    state_path: Path | None,
+    signed_at: datetime,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    archive_path: Path | None = None,
+) -> tuple[
+    ReportChecksum,
+    ReportAuthentication,
+    AuditReportBundleManifest,
+    ReportArchiveExportResult,
+    ArchiveAuthentication,
+    ArchiveSignaturePayload,
+    ManifestTrustStateDecision,
+]:
+    if not isinstance(root_state, RootTrustStatePayload):
+        raise TypeError("root_state must be a RootTrustStatePayload")
+    verified_manifest, state_decision = verify_signing_key_manifest_with_root_state(
+        manifest_path=manifest_path,
+        root_state=root_state,
         verification_time=signed_at,
         state_path=state_path,
         minimum_generation=minimum_generation,

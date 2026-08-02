@@ -685,3 +685,55 @@ def test_concrete_manifest_trust_state_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 9
+
+
+def test_root_transition_errors_are_project_errors() -> None:
+    from app.exceptions import (
+        AgenticAILabError,
+        RootTransitionDigestMismatchError,
+        RootTransitionError,
+        RootTransitionExportError,
+        RootTransitionMetadataMismatchError,
+        RootTransitionReadError,
+        RootTransitionSignatureVerificationError,
+        RootTransitionValidationError,
+    )
+
+    concrete = (
+        RootTransitionReadError,
+        RootTransitionValidationError,
+        RootTransitionExportError,
+        RootTransitionSignatureVerificationError,
+        RootTransitionDigestMismatchError,
+        RootTransitionMetadataMismatchError,
+    )
+    assert issubclass(RootTransitionError, AgenticAILabError)
+    assert all(issubclass(error_type, RootTransitionError) for error_type in concrete)
+    assert len(set(concrete)) == len(concrete)
+
+
+def test_root_trust_state_errors_are_project_errors() -> None:
+    from app.exceptions import (
+        ActiveManifestTrustStateBlocksRootTransitionError,
+        AgenticAILabError,
+        MissingRootTrustStateError,
+        RootTrustStateAlreadyExistsError,
+        RootTrustStateError,
+        RootTrustStateExportError,
+        RootTrustStateLockError,
+        RootTrustStateReadError,
+        RootTrustStateValidationError,
+    )
+
+    concrete = (
+        RootTrustStateReadError,
+        RootTrustStateValidationError,
+        RootTrustStateExportError,
+        RootTrustStateLockError,
+        RootTrustStateAlreadyExistsError,
+        MissingRootTrustStateError,
+        ActiveManifestTrustStateBlocksRootTransitionError,
+    )
+    assert issubclass(RootTrustStateError, AgenticAILabError)
+    assert all(issubclass(error_type, RootTrustStateError) for error_type in concrete)
+    assert len(set(concrete)) == len(concrete)

@@ -75,6 +75,9 @@ from app.report_integrity import (
     parse_report_checksum,
 )
 from app.root_signature_trust import TrustedRootSigningPublicKey
+from app.root_trust_state import (
+    RootTrustStatePayload,
+)
 from app.signature_trust import (
     ArchiveSignatureTrustStore,
     ArchiveSigningPrivateKey,
@@ -84,6 +87,7 @@ from app.signature_trust import (
 from app.signing_key_manifest import (
     VerifiedSigningKeyManifest,
     verify_signing_key_manifest,
+    verify_signing_key_manifest_with_root_state,
     verify_signing_key_manifest_with_state,
 )
 
@@ -656,6 +660,82 @@ def verify_signed_authenticated_report_archive_with_manifest_state(
         revoked_signature_key_policy=revoked_signature_key_policy,
         maximum_clock_skew=maximum_clock_skew,
         maximum_signature_clock_skew=maximum_signature_clock_skew,
+    )
+    return result, verified_manifest, state_decision
+
+
+def verify_signed_authenticated_report_archive_with_root_state(
+    *,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    manifest_path: Path,
+    root_state: RootTrustStatePayload,
+    verification_time: datetime,
+    state_path: Path | None,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    revoked_signature_key_policy: RevokedSignatureKeyPolicy = RevokedSignatureKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+    maximum_signature_clock_skew: timedelta = MAX_SIGNATURE_CLOCK_SKEW,
+) -> tuple[SignedAuthenticatedReportArchiveResult, VerifiedSigningKeyManifest, ManifestTrustStateDecision]:
+    if not isinstance(root_state, RootTrustStatePayload):
+        raise TypeError("root_state must be a RootTrustStatePayload")
+    verified_manifest, state_decision = verify_signing_key_manifest_with_root_state(
+        manifest_path=manifest_path,
+        root_state=root_state,
+        verification_time=verification_time,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+        maximum_clock_skew=maximum_signature_clock_skew,
+    )
+    result = verify_signed_authenticated_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store,
+        signature_trust_store=verified_manifest.trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_key_policy,
+        revoked_signature_key_policy=revoked_signature_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+        maximum_signature_clock_skew=maximum_signature_clock_skew,
+    )
+    return result, verified_manifest, state_decision
+
+
+def verify_archive_signature_with_root_state(
+    *,
+    archive_path: Path,
+    manifest_path: Path,
+    root_state: RootTrustStatePayload,
+    verification_time: datetime,
+    state_path: Path | None,
+    minimum_generation: int = 1,
+    state_mode: ManifestTrustStateMode = ManifestTrustStateMode.UPDATE,
+    require_existing_state: bool = False,
+    revoked_signature_key_policy: RevokedSignatureKeyPolicy = RevokedSignatureKeyPolicy.REJECT,
+    maximum_signature_clock_skew: timedelta = MAX_SIGNATURE_CLOCK_SKEW,
+):
+    if not isinstance(root_state, RootTrustStatePayload):
+        raise TypeError("root_state must be a RootTrustStatePayload")
+    verified_manifest, state_decision = verify_signing_key_manifest_with_root_state(
+        manifest_path=manifest_path,
+        root_state=root_state,
+        verification_time=verification_time,
+        state_path=state_path,
+        minimum_generation=minimum_generation,
+        state_mode=state_mode,
+        require_existing_state=require_existing_state,
+        maximum_clock_skew=maximum_signature_clock_skew,
+    )
+    result = verify_archive_signature(
+        archive_path=archive_path,
+        signature_trust_store=verified_manifest.trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_signature_key_policy,
+        maximum_clock_skew=maximum_signature_clock_skew,
     )
     return result, verified_manifest, state_decision
 

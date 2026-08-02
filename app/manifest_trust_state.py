@@ -28,6 +28,7 @@ from app.exceptions import (
     ManifestTrustStateLockError,
     ManifestTrustStatePathError,
     ManifestTrustStateReadError,
+    ManifestTrustStateRetirementError,
     ManifestTrustStateRootMismatchError,
     ManifestTrustStateValidationError,
     MissingManifestTrustStateError,
@@ -36,6 +37,7 @@ from app.exceptions import (
 from app.report_integrity import is_valid_sha256_digest
 
 if TYPE_CHECKING:
+    from app.root_trust_state import RootTrustStatePayload
     from app.signing_key_manifest import VerifiedSigningKeyManifest
 
 MANIFEST_TRUST_STATE_VERSION = 1
@@ -53,6 +55,7 @@ _PATH_MESSAGE = "The signing key manifest trust state path is required."
 _ROOT_MISMATCH_MESSAGE = "The signing key manifest trust state belongs to a different root key."
 _GENERATION_CONFLICT_MESSAGE = "The signing key manifest generation conflicts with stored state."
 _ROLLBACK_MESSAGE = "The archive signing key manifest generation is too old."
+_RETIRE_MESSAGE = "Failed to retire the signing key manifest trust state."
 
 
 class ManifestTrustStateMode(str, Enum):
@@ -104,6 +107,14 @@ def manifest_trust_state_lock_path_for(state_path: Path) -> Path:
     if not isinstance(state_path, Path):
         raise TypeError("state_path must be a Path")
     return state_path.with_name(f"{state_path.name}.lock")
+
+
+def retired_manifest_trust_state_path_for(*, state_path: Path, root_epoch: int) -> Path:
+    if not isinstance(state_path, Path):
+        raise TypeError("state_path must be a Path")
+    if not isinstance(root_epoch, int) or isinstance(root_epoch, bool) or root_epoch < 1:
+        raise ManifestTrustStateRetirementError(_RETIRE_MESSAGE)
+    return state_path.with_name(f"{state_path.name}.root-epoch-{root_epoch}.retired")
 
 
 def load_manifest_trust_state(*, path: Path) -> ManifestTrustStatePayload | None:
@@ -251,6 +262,63 @@ def evaluate_manifest_trust_state(
         should_update=True,
         state_updated=False,
     )
+
+
+def retire_manifest_trust_state(
+    *,
+    state_path: Path,
+    current_root_state: RootTrustStatePayload,
+) -> Path:
+    if not isinstance(state_path, Path):
+        raise TypeError("state_path must be a Path")
+    root_key_id = getattr(current_root_state, "current_root_key_id", None)
+    root_fingerprint = getattr(current_root_state, "current_root_public_key_fingerprint", None)
+    root_epoch = getattr(current_root_state, "current_root_epoch", None)
+    if not isinstance(root_key_id, str) or not isinstance(root_fingerprint, str):
+        raise TypeError("current_root_state must be a RootTrustStatePayload")
+    lock_path = manifest_trust_state_lock_path_for(state_path)
+    lock_fd: int | None = None
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        if lock_path.is_symlink() or lock_path.is_dir():
+            raise ManifestTrustStateLockError(_LOCK_MESSAGE)
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, STATE_FILE_MODE)
+        os.chmod(lock_path, STATE_FILE_MODE)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        state = load_manifest_trust_state(path=state_path)
+        if state is None:
+            raise MissingManifestTrustStateError(_MISSING_MESSAGE)
+        if state.root_key_id != root_key_id or not hmac.compare_digest(
+            state.root_key_fingerprint, root_fingerprint
+        ):
+            raise ManifestTrustStateRootMismatchError(_ROOT_MISMATCH_MESSAGE)
+        retired_path = retired_manifest_trust_state_path_for(
+            state_path=state_path,
+            root_epoch=root_epoch,
+        )
+        if retired_path.exists() or retired_path.is_symlink() or retired_path.is_dir():
+            raise ManifestTrustStateRetirementError(_RETIRE_MESSAGE)
+        os.rename(state_path, retired_path)
+        dir_fd = os.open(state_path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+        return retired_path
+    except (ManifestTrustStateLockError, ManifestTrustStateReadError, ManifestTrustStateValidationError, MissingManifestTrustStateError, ManifestTrustStateRootMismatchError, ManifestTrustStateRetirementError):
+        raise
+    except OSError as error:
+        raise ManifestTrustStateRetirementError(_RETIRE_MESSAGE) from error
+    finally:
+        if lock_fd is not None:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except OSError:
+                pass
+            try:
+                os.close(lock_fd)
+            except OSError:
+                pass
 
 
 def apply_manifest_trust_state(
