@@ -7,12 +7,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app import report_export
 from app.archive_authenticity import (
     archive_authentication_path_for,
     verify_archive_authenticity,
 )
+from app.archive_signature import archive_signature_path_for
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import (
     AuthenticationKeyStatus,
@@ -22,6 +25,7 @@ from app.authentication_trust import (
 from app.exceptions import (
     ArchiveAuthenticationExportError,
     ArchiveAuthenticationMetadataMismatchError,
+    ArchiveSignatureExportError,
     AuditReportValidationError,
     AuthenticationExportError,
     ChecksumExportError,
@@ -53,6 +57,7 @@ from app.report_export import (
     export_json_report,
     export_json_report_archive,
     export_json_report_bundle,
+    export_json_report_signed_archive,
     export_json_report_with_authentication,
     export_json_report_with_checksum,
 )
@@ -60,6 +65,13 @@ from app.report_integrity import (
     ReportChecksum,
     checksum_path_for,
     verify_report_integrity,
+)
+from app.signature_trust import (
+    ArchiveSignatureTrustStore,
+    ArchiveSigningPrivateKey,
+    SignatureKeyStatus,
+    TrustedArchiveSigningPublicKey,
+    fingerprint_public_key,
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "audit_report_v1.json"
@@ -1198,3 +1210,124 @@ def test_export_json_report_archive_rejects_report_archive_hmac_metadata_mismatc
             trust_store=trust_store(),
             authenticated_at=AUTHENTICATED_AT,
         )
+
+
+def signature_private_bytes() -> bytes:
+    return Ed25519PrivateKey.generate().private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+def signature_public_bytes(secret: bytes) -> bytes:
+    return Ed25519PrivateKey.from_private_bytes(secret).public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def signature_key(key_id: str = "sig-key") -> ArchiveSigningPrivateKey:
+    secret = signature_private_bytes()
+    public = signature_public_bytes(secret)
+    return ArchiveSigningPrivateKey(
+        key_id=key_id,
+        private_key_bytes=secret,
+        public_key_bytes=public,
+        public_key_fingerprint=fingerprint_public_key(public),
+    )
+
+
+def signature_store(signing_key: ArchiveSigningPrivateKey) -> ArchiveSignatureTrustStore:
+    return ArchiveSignatureTrustStore(
+        keys=(
+            TrustedArchiveSigningPublicKey(
+                key_id=signing_key.key_id,
+                public_key_bytes=signing_key.public_key_bytes,
+                public_key_fingerprint=signing_key.public_key_fingerprint,
+                status=SignatureKeyStatus.ACTIVE,
+                valid_from=datetime(2026, 8, 1, tzinfo=UTC),
+            ),
+        )
+    )
+
+
+def test_export_json_report_signed_archive_creates_all_outputs(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+    signing_key = signature_key()
+
+    checksum, authentication, manifest, archive, archive_authentication, signature = (
+        export_json_report_signed_archive(
+            path=target,
+            json_text=valid_json_text(),
+            trust_store=AuthenticationTrustStore(
+                keys=(
+                    TrustedAuthenticationKey(
+                        "key-1",
+                        b"s" * 32,
+                        AuthenticationKeyStatus.ACTIVE,
+                        datetime(2026, 8, 1, tzinfo=UTC),
+                    ),
+                )
+            ),
+            authenticated_at=AUTHENTICATED_AT,
+            signing_key=signing_key,
+            signature_trust_store=signature_store(signing_key),
+            signed_at=AUTHENTICATED_AT,
+        )
+    )
+    archive_path = archive_path_for(target)
+
+    assert target.exists()
+    assert checksum_path_for(target).exists()
+    assert authentication_path_for(target).exists()
+    assert manifest_path_for(target).exists()
+    assert archive_path.exists()
+    assert archive_authentication_path_for(archive_path).exists()
+    assert archive_signature_path_for(archive_path).exists()
+    assert isinstance(checksum, ReportChecksum)
+    assert isinstance(authentication, ReportAuthentication)
+    assert isinstance(manifest, AuditReportBundleManifest)
+    assert isinstance(archive, ReportArchiveExportResult)
+    assert archive_authentication.key_id == authentication.key_id
+    assert signature.key_id == signing_key.key_id
+
+
+def test_signed_archive_export_failure_keeps_existing_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "report.json"
+    signing_key = signature_key()
+
+    def fail_signature_export(*args: object, **kwargs: object) -> None:
+        raise ArchiveSignatureExportError("PRIVATE-SIGNATURE-ERROR")
+
+    monkeypatch.setattr(report_export, "export_archive_signature_file", fail_signature_export, raising=False)
+    monkeypatch.setattr("app.report_archive.export_archive_signature_file", fail_signature_export)
+
+    with pytest.raises(ArchiveSignatureExportError):
+        export_json_report_signed_archive(
+            path=target,
+            json_text=valid_json_text(),
+            trust_store=AuthenticationTrustStore(
+                keys=(
+                    TrustedAuthenticationKey(
+                        "key-1",
+                        b"s" * 32,
+                        AuthenticationKeyStatus.ACTIVE,
+                        datetime(2026, 8, 1, tzinfo=UTC),
+                    ),
+                )
+            ),
+            authenticated_at=AUTHENTICATED_AT,
+            signing_key=signing_key,
+            signature_trust_store=signature_store(signing_key),
+            signed_at=AUTHENTICATED_AT,
+        )
+
+    assert target.exists()
+    assert checksum_path_for(target).exists()
+    assert authentication_path_for(target).exists()
+    assert manifest_path_for(target).exists()
+    assert archive_path_for(target).exists()

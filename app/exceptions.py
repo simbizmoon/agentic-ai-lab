@@ -351,3 +351,75 @@ class ArchiveAuthenticationExportError(ArchiveAuthenticityError):
 
 class ArchiveAuthenticationMetadataMismatchError(ArchiveAuthenticityError):
     """Raised when archive authentication metadata is inconsistent."""
+
+
+class ArchiveSignatureError(AgenticAILabError):
+    """Base exception for audit report archive signature errors."""
+
+
+class MissingArchiveSigningPrivateKeyError(ArchiveSignatureError):
+    """Raised when an archive signing private key is missing."""
+
+
+class InvalidArchiveSigningPrivateKeyError(ArchiveSignatureError):
+    """Raised when an archive signing private key is invalid."""
+
+
+class InvalidArchiveSigningKeyIdError(ArchiveSignatureError):
+    """Raised when an archive signing key ID is invalid."""
+
+
+class InvalidArchiveSignatureTrustStoreError(ArchiveSignatureError):
+    """Raised when an archive signature trust store is invalid."""
+
+
+class DuplicateArchiveSigningKeyIdError(ArchiveSignatureError):
+    """Raised when archive signing key IDs are duplicated."""
+
+
+class UnknownArchiveSigningKeyError(ArchiveSignatureError):
+    """Raised when an archive signing key ID is not trusted."""
+
+
+class ArchiveSigningKeyNotActiveError(ArchiveSignatureError):
+    """Raised when an archive signing key is not active for signing."""
+
+
+class ArchiveSigningKeyNotValidError(ArchiveSignatureError):
+    """Raised when an archive signing key is not valid for the signing time."""
+
+
+class RejectedArchiveSigningKeyError(ArchiveSignatureError):
+    """Raised when policy rejects a revoked archive signing key."""
+
+
+class ArchiveSignatureFromFutureError(ArchiveSignatureError):
+    """Raised when an archive signature time is too far in the future."""
+
+
+class ArchiveSigningKeyFingerprintMismatchError(ArchiveSignatureError):
+    """Raised when an archive signing key fingerprint does not match."""
+
+
+class ArchiveSignatureReadError(ArchiveSignatureError):
+    """Raised when archive signature inputs cannot be read."""
+
+
+class ArchiveSignatureValidationError(ArchiveSignatureError):
+    """Raised when an archive signature sidecar fails validation."""
+
+
+class ArchiveSignatureFilenameMismatchError(ArchiveSignatureError):
+    """Raised when an archive signature sidecar references another archive."""
+
+
+class ArchiveSignatureArchiveDigestMismatchError(ArchiveSignatureError):
+    """Raised when a signature sidecar archive digest does not match."""
+
+
+class ArchiveSignatureVerificationError(ArchiveSignatureError):
+    """Raised when an archive signature cannot be verified."""
+
+
+class ArchiveSignatureExportError(ArchiveSignatureError):
+    """Raised when an archive signature sidecar cannot be written safely."""

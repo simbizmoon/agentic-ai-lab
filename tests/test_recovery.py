@@ -14,6 +14,17 @@ from app.exceptions import (
     ArchiveAuthenticationMetadataMismatchError,
     ArchiveAuthenticationReadError,
     ArchiveAuthenticityMismatchError,
+    ArchiveSignatureArchiveDigestMismatchError,
+    ArchiveSignatureError,
+    ArchiveSignatureExportError,
+    ArchiveSignatureFilenameMismatchError,
+    ArchiveSignatureFromFutureError,
+    ArchiveSignatureReadError,
+    ArchiveSignatureValidationError,
+    ArchiveSignatureVerificationError,
+    ArchiveSigningKeyFingerprintMismatchError,
+    ArchiveSigningKeyNotActiveError,
+    ArchiveSigningKeyNotValidError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditLogParseError,
@@ -28,10 +39,14 @@ from app.exceptions import (
     BundleReportFilenameMismatchError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
+    DuplicateArchiveSigningKeyIdError,
     DuplicateAuthenticationKeyIdError,
     DuplicateReportArchiveMemberError,
     IncompleteReportBundleError,
     InvalidArchiveAuthenticationFormatError,
+    InvalidArchiveSignatureTrustStoreError,
+    InvalidArchiveSigningKeyIdError,
+    InvalidArchiveSigningPrivateKeyError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
@@ -45,12 +60,14 @@ from app.exceptions import (
     InvalidReportArchivePathError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
+    MissingArchiveSigningPrivateKeyError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
     MissingReportArchiveMemberError,
     MissingSchemaMigrationError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
+    RejectedArchiveSigningKeyError,
     RejectedAuthenticationKeyError,
     ReportArchiveDigestMismatchError,
     ReportArchiveError,
@@ -80,6 +97,7 @@ from app.exceptions import (
     TimeBudgetExceededError,
     TokenBudgetExceededError,
     UnexpectedReportArchiveMemberError,
+    UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
     UnsafeReportArchiveMemberError,
     UnsupportedAuditSchemaError,
@@ -93,6 +111,7 @@ PRIVATE_KEYRING_SECRET = "PRIVATE-KEYRING-SECRET"
 PRIVATE_TRUST_SECRET = "PRIVATE-TRUST-ERROR"
 PRIVATE_BUNDLE_SECRET = "PRIVATE-BUNDLE-ERROR"
 PRIVATE_ARCHIVE_SECRET = "PRIVATE-ARCHIVE-ERROR"
+PRIVATE_SIGNATURE_SECRET = "PRIVATE-ARCHIVE-SECRET"
 
 
 def make_request() -> httpx.Request:
@@ -128,6 +147,7 @@ def assert_decision(
     assert PRIVATE_TRUST_SECRET not in decision.reason
     assert PRIVATE_BUNDLE_SECRET not in decision.reason
     assert PRIVATE_ARCHIVE_SECRET not in decision.reason
+    assert PRIVATE_SIGNATURE_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -227,6 +247,24 @@ def test_recovery_decision_is_frozen() -> None:
         (ReportIntegrityMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ChecksumExportError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
 
+        (ArchiveSignatureError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (MissingArchiveSigningPrivateKeyError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (InvalidArchiveSigningPrivateKeyError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (InvalidArchiveSigningKeyIdError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (InvalidArchiveSignatureTrustStoreError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (DuplicateArchiveSigningKeyIdError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (UnknownArchiveSigningKeyError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSigningKeyNotActiveError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSigningKeyNotValidError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (RejectedArchiveSigningKeyError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureFromFutureError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSigningKeyFingerprintMismatchError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureReadError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureValidationError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureFilenameMismatchError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureArchiveDigestMismatchError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureVerificationError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
+        (ArchiveSignatureExportError(PRIVATE_SIGNATURE_SECRET), False, RecoveryAction.ABORT),
         (ReportArchiveError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
         (InvalidReportArchivePathError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
         (ReportArchiveExportError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),

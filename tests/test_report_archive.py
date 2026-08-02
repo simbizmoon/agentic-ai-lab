@@ -8,9 +8,12 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app import report_archive
 from app.archive_authenticity import archive_authentication_path_for
+from app.archive_signature import archive_signature_path_for
 from app.authentication_trust import (
     AuthenticationKeyStatus,
     AuthenticationTrustStore,
@@ -19,6 +22,8 @@ from app.authentication_trust import (
 )
 from app.exceptions import (
     ArchiveAuthenticityMismatchError,
+    ArchiveSignatureArchiveDigestMismatchError,
+    ArchiveSignatureExportError,
     AuthenticationFromFutureError,
     DuplicateReportArchiveMemberError,
     IncompleteReportBundleError,
@@ -43,18 +48,28 @@ from app.report_archive import (
     AuthenticatedReportArchiveResult,
     ReportArchiveExportResult,
     ReportArchiveVerificationResult,
+    SignedAuthenticatedReportArchiveResult,
     archive_path_for,
     expected_archive_members,
     export_authenticated_report_archive,
     export_report_archive,
+    export_signed_authenticated_report_archive,
     validate_archive_member_name,
     verify_authenticated_report_archive,
     verify_report_archive,
+    verify_signed_authenticated_report_archive,
 )
 from app.report_authenticity import HMAC_ALGORITHM, HMAC_PROTOCOL_VERSION
 from app.report_bundle import manifest_path_for
 from app.report_export import export_json_report_bundle
 from app.report_integrity import checksum_path_for, is_valid_sha256_digest
+from app.signature_trust import (
+    ArchiveSignatureTrustStore,
+    ArchiveSigningPrivateKey,
+    SignatureKeyStatus,
+    TrustedArchiveSigningPublicKey,
+    fingerprint_public_key,
+)
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "audit_report_v1.json"
 SECRET = b"s" * 32
@@ -664,3 +679,155 @@ def test_export_authenticated_report_archive_keeps_zip_when_hmac_export_fails(
 
     assert archive_path.exists()
     assert PRIVATE_TEXT in str(exc_info.value)
+
+
+def signature_private_bytes() -> bytes:
+    return Ed25519PrivateKey.generate().private_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PrivateFormat.Raw,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
+def signature_public_bytes(secret: bytes) -> bytes:
+    return Ed25519PrivateKey.from_private_bytes(secret).public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+
+
+def signature_key(key_id: str = "sig-key") -> ArchiveSigningPrivateKey:
+    secret = signature_private_bytes()
+    public = signature_public_bytes(secret)
+    return ArchiveSigningPrivateKey(
+        key_id=key_id,
+        private_key_bytes=secret,
+        public_key_bytes=public,
+        public_key_fingerprint=fingerprint_public_key(public),
+    )
+
+
+def signature_store(signing_key: ArchiveSigningPrivateKey) -> ArchiveSignatureTrustStore:
+    return ArchiveSignatureTrustStore(
+        keys=(
+            TrustedArchiveSigningPublicKey(
+                key_id=signing_key.key_id,
+                public_key_bytes=signing_key.public_key_bytes,
+                public_key_fingerprint=signing_key.public_key_fingerprint,
+                status=SignatureKeyStatus.ACTIVE,
+                valid_from=datetime(2026, 8, 1, 0, 0, tzinfo=UTC),
+            ),
+        )
+    )
+
+
+def test_export_signed_authenticated_report_archive_creates_signature(tmp_path: Path) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+
+    archive, archive_authentication, signature = export_signed_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        signature_trust_store=signature_store(signing_key),
+        signed_at=AUTHENTICATED_AT,
+    )
+
+    assert isinstance(archive, ReportArchiveExportResult)
+    assert archive_authentication.key_id == "key-1"
+    assert signature.key_id == signing_key.key_id
+    assert archive_signature_path_for(archive_path).is_file()
+    assert archive_path.exists()
+
+
+def test_verify_signed_authenticated_report_archive_returns_combined_result(tmp_path: Path) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+    export_signed_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        signature_trust_store=signature_store(signing_key),
+        signed_at=AUTHENTICATED_AT,
+    )
+
+    result = verify_signed_authenticated_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        signature_trust_store=signature_store(signing_key),
+        verification_time=VERIFICATION_TIME,
+    )
+
+    assert isinstance(result, SignedAuthenticatedReportArchiveResult)
+    assert result.signature_key_id == signing_key.key_id
+    assert result.archive_key_id == "key-1"
+    assert result.report_key_id == "key-1"
+    assert result.signature_signed_at == AUTHENTICATED_AT
+
+
+def test_verify_signed_authenticated_report_archive_checks_signature_first(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+    export_signed_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+        signing_key=signing_key,
+        signature_trust_store=signature_store(signing_key),
+        signed_at=AUTHENTICATED_AT,
+    )
+    archive_path.write_bytes(b"tampered")
+
+    def fail_internal_verify(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("internal archive verification should not run")
+
+    monkeypatch.setattr(report_archive, "verify_authenticated_report_archive", fail_internal_verify)
+
+    with pytest.raises(ArchiveSignatureArchiveDigestMismatchError):
+        verify_signed_authenticated_report_archive(
+            archive_path=archive_path,
+            trust_store=trust_store(),
+            signature_trust_store=signature_store(signing_key),
+            verification_time=VERIFICATION_TIME,
+        )
+
+
+def test_signed_archive_signature_export_failure_keeps_zip_and_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    signing_key = signature_key()
+
+    def fail_export(*args: Any, **kwargs: Any) -> None:
+        raise ArchiveSignatureExportError(PRIVATE_TEXT)
+
+    monkeypatch.setattr(report_archive, "export_archive_signature_file", fail_export)
+
+    with pytest.raises(ArchiveSignatureExportError):
+        export_signed_authenticated_report_archive(
+            report_path=report_path,
+            archive_path=archive_path,
+            trust_store=trust_store(),
+            authenticated_at=AUTHENTICATED_AT,
+            signing_key=signing_key,
+            signature_trust_store=signature_store(signing_key),
+            signed_at=AUTHENTICATED_AT,
+        )
+
+    assert report_path.exists()
+    assert checksum_path_for(report_path).exists()
+    assert archive_authentication_path_for(archive_path).exists()
+    assert archive_path.exists()

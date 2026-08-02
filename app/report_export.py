@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from app.archive_authenticity import ArchiveAuthentication
+from app.archive_signature import ArchiveSignaturePayload
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import AuthenticationTrustStore, select_signing_key
 from app.exceptions import (
@@ -19,6 +20,7 @@ from app.report_archive import (
     ReportArchiveExportResult,
     archive_path_for,
     export_authenticated_report_archive,
+    export_signed_authenticated_report_archive,
 )
 from app.report_authenticity import (
     ReportAuthentication,
@@ -38,6 +40,7 @@ from app.report_integrity import (
     checksum_path_for,
     export_checksum_file,
 )
+from app.signature_trust import ArchiveSignatureTrustStore, ArchiveSigningPrivateKey
 
 
 def _validate_export_path(path: Path) -> None:
@@ -153,6 +156,7 @@ def export_json_report_bundle(
     )
     return checksum, authentication, manifest
 
+
 def export_json_report_archive(
     *,
     path: Path,
@@ -188,3 +192,47 @@ def export_json_report_archive(
             "The audit report archive authentication metadata is inconsistent."
         )
     return checksum, authentication, manifest, archive, archive_authentication
+
+
+def export_json_report_signed_archive(
+    *,
+    path: Path,
+    json_text: str,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    signing_key: ArchiveSigningPrivateKey,
+    signature_trust_store: ArchiveSignatureTrustStore,
+    signed_at: datetime,
+    archive_path: Path | None = None,
+) -> tuple[
+    ReportChecksum,
+    ReportAuthentication,
+    AuditReportBundleManifest,
+    ReportArchiveExportResult,
+    ArchiveAuthentication,
+    ArchiveSignaturePayload,
+]:
+    checksum, authentication, manifest = export_json_report_bundle(
+        path=path,
+        json_text=json_text,
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+    )
+    effective_archive_path = archive_path_for(path) if archive_path is None else archive_path
+    archive, archive_authentication, signature = export_signed_authenticated_report_archive(
+        report_path=path,
+        archive_path=effective_archive_path,
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+        signing_key=signing_key,
+        signature_trust_store=signature_trust_store,
+        signed_at=signed_at,
+    )
+    if (
+        archive_authentication.key_id != authentication.key_id
+        or archive_authentication.authenticated_at != authentication.authenticated_at
+    ):
+        raise ArchiveAuthenticationMetadataMismatchError(
+            "The audit report archive authentication metadata is inconsistent."
+        )
+    return checksum, authentication, manifest, archive, archive_authentication, signature

@@ -9,6 +9,7 @@ import openai
 
 from app.exceptions import (
     ArchiveAuthenticityError,
+    ArchiveSignatureError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditReportValidationError,
@@ -201,6 +202,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The exported audit report failed an integrity check.",
+        )
+
+    if isinstance(error, ArchiveSignatureError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report archive signature could not be created or verified safely.",
         )
 
     if isinstance(error, ArchiveAuthenticityError):

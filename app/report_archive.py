@@ -20,6 +20,14 @@ from app.archive_authenticity import (
     export_archive_authentication_file,
     verify_archive_authenticity,
 )
+from app.archive_signature import (
+    MAX_SIGNATURE_CLOCK_SKEW,
+    ArchiveSignaturePayload,
+    archive_signature_path_for,
+    export_archive_signature_file,
+    sign_archive,
+    verify_archive_signature,
+)
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import (
     AuthenticationTrustStore,
@@ -64,6 +72,12 @@ from app.report_integrity import (
     checksum_path_for,
     is_valid_sha256_digest,
     parse_report_checksum,
+)
+from app.signature_trust import (
+    ArchiveSignatureTrustStore,
+    ArchiveSigningPrivateKey,
+    RevokedSignatureKeyPolicy,
+    ensure_private_key_trusted_for_signing,
 )
 
 ZIP_MEMBER_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
@@ -112,6 +126,31 @@ class ReportArchiveVerificationResult:
 
 @dataclass(frozen=True)
 class AuthenticatedReportArchiveResult:
+    archive_format_version: int
+    archive_authentication_protocol_version: int
+    archive_algorithm: str
+    archive_key_id: str
+    archive_authenticated_at: datetime
+    archive_digest: str
+    archive_sha256: str
+    member_count: int
+    manifest_version: int
+    report_schema_version: int
+    report_authentication_protocol_version: int
+    report_algorithm: str
+    report_key_id: str
+    report_authenticated_at: datetime
+    report_filename: str
+
+
+@dataclass(frozen=True)
+class SignedAuthenticatedReportArchiveResult:
+    signature_algorithm: str
+    signature_protocol_version: int
+    signature_key_id: str
+    signature_public_key_fingerprint: str
+    signature_signed_at: datetime
+    signature_archive_sha256: str
     archive_format_version: int
     archive_authentication_protocol_version: int
     archive_algorithm: str
@@ -423,6 +462,94 @@ def verify_authenticated_report_archive(
         report_algorithm=archive.algorithm,
         report_key_id=archive.key_id,
         report_authenticated_at=archive.authenticated_at,
+        report_filename=archive.report_filename,
+    )
+
+
+def export_signed_authenticated_report_archive(
+    *,
+    report_path: Path,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    signing_key: ArchiveSigningPrivateKey,
+    signature_trust_store: ArchiveSignatureTrustStore,
+    signed_at: datetime,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+) -> tuple[ReportArchiveExportResult, ArchiveAuthentication, ArchiveSignaturePayload]:
+    ensure_private_key_trusted_for_signing(
+        signing_key=signing_key,
+        trust_store=signature_trust_store,
+        signed_at=signed_at,
+    )
+    archive, archive_authentication = export_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    signature = sign_archive(
+        archive_path=archive_path,
+        signing_key=signing_key,
+        signed_at=signed_at,
+        archive_format_version=REPORT_ARCHIVE_FORMAT_VERSION,
+    )
+    export_archive_signature_file(
+        path=archive_signature_path_for(archive_path),
+        signature=signature,
+    )
+    return archive, archive_authentication, signature
+
+
+def verify_signed_authenticated_report_archive(
+    *,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    signature_trust_store: ArchiveSignatureTrustStore,
+    verification_time: datetime,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    revoked_signature_key_policy: RevokedSignatureKeyPolicy = RevokedSignatureKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+    maximum_signature_clock_skew: timedelta = MAX_SIGNATURE_CLOCK_SKEW,
+) -> SignedAuthenticatedReportArchiveResult:
+    signature = verify_archive_signature(
+        archive_path=archive_path,
+        signature_trust_store=signature_trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_signature_key_policy,
+        maximum_clock_skew=maximum_signature_clock_skew,
+    )
+    archive = verify_authenticated_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    return SignedAuthenticatedReportArchiveResult(
+        signature_algorithm=signature.algorithm,
+        signature_protocol_version=signature.protocol_version,
+        signature_key_id=signature.key_id,
+        signature_public_key_fingerprint=signature.public_key_fingerprint,
+        signature_signed_at=signature.signed_at,
+        signature_archive_sha256=signature.archive_sha256,
+        archive_format_version=archive.archive_format_version,
+        archive_authentication_protocol_version=archive.archive_authentication_protocol_version,
+        archive_algorithm=archive.archive_algorithm,
+        archive_key_id=archive.archive_key_id,
+        archive_authenticated_at=archive.archive_authenticated_at,
+        archive_digest=archive.archive_digest,
+        archive_sha256=archive.archive_sha256,
+        member_count=archive.member_count,
+        manifest_version=archive.manifest_version,
+        report_schema_version=archive.report_schema_version,
+        report_authentication_protocol_version=archive.report_authentication_protocol_version,
+        report_algorithm=archive.report_algorithm,
+        report_key_id=archive.report_key_id,
+        report_authenticated_at=archive.report_authenticated_at,
         report_filename=archive.report_filename,
     )
 

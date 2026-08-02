@@ -8,6 +8,17 @@ from app.exceptions import (
     ArchiveAuthenticationReadError,
     ArchiveAuthenticityError,
     ArchiveAuthenticityMismatchError,
+    ArchiveSignatureArchiveDigestMismatchError,
+    ArchiveSignatureError,
+    ArchiveSignatureExportError,
+    ArchiveSignatureFilenameMismatchError,
+    ArchiveSignatureFromFutureError,
+    ArchiveSignatureReadError,
+    ArchiveSignatureValidationError,
+    ArchiveSignatureVerificationError,
+    ArchiveSigningKeyFingerprintMismatchError,
+    ArchiveSigningKeyNotActiveError,
+    ArchiveSigningKeyNotValidError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditLogParseError,
@@ -22,11 +33,15 @@ from app.exceptions import (
     BundleReportFilenameMismatchError,
     ChecksumExportError,
     ChecksumFilenameMismatchError,
+    DuplicateArchiveSigningKeyIdError,
     DuplicateAuthenticationKeyIdError,
     DuplicateReportArchiveMemberError,
     ExecutionBudgetError,
     IncompleteReportBundleError,
     InvalidArchiveAuthenticationFormatError,
+    InvalidArchiveSignatureTrustStoreError,
+    InvalidArchiveSigningKeyIdError,
+    InvalidArchiveSigningPrivateKeyError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
@@ -40,12 +55,14 @@ from app.exceptions import (
     InvalidReportArchivePathError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
+    MissingArchiveSigningPrivateKeyError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
     MissingReportArchiveMemberError,
     MissingSchemaMigrationError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
+    RejectedArchiveSigningKeyError,
     RejectedAuthenticationKeyError,
     ReportArchiveDigestMismatchError,
     ReportArchiveError,
@@ -80,6 +97,7 @@ from app.exceptions import (
     TimeBudgetExceededError,
     TokenBudgetExceededError,
     UnexpectedReportArchiveMemberError,
+    UnknownArchiveSigningKeyError,
     UnknownAuthenticationKeyError,
     UnsafeReportArchiveMemberError,
     UnsupportedAuditSchemaError,
@@ -487,3 +505,54 @@ def test_concrete_archive_authenticity_errors_are_distinct_classes() -> None:
     }
 
     assert len(classes) == 8
+
+
+def test_archive_signature_error_inherits_from_project_error() -> None:
+    assert issubclass(ArchiveSignatureError, AgenticAILabError)
+
+
+def test_concrete_archive_signature_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        MissingArchiveSigningPrivateKeyError,
+        InvalidArchiveSigningPrivateKeyError,
+        InvalidArchiveSigningKeyIdError,
+        InvalidArchiveSignatureTrustStoreError,
+        DuplicateArchiveSigningKeyIdError,
+        UnknownArchiveSigningKeyError,
+        ArchiveSigningKeyNotActiveError,
+        ArchiveSigningKeyNotValidError,
+        RejectedArchiveSigningKeyError,
+        ArchiveSignatureFromFutureError,
+        ArchiveSigningKeyFingerprintMismatchError,
+        ArchiveSignatureReadError,
+        ArchiveSignatureValidationError,
+        ArchiveSignatureFilenameMismatchError,
+        ArchiveSignatureArchiveDigestMismatchError,
+        ArchiveSignatureVerificationError,
+        ArchiveSignatureExportError,
+    ):
+        assert issubclass(exception_type, ArchiveSignatureError)
+
+
+def test_concrete_archive_signature_errors_are_distinct_classes() -> None:
+    exception_types = {
+        MissingArchiveSigningPrivateKeyError,
+        InvalidArchiveSigningPrivateKeyError,
+        InvalidArchiveSigningKeyIdError,
+        InvalidArchiveSignatureTrustStoreError,
+        DuplicateArchiveSigningKeyIdError,
+        UnknownArchiveSigningKeyError,
+        ArchiveSigningKeyNotActiveError,
+        ArchiveSigningKeyNotValidError,
+        RejectedArchiveSigningKeyError,
+        ArchiveSignatureFromFutureError,
+        ArchiveSigningKeyFingerprintMismatchError,
+        ArchiveSignatureReadError,
+        ArchiveSignatureValidationError,
+        ArchiveSignatureFilenameMismatchError,
+        ArchiveSignatureArchiveDigestMismatchError,
+        ArchiveSignatureVerificationError,
+        ArchiveSignatureExportError,
+    }
+
+    assert len(exception_types) == 17
