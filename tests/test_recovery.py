@@ -23,6 +23,7 @@ from app.exceptions import (
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     DuplicateAuthenticationKeyIdError,
+    DuplicateReportArchiveMemberError,
     IncompleteReportBundleError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
@@ -32,14 +33,24 @@ from app.exceptions import (
     InvalidAuthenticationTrustStoreError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
+    InvalidReportArchiveError,
+    InvalidReportArchiveMemberError,
+    InvalidReportArchivePathError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
+    MissingReportArchiveMemberError,
     MissingSchemaMigrationError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
     RejectedAuthenticationKeyError,
+    ReportArchiveDigestMismatchError,
+    ReportArchiveError,
+    ReportArchiveExportError,
+    ReportArchiveMetadataMismatchError,
+    ReportArchiveReadError,
+    ReportArchiveSizeLimitError,
     ReportAuthenticationReadError,
     ReportAuthenticityMismatchError,
     ReportBundleDigestMismatchError,
@@ -61,7 +72,9 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    UnexpectedReportArchiveMemberError,
     UnknownAuthenticationKeyError,
+    UnsafeReportArchiveMemberError,
     UnsupportedAuditSchemaError,
     UnsupportedSchemaVersionError,
 )
@@ -72,6 +85,7 @@ PRIVATE_HMAC_SECRET = "PRIVATE-HMAC-SECRET"
 PRIVATE_KEYRING_SECRET = "PRIVATE-KEYRING-SECRET"
 PRIVATE_TRUST_SECRET = "PRIVATE-TRUST-ERROR"
 PRIVATE_BUNDLE_SECRET = "PRIVATE-BUNDLE-ERROR"
+PRIVATE_ARCHIVE_SECRET = "PRIVATE-ARCHIVE-ERROR"
 
 
 def make_request() -> httpx.Request:
@@ -106,6 +120,7 @@ def assert_decision(
     assert PRIVATE_KEYRING_SECRET not in decision.reason
     assert PRIVATE_TRUST_SECRET not in decision.reason
     assert PRIVATE_BUNDLE_SECRET not in decision.reason
+    assert PRIVATE_ARCHIVE_SECRET not in decision.reason
 
 
 def test_recovery_action_string_values() -> None:
@@ -204,6 +219,20 @@ def test_recovery_decision_is_frozen() -> None:
         (ChecksumFilenameMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ReportIntegrityMismatchError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
         (ChecksumExportError(SENSITIVE_TEXT), False, RecoveryAction.ABORT),
+
+        (ReportArchiveError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (InvalidReportArchivePathError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (ReportArchiveExportError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (ReportArchiveReadError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (InvalidReportArchiveError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (UnsafeReportArchiveMemberError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (DuplicateReportArchiveMemberError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (UnexpectedReportArchiveMemberError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (MissingReportArchiveMemberError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (ReportArchiveSizeLimitError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (InvalidReportArchiveMemberError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (ReportArchiveDigestMismatchError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
+        (ReportArchiveMetadataMismatchError(PRIVATE_ARCHIVE_SECRET), False, RecoveryAction.ABORT),
         (ReportBundleError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
         (ReportBundleManifestValidationError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),
         (ReportBundleReadError(PRIVATE_BUNDLE_SECRET), False, RecoveryAction.ABORT),

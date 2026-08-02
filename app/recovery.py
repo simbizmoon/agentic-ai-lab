@@ -13,6 +13,7 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationKeyringError,
     AuthenticationTrustError,
+    ReportArchiveError,
     ReportAuthenticityError,
     ReportBundleError,
     ReportExportError,
@@ -199,6 +200,14 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The exported audit report failed an integrity check.",
+        )
+
+
+    if isinstance(error, ReportArchiveError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report archive is unsafe, incomplete, or inconsistent.",
         )
 
     if isinstance(error, ReportBundleError):

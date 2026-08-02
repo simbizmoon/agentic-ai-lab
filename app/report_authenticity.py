@@ -81,6 +81,49 @@ def authentication_path_for(
     return report_path.parent / f"{report_path.name}.hmac"
 
 
+
+def calculate_report_hmac_bytes(
+    *,
+    filename: str,
+    data: bytes,
+    key: TrustedAuthenticationKey,
+    authenticated_at: datetime,
+) -> str:
+    if not isinstance(data, bytes):
+        raise TypeError("data must be bytes")
+    digest = _create_report_hmac(
+        filename=filename,
+        key=key,
+        authenticated_at=authenticated_at,
+    )
+    digest.update(data)
+    return digest.hexdigest()
+
+
+def _create_report_hmac(
+    *,
+    filename: str,
+    key: TrustedAuthenticationKey,
+    authenticated_at: datetime,
+) -> hmac.HMAC:
+    if not isinstance(filename, str):
+        raise TypeError("filename must be a str")
+    _validate_authentication_filename(filename)
+    _validate_authentication_key(key)
+    authenticated_at = _normalize_aware_datetime(authenticated_at)
+    authenticated_at_text = authenticated_at.isoformat()
+    digest = hmac.new(key.secret, digestmod="sha256")
+    digest.update(HMAC_DOMAIN_SEPARATOR)
+    digest.update(b"\0")
+    digest.update(key.key_id.encode("ascii"))
+    digest.update(b"\0")
+    digest.update(authenticated_at_text.encode("ascii"))
+    digest.update(b"\0")
+    digest.update(filename.encode("utf-8"))
+    digest.update(b"\0")
+    return digest
+
+
 def calculate_report_hmac(
     *,
     report_path: Path,
@@ -89,22 +132,14 @@ def calculate_report_hmac(
 ) -> str:
     if not isinstance(report_path, Path):
         raise TypeError("report_path must be a Path")
-    _validate_authentication_key(key)
-    authenticated_at = _normalize_aware_datetime(authenticated_at)
-    authenticated_at_text = authenticated_at.isoformat()
-
     try:
         if report_path.is_symlink() or not report_path.is_file():
             raise ReportAuthenticationReadError(_READ_ERROR_MESSAGE)
-        digest = hmac.new(key.secret, digestmod="sha256")
-        digest.update(HMAC_DOMAIN_SEPARATOR)
-        digest.update(b"\0")
-        digest.update(key.key_id.encode("ascii"))
-        digest.update(b"\0")
-        digest.update(authenticated_at_text.encode("ascii"))
-        digest.update(b"\0")
-        digest.update(report_path.name.encode("utf-8"))
-        digest.update(b"\0")
+        digest = _create_report_hmac(
+            filename=report_path.name,
+            key=key,
+            authenticated_at=authenticated_at,
+        )
         with report_path.open("rb") as file:
             while chunk := file.read(HMAC_CHUNK_SIZE):
                 digest.update(chunk)

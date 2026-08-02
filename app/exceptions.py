@@ -268,3 +268,54 @@ class ReportBundleDigestMismatchError(ReportBundleError):
 
 class ReportBundleMetadataMismatchError(ReportBundleError):
     """Raised when bundle metadata is inconsistent with verified files."""
+
+class ReportArchiveError(AgenticAILabError):
+    """Base exception for audit report archive errors."""
+
+
+class InvalidReportArchivePathError(ReportArchiveError):
+    """Raised when an audit report archive path is invalid."""
+
+
+class ReportArchiveExportError(ReportArchiveError):
+    """Raised when an audit report archive cannot be written safely."""
+
+
+class ReportArchiveReadError(ReportArchiveError):
+    """Raised when archive input files or a ZIP archive cannot be read."""
+
+
+class InvalidReportArchiveError(ReportArchiveError):
+    """Raised when a ZIP archive is structurally invalid."""
+
+
+class UnsafeReportArchiveMemberError(ReportArchiveError):
+    """Raised when a ZIP member is unsafe to process."""
+
+
+class DuplicateReportArchiveMemberError(ReportArchiveError):
+    """Raised when a ZIP archive contains duplicate member names."""
+
+
+class UnexpectedReportArchiveMemberError(ReportArchiveError):
+    """Raised when a ZIP archive contains unexpected members."""
+
+
+class MissingReportArchiveMemberError(ReportArchiveError):
+    """Raised when a ZIP archive is missing required members."""
+
+
+class ReportArchiveSizeLimitError(ReportArchiveError):
+    """Raised when a ZIP archive exceeds configured size limits."""
+
+
+class InvalidReportArchiveMemberError(ReportArchiveError):
+    """Raised when a ZIP member cannot be decoded or parsed safely."""
+
+
+class ReportArchiveDigestMismatchError(ReportArchiveError):
+    """Raised when archive member digests do not match expected values."""
+
+
+class ReportArchiveMetadataMismatchError(ReportArchiveError):
+    """Raised when archive metadata is inconsistent across members."""

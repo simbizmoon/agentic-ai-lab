@@ -10,6 +10,11 @@ from tempfile import NamedTemporaryFile
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import AuthenticationTrustStore, select_signing_key
 from app.exceptions import InvalidReportExportPathError, ReportExportWriteError
+from app.report_archive import (
+    ReportArchiveExportResult,
+    archive_path_for,
+    export_report_archive,
+)
 from app.report_authenticity import (
     ReportAuthentication,
     authentication_path_for,
@@ -142,3 +147,31 @@ def export_json_report_bundle(
         manifest=manifest,
     )
     return checksum, authentication, manifest
+
+def export_json_report_archive(
+    *,
+    path: Path,
+    json_text: str,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    archive_path: Path | None = None,
+) -> tuple[
+    ReportChecksum,
+    ReportAuthentication,
+    AuditReportBundleManifest,
+    ReportArchiveExportResult,
+]:
+    checksum, authentication, manifest = export_json_report_bundle(
+        path=path,
+        json_text=json_text,
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+    )
+    effective_archive_path = archive_path_for(path) if archive_path is None else archive_path
+    archive = export_report_archive(
+        report_path=path,
+        archive_path=effective_archive_path,
+        trust_store=trust_store,
+        verification_time=authenticated_at,
+    )
+    return checksum, authentication, manifest, archive

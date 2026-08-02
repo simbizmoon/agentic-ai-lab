@@ -4,6 +4,7 @@ import base64
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
 
@@ -21,10 +22,12 @@ from app.exceptions import (
     AuditReportValidationError,
     AuthenticationExportError,
     ChecksumExportError,
+    ReportArchiveExportError,
     ReportBundleExportError,
     ReportExportWriteError,
 )
 from app.observability import AUDIT_SCHEMA_VERSION
+from app.report_archive import archive_path_for, verify_report_archive
 from app.report_authenticity import (
     authentication_path_for,
     verify_report_authenticity,
@@ -2423,4 +2426,230 @@ def test_verify_bundle_failure_header_and_secret_omission(
     assert "Action: abort" in output
     assert "Retryable: false" in output
     assert "PRIVATE-BUNDLE-ERROR" not in output
+    assert HMAC_SECRET_B64 not in output
+
+def test_archive_export_creates_zip_and_outputs_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    ) == 0
+    output = capsys.readouterr().out
+
+    assert archive_path_for(output_path).is_file()
+    assert "Archive:" in output
+    assert "Archive Format Version: 1" in output
+    assert "Archive Members: 4" in output
+    assert "Archive SHA-256:" in output
+
+
+def test_archive_export_zip_verifies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    ) == 0
+
+    assert verify_report_archive(
+        archive_path=archive_path_for(output_path),
+        trust_store=AuthenticationTrustStore(
+            keys=(
+                TrustedAuthenticationKey(
+                    HMAC_KEY_ID,
+                    HMAC_SECRET,
+                    AuthenticationKeyStatus.ACTIVE,
+                    datetime.fromisoformat(VALID_FROM),
+                ),
+            )
+        ),
+        verification_time=datetime.now(UTC),
+    ).member_count == 4
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--format", "json", "--authenticate", "--archive"],
+        ["--format", "json", "--output", "out.json", "--archive"],
+        ["--output", "out.json", "--authenticate", "--archive"],
+        ["--verify", "report.json", "--archive"],
+    ],
+)
+def test_archive_export_rejects_invalid_combinations(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_archive_export_failure_keeps_bundle_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    configure_log(monkeypatch, tmp_path, success_event())
+    output_path = tmp_path / "audit-report.json"
+
+    def fail_archive(**kwargs: object) -> None:
+        from app.report_export import export_json_report_bundle
+
+        export_json_report_bundle(
+            path=kwargs["path"],
+            json_text=kwargs["json_text"],
+            trust_store=kwargs["trust_store"],
+            authenticated_at=kwargs["authenticated_at"],
+        )
+        raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report_archive", fail_archive)
+
+    assert script.main(["--format", "json", "--output", str(output_path), "--authenticate", "--archive"]) == 5
+    output = capsys.readouterr().out
+
+    assert output_path.exists()
+    assert checksum_path_for(output_path).exists()
+    assert authentication_path_for(output_path).exists()
+    assert manifest_path_for(output_path).exists()
+    assert not archive_path_for(output_path).exists()
+    assert "Audit report exported successfully." not in output
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert "PRIVATE-ARCHIVE-ERROR" not in output
+
+
+def test_verify_archive_success_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+
+    assert script.main(["--verify-archive", str(archive_path_for(output_path))]) == 0
+    output = capsys.readouterr().out
+
+    assert "Audit report archive verified." in output
+    assert "Archive Format Version: 1" in output
+    assert "Archive SHA-256:" in output
+    assert "Members: 4" in output
+    assert "Manifest Version: 1" in output
+    assert "Report Schema Version: 1" in output
+    assert "Authentication Protocol Version: 2" in output
+    assert "Algorithm: hmac-sha256-v2" in output
+    assert "Key ID:" in output
+    assert "Authenticated At:" in output
+    assert "Report Filename: audit-report.json" in output
+
+
+def test_verify_archive_succeeds_without_audit_log_or_external_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+    archive_path = archive_path_for(output_path)
+    for path in (output_path, checksum_path_for(output_path), authentication_path_for(output_path), manifest_path_for(output_path)):
+        path.unlink()
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", tmp_path / "missing.jsonl")
+
+    assert script.main(["--verify-archive", str(archive_path)]) == 0
+
+
+def test_verify_archive_does_not_call_read_audit_events(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+
+    def fail_read(*args: object, **kwargs: object) -> None:
+        raise AssertionError("read_audit_events must not be called")
+
+    monkeypatch.setattr(script, "read_audit_events", fail_read)
+
+    assert script.main(["--verify-archive", str(archive_path_for(output_path))]) == 0
+
+
+def test_verify_archive_tamper_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+    archive_path = archive_path_for(output_path)
+    with ZipFile(archive_path, "a", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("extra.txt", b"PRIVATE-ARCHIVE-ERROR")
+
+    assert script.main(["--verify-archive", str(archive_path)]) == 5
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--verify", "report.json", "--verify-archive", "report.bundle.zip"],
+        ["--verify-authenticity", "report.json", "--verify-archive", "report.bundle.zip"],
+        ["--verify-bundle", "report.json", "--verify-archive", "report.bundle.zip"],
+        ["--verify-archive", "report.bundle.zip", "--output", "out.json"],
+        ["--verify-archive", "report.bundle.zip", "--archive"],
+        ["--verify-archive", "report.bundle.zip", "--format", "json"],
+        ["--verify-archive", "report.bundle.zip", "--status", "success"],
+    ],
+)
+def test_verify_archive_rejects_invalid_combinations(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_verify_archive_failure_header_and_secret_omission(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    archive_path = tmp_path / "audit-report.bundle.zip"
+    archive_path.write_bytes(b"PRIVATE-ARCHIVE-ERROR")
+
+    assert script.main(["--verify-archive", str(archive_path)]) == 5
+    output = capsys.readouterr().out
+
+    assert "[ERROR] Audit report archive verification failed" in output
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert "PRIVATE-ARCHIVE-ERROR" not in output
     assert HMAC_SECRET_B64 not in output

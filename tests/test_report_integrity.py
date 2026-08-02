@@ -23,6 +23,7 @@ from app.report_integrity import (
     ReportIntegrityResult,
     build_report_checksum,
     calculate_sha256,
+    calculate_sha256_bytes,
     checksum_path_for,
     export_checksum_file,
     format_report_checksum,
@@ -52,6 +53,28 @@ def write_report_and_checksum(path: Path) -> tuple[Path, Path, ReportChecksum]:
     checksum_path = checksum_path_for(path)
     export_checksum_file(checksum_path=checksum_path, checksum=checksum)
     return path, checksum_path, checksum
+
+
+
+def test_calculate_sha256_bytes_known_bytes() -> None:
+    assert calculate_sha256_bytes(b"abc") == hashlib.sha256(b"abc").hexdigest()
+
+
+def test_calculate_sha256_bytes_empty_bytes() -> None:
+    assert calculate_sha256_bytes(b"") == hashlib.sha256(b"").hexdigest()
+
+
+def test_calculate_sha256_bytes_returns_lowercase_64_hex() -> None:
+    digest = calculate_sha256_bytes(b"abc")
+
+    assert is_valid_sha256_digest(digest)
+    assert digest == digest.lower()
+
+
+@pytest.mark.parametrize("value", ["abc", bytearray(b"abc")])
+def test_calculate_sha256_bytes_rejects_non_bytes(value: object) -> None:
+    with pytest.raises(TypeError):
+        calculate_sha256_bytes(value)  # type: ignore[arg-type]
 
 
 def test_calculate_sha256_known_bytes(tmp_path: Path) -> None:

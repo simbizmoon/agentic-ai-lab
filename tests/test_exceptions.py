@@ -16,6 +16,7 @@ from app.exceptions import (
     ChecksumExportError,
     ChecksumFilenameMismatchError,
     DuplicateAuthenticationKeyIdError,
+    DuplicateReportArchiveMemberError,
     ExecutionBudgetError,
     IncompleteReportBundleError,
     InvalidAuditEventError,
@@ -26,14 +27,24 @@ from app.exceptions import (
     InvalidAuthenticationTrustStoreError,
     InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
+    InvalidReportArchiveError,
+    InvalidReportArchiveMemberError,
+    InvalidReportArchivePathError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
     MissingAuthenticationKeyError,
     MissingAuthenticationKeyringError,
+    MissingReportArchiveMemberError,
     MissingSchemaMigrationError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
     RejectedAuthenticationKeyError,
+    ReportArchiveDigestMismatchError,
+    ReportArchiveError,
+    ReportArchiveExportError,
+    ReportArchiveMetadataMismatchError,
+    ReportArchiveReadError,
+    ReportArchiveSizeLimitError,
     ReportAuthenticationReadError,
     ReportAuthenticityError,
     ReportAuthenticityMismatchError,
@@ -60,7 +71,9 @@ from app.exceptions import (
     StructuredResponseValidationError,
     TimeBudgetExceededError,
     TokenBudgetExceededError,
+    UnexpectedReportArchiveMemberError,
     UnknownAuthenticationKeyError,
+    UnsafeReportArchiveMemberError,
     UnsupportedAuditSchemaError,
     UnsupportedSchemaVersionError,
 )
@@ -361,6 +374,7 @@ def test_concrete_authentication_trust_errors_are_distinct_classes() -> None:
 
 
 
+
 def test_report_bundle_error_inherits_from_project_error() -> None:
     assert issubclass(ReportBundleError, AgenticAILabError)
 
@@ -391,3 +405,44 @@ def test_concrete_report_bundle_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 8
+
+def test_report_archive_error_inherits_from_project_error() -> None:
+    assert issubclass(ReportArchiveError, AgenticAILabError)
+
+
+def test_concrete_report_archive_errors_inherit_from_archive_error() -> None:
+    for exception_type in (
+        InvalidReportArchivePathError,
+        ReportArchiveExportError,
+        ReportArchiveReadError,
+        InvalidReportArchiveError,
+        UnsafeReportArchiveMemberError,
+        DuplicateReportArchiveMemberError,
+        UnexpectedReportArchiveMemberError,
+        MissingReportArchiveMemberError,
+        ReportArchiveSizeLimitError,
+        InvalidReportArchiveMemberError,
+        ReportArchiveDigestMismatchError,
+        ReportArchiveMetadataMismatchError,
+    ):
+        assert issubclass(exception_type, ReportArchiveError)
+
+
+def test_concrete_report_archive_errors_are_distinct_classes() -> None:
+    exception_types = {
+        ReportArchiveError,
+        InvalidReportArchivePathError,
+        ReportArchiveExportError,
+        ReportArchiveReadError,
+        InvalidReportArchiveError,
+        UnsafeReportArchiveMemberError,
+        DuplicateReportArchiveMemberError,
+        UnexpectedReportArchiveMemberError,
+        MissingReportArchiveMemberError,
+        ReportArchiveSizeLimitError,
+        InvalidReportArchiveMemberError,
+        ReportArchiveDigestMismatchError,
+        ReportArchiveMetadataMismatchError,
+    }
+
+    assert len(exception_types) == 13

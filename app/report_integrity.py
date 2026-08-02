@@ -56,6 +56,15 @@ def is_valid_sha256_digest(
     return all(character in "0123456789abcdef" for character in value)
 
 
+
+def calculate_sha256_bytes(
+    data: bytes,
+) -> str:
+    if not isinstance(data, bytes):
+        raise TypeError("data must be bytes")
+    return hashlib.sha256(data).hexdigest()
+
+
 def calculate_sha256(
     path: Path,
 ) -> str:

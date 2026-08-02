@@ -37,6 +37,7 @@ from app.report_authenticity import (
     authentication_path_for,
     build_report_authentication,
     calculate_report_hmac,
+    calculate_report_hmac_bytes,
     export_authentication_file,
     format_report_authentication,
     is_valid_hmac_digest,
@@ -141,6 +142,72 @@ def test_hmac_protocol_v2_constants() -> None:
     assert HMAC_PROTOCOL_VERSION == 2
     assert HMAC_DOMAIN_SEPARATOR.endswith(b"v2")
     assert MAX_AUTHENTICATION_CLOCK_SKEW == timedelta(minutes=5)
+
+
+
+def test_calculate_report_hmac_bytes_matches_path_result(tmp_path: Path) -> None:
+    report_path = write_report(tmp_path / "report.json")
+
+    assert calculate_report_hmac_bytes(
+        filename=report_path.name,
+        data=report_path.read_bytes(),
+        key=key(),
+        authenticated_at=AUTHENTICATED_AT,
+    ) == calculate_report_hmac(
+        report_path=report_path,
+        key=key(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+
+@pytest.mark.parametrize("mutate", ["data", "filename", "key", "time"])
+def test_calculate_report_hmac_bytes_changes_when_bound_inputs_change(mutate: str) -> None:
+    baseline = calculate_report_hmac_bytes(
+        filename="report.json",
+        data=b"abc",
+        key=key(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+    if mutate == "data":
+        changed = calculate_report_hmac_bytes(
+            filename="report.json",
+            data=b"abcd",
+            key=key(),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+    elif mutate == "filename":
+        changed = calculate_report_hmac_bytes(
+            filename="other.json",
+            data=b"abc",
+            key=key(),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+    elif mutate == "key":
+        changed = calculate_report_hmac_bytes(
+            filename="report.json",
+            data=b"abc",
+            key=key(secret=OTHER_SECRET),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+    else:
+        changed = calculate_report_hmac_bytes(
+            filename="report.json",
+            data=b"abc",
+            key=key(),
+            authenticated_at=AUTHENTICATED_AT + timedelta(seconds=1),
+        )
+
+    assert changed != baseline
+
+
+def test_calculate_report_hmac_bytes_rejects_non_bytes() -> None:
+    with pytest.raises(TypeError):
+        calculate_report_hmac_bytes(
+            filename="report.json",
+            data=bytearray(b"abc"),
+            key=key(),
+            authenticated_at=AUTHENTICATED_AT,
+        )  # type: ignore[arg-type]
 
 
 def test_hmac_same_key_file_time_and_name_is_stable(tmp_path: Path) -> None:

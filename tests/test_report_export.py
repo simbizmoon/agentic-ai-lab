@@ -22,8 +22,14 @@ from app.exceptions import (
     InvalidReportExportPathError,
     MultipleActiveAuthenticationKeysError,
     NoActiveAuthenticationKeyError,
+    ReportArchiveExportError,
     ReportBundleExportError,
     ReportExportWriteError,
+)
+from app.report_archive import (
+    ReportArchiveExportResult,
+    archive_path_for,
+    verify_report_archive,
 )
 from app.report_authenticity import (
     ReportAuthentication,
@@ -38,6 +44,7 @@ from app.report_bundle import (
 from app.report_export import (
     _validate_export_path,
     export_json_report,
+    export_json_report_archive,
     export_json_report_bundle,
     export_json_report_with_authentication,
     export_json_report_with_checksum,
@@ -1013,3 +1020,86 @@ def test_existing_authenticated_export_still_skips_manifest(tmp_path: Path) -> N
 
     assert authentication_path_for(target).exists()
     assert not manifest_path_for(target).exists()
+
+def test_export_json_report_archive_succeeds(tmp_path: Path) -> None:
+    result = export_json_report_archive(
+        path=tmp_path / "audit-report.json",
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert isinstance(result[3], ReportArchiveExportResult)
+
+
+def test_export_json_report_archive_creates_bundle_and_zip(tmp_path: Path) -> None:
+    path = tmp_path / "audit-report.json"
+
+    export_json_report_archive(
+        path=path,
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert path.exists()
+    assert checksum_path_for(path).exists()
+    assert authentication_path_for(path).exists()
+    assert manifest_path_for(path).exists()
+    assert archive_path_for(path).exists()
+
+
+def test_export_json_report_archive_verifies(tmp_path: Path) -> None:
+    path = tmp_path / "audit-report.json"
+
+    export_json_report_archive(
+        path=path,
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert verify_report_archive(
+        archive_path=archive_path_for(path),
+        trust_store=trust_store(),
+        verification_time=VERIFICATION_TIME,
+    ).member_count == 4
+
+
+def test_export_json_report_archive_failure_keeps_bundle_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "audit-report.json"
+
+    def fail_archive(**kwargs: object) -> None:
+        raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
+
+    monkeypatch.setattr(report_export, "export_report_archive", fail_archive)
+
+    with pytest.raises(ReportArchiveExportError):
+        export_json_report_archive(
+            path=path,
+            json_text=valid_json_text(),
+            trust_store=trust_store(),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+
+    assert path.exists()
+    assert checksum_path_for(path).exists()
+    assert authentication_path_for(path).exists()
+    assert manifest_path_for(path).exists()
+    assert not archive_path_for(path).exists()
+
+
+def test_existing_bundle_export_still_skips_archive(tmp_path: Path) -> None:
+    path = tmp_path / "audit-report.json"
+
+    export_json_report_bundle(
+        path=path,
+        json_text=valid_json_text(),
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert not archive_path_for(path).exists()
