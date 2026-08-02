@@ -122,3 +122,27 @@ class InvalidReportExportPathError(ReportExportError):
 
 class ReportExportWriteError(ReportExportError):
     """Raised when an audit report cannot be written safely."""
+
+
+class ReportIntegrityError(AgenticAILabError):
+    """Base exception for audit report integrity errors."""
+
+
+class ReportIntegrityReadError(ReportIntegrityError):
+    """Raised when an audit report or checksum cannot be read."""
+
+
+class InvalidChecksumFormatError(ReportIntegrityError):
+    """Raised when a checksum sidecar has an invalid format."""
+
+
+class ChecksumFilenameMismatchError(ReportIntegrityError):
+    """Raised when a checksum sidecar references a different report filename."""
+
+
+class ReportIntegrityMismatchError(ReportIntegrityError):
+    """Raised when an audit report checksum does not match."""
+
+
+class ChecksumExportError(ReportIntegrityError):
+    """Raised when a checksum sidecar cannot be written safely."""

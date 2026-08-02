@@ -8,6 +8,12 @@ from tempfile import NamedTemporaryFile
 
 from app.audit_report import validate_audit_report_json
 from app.exceptions import InvalidReportExportPathError, ReportExportWriteError
+from app.report_integrity import (
+    ReportChecksum,
+    build_report_checksum,
+    checksum_path_for,
+    export_checksum_file,
+)
 
 
 def _validate_export_path(path: Path) -> None:
@@ -63,3 +69,17 @@ def export_json_report(
                 temp_path.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def export_json_report_with_checksum(
+    *,
+    path: Path,
+    json_text: str,
+) -> ReportChecksum:
+    export_json_report(path=path, json_text=json_text)
+    checksum = build_report_checksum(path)
+    export_checksum_file(
+        checksum_path=checksum_path_for(path),
+        checksum=checksum,
+    )
+    return checksum

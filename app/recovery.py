@@ -12,6 +12,7 @@ from app.exceptions import (
     AuditLogError,
     AuditReportValidationError,
     ReportExportError,
+    ReportIntegrityError,
     SchemaCompatibilityError,
     SchemaMigrationError,
     StructuredResponseIncompleteError,
@@ -187,6 +188,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The audit report could not be exported safely.",
+        )
+
+    if isinstance(error, ReportIntegrityError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The exported audit report failed an integrity check.",
         )
 
     if isinstance(error, ValueError):

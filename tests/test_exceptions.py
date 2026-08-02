@@ -5,14 +5,20 @@ from app.exceptions import (
     AuditLogParseError,
     AuditLogReadError,
     AuditReportValidationError,
+    ChecksumExportError,
+    ChecksumFilenameMismatchError,
     ExecutionBudgetError,
     InvalidAuditEventError,
+    InvalidChecksumFormatError,
     InvalidMigrationRegistryError,
     InvalidReportExportPathError,
     InvalidSchemaVersionError,
     MissingSchemaMigrationError,
     ReportExportError,
     ReportExportWriteError,
+    ReportIntegrityError,
+    ReportIntegrityMismatchError,
+    ReportIntegrityReadError,
     SchemaCompatibilityError,
     SchemaDowngradeError,
     SchemaMigrationError,
@@ -193,3 +199,31 @@ def test_concrete_report_export_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 3
+
+
+def test_report_integrity_error_inherits_from_project_error() -> None:
+    assert issubclass(ReportIntegrityError, AgenticAILabError)
+
+
+def test_concrete_report_integrity_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        ReportIntegrityReadError,
+        InvalidChecksumFormatError,
+        ChecksumFilenameMismatchError,
+        ReportIntegrityMismatchError,
+        ChecksumExportError,
+    ):
+        assert issubclass(exception_type, ReportIntegrityError)
+
+
+def test_concrete_report_integrity_errors_are_distinct_classes() -> None:
+    exception_types = {
+        ReportIntegrityError,
+        ReportIntegrityReadError,
+        InvalidChecksumFormatError,
+        ChecksumFilenameMismatchError,
+        ReportIntegrityMismatchError,
+        ChecksumExportError,
+    }
+
+    assert len(exception_types) == 6

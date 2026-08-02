@@ -20,9 +20,10 @@ from app.audit_report import (
     read_audit_events,
     render_audit_report,
 )
-from app.exceptions import AuditLogError, ReportExportError
+from app.exceptions import AuditLogError, ReportExportError, ReportIntegrityError
 from app.recovery import decide_recovery
-from app.report_export import export_json_report
+from app.report_export import export_json_report_with_checksum
+from app.report_integrity import checksum_path_for, verify_report_integrity
 
 AUDIT_LOG_PATH = PROJECT_ROOT / "logs" / "structured_analysis.jsonl"
 
@@ -68,12 +69,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Atomically export a JSON audit report to this file path.",
     )
+    parser.add_argument(
+        "--verify",
+        type=Path,
+        help="Verify an exported JSON audit report and checksum sidecar.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.verify is not None:
+        _validate_verify_args(parser, args)
+        return _run_verify(args.verify)
+
     if args.output is not None and args.format != AuditReportFormat.JSON.value:
         parser.error("--output requires --format json")
 
@@ -100,20 +110,71 @@ def main(argv: list[str] | None = None) -> int:
             report_format=AuditReportFormat(args.format),
         )
         if args.output is not None:
-            export_json_report(path=args.output, json_text=rendered_report)
+            checksum = export_json_report_with_checksum(
+                path=args.output,
+                json_text=rendered_report,
+            )
             print("Audit report exported successfully.")
             print(f"Output: {args.output}")
+            print(f"Checksum: {checksum_path_for(args.output)}")
+            print(f"SHA-256: {checksum.digest}")
             return 0
 
         print(rendered_report)
         return 0
-    except (AuditLogError, ReportExportError) as error:
-        decision = decide_recovery(error)
-        print("[ERROR] Audit report generation failed")
-        print(f"Action: {decision.action.value}")
-        print(f"Retryable: {str(decision.retryable).lower()}")
-        print(f"Reason: {decision.reason}")
+    except (AuditLogError, ReportExportError, ReportIntegrityError) as error:
+        _print_recovery_error(
+            header="[ERROR] Audit report generation failed",
+            error=error,
+        )
         return 5
+
+
+def _validate_verify_args(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+) -> None:
+    if args.output is not None:
+        parser.error("--verify cannot be used with --output")
+    if args.since is not None:
+        parser.error("--verify cannot be used with --since")
+    if args.until is not None:
+        parser.error("--verify cannot be used with --until")
+    if args.model is not None:
+        parser.error("--verify cannot be used with --model")
+    if args.status != AuditStatusFilter.ALL.value:
+        parser.error("--verify cannot be used with --status")
+    if args.format == AuditReportFormat.JSON.value:
+        parser.error("--verify cannot be used with --format json")
+
+
+def _run_verify(verify_path: Path) -> int:
+    try:
+        result = verify_report_integrity(report_path=verify_path)
+    except (AuditLogError, ReportIntegrityError) as error:
+        _print_recovery_error(
+            header="[ERROR] Audit report integrity verification failed",
+            error=error,
+        )
+        return 5
+
+    print("Audit report integrity verified.")
+    print(f"File: {verify_path}")
+    print(f"Checksum: {checksum_path_for(verify_path)}")
+    print(f"SHA-256: {result.digest}")
+    return 0
+
+
+def _print_recovery_error(
+    *,
+    header: str,
+    error: BaseException,
+) -> None:
+    decision = decide_recovery(error)
+    print(header)
+    print(f"Action: {decision.action.value}")
+    print(f"Retryable: {str(decision.retryable).lower()}")
+    print(f"Reason: {decision.reason}")
 
 
 if __name__ == "__main__":

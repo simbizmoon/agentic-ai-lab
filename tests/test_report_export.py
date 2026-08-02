@@ -11,10 +11,20 @@ from app import report_export
 from app.audit_report import validate_audit_report_json
 from app.exceptions import (
     AuditReportValidationError,
+    ChecksumExportError,
     InvalidReportExportPathError,
     ReportExportWriteError,
 )
-from app.report_export import _validate_export_path, export_json_report
+from app.report_export import (
+    _validate_export_path,
+    export_json_report,
+    export_json_report_with_checksum,
+)
+from app.report_integrity import (
+    ReportChecksum,
+    checksum_path_for,
+    verify_report_integrity,
+)
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "audit_report_v1.json"
 PRIVATE_PATH = "PRIVATE-PATH"
@@ -366,3 +376,124 @@ def test_unlink_failure_does_not_replace_original_export_error(
 
     assert PRIVATE_REPLACE_ERROR not in str(exc_info.value)
     assert "PRIVATE-UNLINK-ERROR" not in str(exc_info.value)
+
+
+def test_export_json_report_with_checksum_succeeds(tmp_path: Path) -> None:
+    checksum = export_json_report_with_checksum(
+        path=tmp_path / "report.json",
+        json_text=valid_json_text(),
+    )
+
+    assert isinstance(checksum, ReportChecksum)
+
+
+def test_export_json_report_with_checksum_creates_json_file(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_checksum(path=target, json_text=valid_json_text())
+
+    assert target.is_file()
+
+
+def test_export_json_report_with_checksum_creates_sidecar(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_checksum(path=target, json_text=valid_json_text())
+
+    assert checksum_path_for(target).is_file()
+
+
+def test_export_json_report_with_checksum_returns_checksum(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    checksum = export_json_report_with_checksum(path=target, json_text=valid_json_text())
+
+    assert checksum.filename == target.name
+    assert checksum.digest
+
+
+def test_export_json_report_with_checksum_matches_json(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report_with_checksum(path=target, json_text=valid_json_text())
+
+    verify_report_integrity(report_path=target)
+
+
+def test_export_json_report_with_checksum_hashes_final_newline(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    checksum = export_json_report_with_checksum(path=target, json_text=valid_json_text().rstrip("\n"))
+
+    assert target.read_text(encoding="utf-8").endswith("\n")
+    assert verify_report_integrity(report_path=target).digest == checksum.digest
+
+
+def test_checksum_failure_keeps_json_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "report.json"
+
+    def fail_checksum(**kwargs: object) -> None:
+        raise ChecksumExportError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(report_export, "export_checksum_file", fail_checksum)
+
+    with pytest.raises(ChecksumExportError):
+        export_json_report_with_checksum(path=target, json_text=valid_json_text())
+
+    assert target.is_file()
+
+
+def test_checksum_failure_propagates_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    def fail_checksum(**kwargs: object) -> None:
+        raise ChecksumExportError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(report_export, "export_checksum_file", fail_checksum)
+
+    with pytest.raises(ChecksumExportError):
+        export_json_report_with_checksum(path=tmp_path / "report.json", json_text=valid_json_text())
+
+
+def test_existing_export_json_report_still_writes_json_only(tmp_path: Path) -> None:
+    target = tmp_path / "report.json"
+
+    export_json_report(path=target, json_text=valid_json_text())
+
+    assert target.is_file()
+    assert not checksum_path_for(target).exists()
+
+
+def test_export_with_checksum_runs_json_before_checksum(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    calls: list[str] = []
+
+    def record_json_export(**kwargs: object) -> None:
+        calls.append("json")
+        Path(kwargs["path"]).write_text(valid_json_text(), encoding="utf-8")
+
+    def record_build_checksum(path: Path) -> ReportChecksum:
+        calls.append("build")
+        return ReportChecksum("sha256", "a" * 64, path.name)
+
+    def record_checksum_path(path: Path) -> Path:
+        calls.append("path")
+        return path.parent / f"{path.name}.sha256"
+
+    def record_checksum_export(**kwargs: object) -> None:
+        calls.append("checksum")
+
+    monkeypatch.setattr(report_export, "export_json_report", record_json_export)
+    monkeypatch.setattr(report_export, "build_report_checksum", record_build_checksum)
+    monkeypatch.setattr(report_export, "checksum_path_for", record_checksum_path)
+    monkeypatch.setattr(report_export, "export_checksum_file", record_checksum_export)
+
+    export_json_report_with_checksum(path=tmp_path / "report.json", json_text=valid_json_text())
+
+    assert calls == ["json", "build", "path", "checksum"]

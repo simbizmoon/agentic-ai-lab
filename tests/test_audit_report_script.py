@@ -7,8 +7,13 @@ import pytest
 
 import scripts.audit_report as script
 from app.audit_report import validate_audit_report_json
-from app.exceptions import AuditReportValidationError, ReportExportWriteError
+from app.exceptions import (
+    AuditReportValidationError,
+    ChecksumExportError,
+    ReportExportWriteError,
+)
 from app.observability import AUDIT_SCHEMA_VERSION
+from app.report_integrity import checksum_path_for, verify_report_integrity
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
 SECRET_VALUES = (
@@ -968,9 +973,9 @@ def test_export_write_failure_returns_exit_code_five(
     configure_log(monkeypatch, tmp_path, success_event())
 
     def fail_export(**kwargs: object) -> None:
-        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+        raise ChecksumExportError("PRIVATE-EXPORT-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report", fail_export)
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
 
     assert script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")]) == 5
 
@@ -983,9 +988,9 @@ def test_export_failure_outputs_abort_action(
     configure_log(monkeypatch, tmp_path, success_event())
 
     def fail_export(**kwargs: object) -> None:
-        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+        raise ChecksumExportError("PRIVATE-EXPORT-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report", fail_export)
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
     script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
 
     assert "Action: abort" in capsys.readouterr().out
@@ -1001,7 +1006,7 @@ def test_export_failure_outputs_retryable_false(
     def fail_export(**kwargs: object) -> None:
         raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report", fail_export)
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
     script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
 
     assert "Retryable: false" in capsys.readouterr().out
@@ -1017,7 +1022,7 @@ def test_export_failure_does_not_print_success_message(
     def fail_export(**kwargs: object) -> None:
         raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report", fail_export)
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
     script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
 
     assert "Audit report exported successfully." not in capsys.readouterr().out
@@ -1034,7 +1039,7 @@ def test_export_failure_preserves_existing_target_file(
     def fail_export(**kwargs: object) -> None:
         raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
 
-    monkeypatch.setattr(script, "export_json_report", fail_export)
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
     script.main(["--format", "json", "--output", str(output_path)])
 
     assert output_path.read_text(encoding="utf-8") == "existing"
@@ -1074,3 +1079,229 @@ def test_export_script_does_not_load_settings() -> None:
 
 def test_export_script_does_not_access_env() -> None:
     assert "dotenv" not in script.__dict__
+
+
+def test_json_output_export_creates_checksum_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    assert checksum_path_for(output_path).is_file()
+
+
+def test_json_output_export_checksum_verifies(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    verify_report_integrity(report_path=output_path)
+
+
+def test_json_output_export_prints_checksum_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    assert f"Checksum: {checksum_path_for(output_path)}" in capsys.readouterr().out
+
+
+def test_json_output_export_prints_sha256_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    assert "SHA-256:" in capsys.readouterr().out
+
+
+def test_checksum_generation_failure_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+    output_path = tmp_path / "audit-report.json"
+
+    def fail_export(**kwargs: object) -> None:
+        Path(kwargs["path"]).write_text("{}", encoding="utf-8")
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
+
+    assert script.main(["--format", "json", "--output", str(output_path)]) == 5
+
+
+def test_checksum_generation_failure_keeps_json_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+    output_path = tmp_path / "audit-report.json"
+
+    def fail_export(**kwargs: object) -> None:
+        Path(kwargs["path"]).write_text("{}", encoding="utf-8")
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report_with_checksum", fail_export)
+    script.main(["--format", "json", "--output", str(output_path)])
+
+    assert output_path.exists()
+
+
+def test_verify_mode_success_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    assert script.main(["--verify", str(output_path)]) == 0
+
+
+def test_verify_mode_outputs_success_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    capsys.readouterr()
+
+    script.main(["--verify", str(output_path)])
+
+    assert "Audit report integrity verified." in capsys.readouterr().out
+
+
+def test_verify_mode_outputs_digest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    capsys.readouterr()
+
+    script.main(["--verify", str(output_path)])
+
+    assert "SHA-256:" in capsys.readouterr().out
+
+
+def test_verify_mode_succeeds_without_audit_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    monkeypatch.setattr(script, "AUDIT_LOG_PATH", tmp_path / "missing.jsonl")
+
+    assert script.main(["--verify", str(output_path)]) == 0
+
+
+def test_verify_mode_does_not_call_read_audit_events(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    def fail_read(*args: object, **kwargs: object) -> object:
+        raise AssertionError("read_audit_events must not be called")
+
+    monkeypatch.setattr(script, "read_audit_events", fail_read)
+
+    assert script.main(["--verify", str(output_path)]) == 0
+
+
+def test_verify_mode_changed_json_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    output_path.write_text(output_path.read_text(encoding="utf-8").replace("gpt-test", "gpt-tampered"), encoding="utf-8")
+
+    assert script.main(["--verify", str(output_path)]) == 5
+
+
+def test_verify_mode_bad_checksum_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    checksum_path_for(output_path).write_text(f"{'0' * 64}  audit-report.json\n", encoding="utf-8")
+
+    assert script.main(["--verify", str(output_path)]) == 5
+
+
+def test_verify_mode_missing_checksum_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    checksum_path_for(output_path).unlink()
+
+    assert script.main(["--verify", str(output_path)]) == 5
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--verify", "report.json", "--output", "out.json"],
+        ["--verify", "report.json", "--since", "2026-08-02T00:00:00+00:00"],
+        ["--verify", "report.json", "--until", "2026-08-02T00:00:00+00:00"],
+        ["--verify", "report.json", "--model", "gpt-5"],
+        ["--verify", "report.json", "--status", "success"],
+        ["--verify", "report.json", "--format", "json"],
+    ],
+)
+def test_verify_mode_rejects_invalid_combinations(argv: list[str]) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(argv)
+
+    assert exc_info.value.code == 2
+
+
+def test_verify_failure_header_is_specific(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    checksum_path_for(output_path).write_text(f"{'0' * 64}  audit-report.json\n", encoding="utf-8")
+    capsys.readouterr()
+
+    script.main(["--verify", str(output_path)])
+
+    assert "[ERROR] Audit report integrity verification failed" in capsys.readouterr().out
+
+
+def test_verify_failure_does_not_modify_report_or_checksum(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    checksum_path = checksum_path_for(output_path)
+    checksum_path.write_text(f"{'0' * 64}  audit-report.json\n", encoding="utf-8")
+    report_before = output_path.read_text(encoding="utf-8")
+    checksum_before = checksum_path.read_text(encoding="utf-8")
+
+    script.main(["--verify", str(output_path)])
+
+    assert output_path.read_text(encoding="utf-8") == report_before
+    assert checksum_path.read_text(encoding="utf-8") == checksum_before
