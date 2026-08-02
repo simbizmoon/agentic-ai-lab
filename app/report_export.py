@@ -7,13 +7,18 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from app.archive_authenticity import ArchiveAuthentication
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import AuthenticationTrustStore, select_signing_key
-from app.exceptions import InvalidReportExportPathError, ReportExportWriteError
+from app.exceptions import (
+    ArchiveAuthenticationMetadataMismatchError,
+    InvalidReportExportPathError,
+    ReportExportWriteError,
+)
 from app.report_archive import (
     ReportArchiveExportResult,
     archive_path_for,
-    export_report_archive,
+    export_authenticated_report_archive,
 )
 from app.report_authenticity import (
     ReportAuthentication,
@@ -160,6 +165,7 @@ def export_json_report_archive(
     ReportAuthentication,
     AuditReportBundleManifest,
     ReportArchiveExportResult,
+    ArchiveAuthentication,
 ]:
     checksum, authentication, manifest = export_json_report_bundle(
         path=path,
@@ -168,10 +174,17 @@ def export_json_report_archive(
         authenticated_at=authenticated_at,
     )
     effective_archive_path = archive_path_for(path) if archive_path is None else archive_path
-    archive = export_report_archive(
+    archive, archive_authentication = export_authenticated_report_archive(
         report_path=path,
         archive_path=effective_archive_path,
         trust_store=trust_store,
-        verification_time=authenticated_at,
+        authenticated_at=authenticated_at,
     )
-    return checksum, authentication, manifest, archive
+    if (
+        archive_authentication.key_id != authentication.key_id
+        or archive_authentication.authenticated_at != authentication.authenticated_at
+    ):
+        raise ArchiveAuthenticationMetadataMismatchError(
+            "The audit report archive authentication metadata is inconsistent."
+        )
+    return checksum, authentication, manifest, archive, archive_authentication

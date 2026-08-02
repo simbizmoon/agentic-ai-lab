@@ -8,6 +8,12 @@ import pytest
 
 from app.exceptions import (
     ActiveAuthenticationKeyNotFoundError,
+    ArchiveAuthenticationExportError,
+    ArchiveAuthenticationFilenameMismatchError,
+    ArchiveAuthenticationFormatVersionMismatchError,
+    ArchiveAuthenticationMetadataMismatchError,
+    ArchiveAuthenticationReadError,
+    ArchiveAuthenticityMismatchError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditLogParseError,
@@ -25,6 +31,7 @@ from app.exceptions import (
     DuplicateAuthenticationKeyIdError,
     DuplicateReportArchiveMemberError,
     IncompleteReportBundleError,
+    InvalidArchiveAuthenticationFormatError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
@@ -274,3 +281,26 @@ def test_decide_recovery_returns_expected_policy(
     action: RecoveryAction,
 ) -> None:
     assert_decision(error, retryable=retryable, action=action)
+
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ArchiveAuthenticationReadError("PRIVATE-ARCHIVE-SECRET"),
+        InvalidArchiveAuthenticationFormatError("PRIVATE-ARCHIVE-SECRET"),
+        ArchiveAuthenticationFilenameMismatchError("PRIVATE-ARCHIVE-SECRET"),
+        ArchiveAuthenticationFormatVersionMismatchError("PRIVATE-ARCHIVE-SECRET"),
+        ArchiveAuthenticityMismatchError("PRIVATE-ARCHIVE-SECRET"),
+        ArchiveAuthenticationExportError("PRIVATE-ARCHIVE-SECRET"),
+        ArchiveAuthenticationMetadataMismatchError("PRIVATE-ARCHIVE-SECRET"),
+    ],
+)
+def test_archive_authenticity_errors_are_abort_without_secret(error: BaseException) -> None:
+    decision = decide_recovery(error)
+
+    assert decision.retryable is False
+    assert decision.action is RecoveryAction.ABORT
+    assert decision.reason
+    assert "PRIVATE-ARCHIVE-SECRET" not in decision.reason
+    assert "key-1" not in decision.reason

@@ -8,6 +8,7 @@ from enum import Enum
 import openai
 
 from app.exceptions import (
+    ArchiveAuthenticityError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditReportValidationError,
@@ -202,6 +203,12 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             reason="The exported audit report failed an integrity check.",
         )
 
+    if isinstance(error, ArchiveAuthenticityError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report archive could not be authenticated safely.",
+        )
 
     if isinstance(error, ReportArchiveError):
         return RecoveryDecision(

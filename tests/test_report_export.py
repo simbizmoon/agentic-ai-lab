@@ -9,6 +9,10 @@ from typing import Any
 import pytest
 
 from app import report_export
+from app.archive_authenticity import (
+    archive_authentication_path_for,
+    verify_archive_authenticity,
+)
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import (
     AuthenticationKeyStatus,
@@ -16,6 +20,8 @@ from app.authentication_trust import (
     TrustedAuthenticationKey,
 )
 from app.exceptions import (
+    ArchiveAuthenticationExportError,
+    ArchiveAuthenticationMetadataMismatchError,
     AuditReportValidationError,
     AuthenticationExportError,
     ChecksumExportError,
@@ -29,6 +35,7 @@ from app.exceptions import (
 from app.report_archive import (
     ReportArchiveExportResult,
     archive_path_for,
+    verify_authenticated_report_archive,
     verify_report_archive,
 )
 from app.report_authenticity import (
@@ -1021,6 +1028,7 @@ def test_existing_authenticated_export_still_skips_manifest(tmp_path: Path) -> N
     assert authentication_path_for(target).exists()
     assert not manifest_path_for(target).exists()
 
+
 def test_export_json_report_archive_succeeds(tmp_path: Path) -> None:
     result = export_json_report_archive(
         path=tmp_path / "audit-report.json",
@@ -1030,6 +1038,7 @@ def test_export_json_report_archive_succeeds(tmp_path: Path) -> None:
     )
 
     assert isinstance(result[3], ReportArchiveExportResult)
+    assert result[4].filename == "audit-report.bundle.zip"
 
 
 def test_export_json_report_archive_creates_bundle_and_zip(tmp_path: Path) -> None:
@@ -1047,6 +1056,7 @@ def test_export_json_report_archive_creates_bundle_and_zip(tmp_path: Path) -> No
     assert authentication_path_for(path).exists()
     assert manifest_path_for(path).exists()
     assert archive_path_for(path).exists()
+    assert archive_authentication_path_for(archive_path_for(path)).exists()
 
 
 def test_export_json_report_archive_verifies(tmp_path: Path) -> None:
@@ -1064,6 +1074,17 @@ def test_export_json_report_archive_verifies(tmp_path: Path) -> None:
         trust_store=trust_store(),
         verification_time=VERIFICATION_TIME,
     ).member_count == 4
+    assert verify_authenticated_report_archive(
+        archive_path=archive_path_for(path),
+        trust_store=trust_store(),
+        verification_time=VERIFICATION_TIME,
+    ).member_count == 4
+    assert verify_archive_authenticity(
+        archive_path=archive_path_for(path),
+        trust_store=trust_store(),
+        verification_time=VERIFICATION_TIME,
+        expected_archive_format_version=1,
+    ).filename == archive_path_for(path).name
 
 
 def test_export_json_report_archive_failure_keeps_bundle_files(
@@ -1075,7 +1096,7 @@ def test_export_json_report_archive_failure_keeps_bundle_files(
     def fail_archive(**kwargs: object) -> None:
         raise ReportArchiveExportError("PRIVATE-ARCHIVE-ERROR")
 
-    monkeypatch.setattr(report_export, "export_report_archive", fail_archive)
+    monkeypatch.setattr(report_export, "export_authenticated_report_archive", fail_archive)
 
     with pytest.raises(ReportArchiveExportError):
         export_json_report_archive(
@@ -1090,6 +1111,7 @@ def test_export_json_report_archive_failure_keeps_bundle_files(
     assert authentication_path_for(path).exists()
     assert manifest_path_for(path).exists()
     assert not archive_path_for(path).exists()
+    assert not archive_authentication_path_for(archive_path_for(path)).exists()
 
 
 def test_existing_bundle_export_still_skips_archive(tmp_path: Path) -> None:
@@ -1103,3 +1125,76 @@ def test_existing_bundle_export_still_skips_archive(tmp_path: Path) -> None:
     )
 
     assert not archive_path_for(path).exists()
+
+
+
+def test_export_json_report_archive_hmac_failure_keeps_zip_and_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "audit-report.json"
+
+    def fail_archive_hmac(**kwargs: object) -> object:
+        from app.report_archive import export_report_archive
+
+        export_report_archive(
+            report_path=kwargs["report_path"],
+            archive_path=kwargs["archive_path"],
+            trust_store=kwargs["trust_store"],
+            verification_time=kwargs["authenticated_at"],
+        )
+        raise ArchiveAuthenticationExportError("PRIVATE-ARCHIVE-SECRET")
+
+    monkeypatch.setattr(report_export, "export_authenticated_report_archive", fail_archive_hmac)
+
+    with pytest.raises(ArchiveAuthenticationExportError):
+        export_json_report_archive(
+            path=path,
+            json_text=valid_json_text(),
+            trust_store=trust_store(),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+
+    assert path.exists()
+    assert checksum_path_for(path).exists()
+    assert authentication_path_for(path).exists()
+    assert manifest_path_for(path).exists()
+    assert archive_path_for(path).exists()
+
+
+
+def test_export_json_report_archive_rejects_report_archive_hmac_metadata_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "audit-report.json"
+
+    def mismatched_archive(**kwargs: object) -> tuple[ReportArchiveExportResult, object]:
+        from app.archive_authenticity import ArchiveAuthentication
+        from app.report_archive import export_report_archive
+
+        archive = export_report_archive(
+            report_path=kwargs["report_path"],
+            archive_path=kwargs["archive_path"],
+            trust_store=kwargs["trust_store"],
+            verification_time=kwargs["authenticated_at"],
+        )
+        return archive, ArchiveAuthentication(
+            algorithm="archive-hmac-sha256-v1",
+            protocol_version=1,
+            archive_format_version=1,
+            key_id="other-key",
+            authenticated_at=AUTHENTICATED_AT,
+            digest="0" * 64,
+            filename=archive.archive_filename,
+        )
+
+    monkeypatch.setattr(report_export, "export_authenticated_report_archive", mismatched_archive)
+
+    with pytest.raises(ArchiveAuthenticationMetadataMismatchError):
+        export_json_report_archive(
+            path=path,
+            json_text=valid_json_text(),
+            trust_store=trust_store(),
+            authenticated_at=AUTHENTICATED_AT,
+        )

@@ -9,6 +9,10 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pytest
 
 import scripts.audit_report as script
+from app.archive_authenticity import (
+    archive_authentication_path_for,
+    verify_archive_authenticity,
+)
 from app.audit_report import validate_audit_report_json
 from app.authentication_keyring import HMAC_KEY_ENV_NAME, HMAC_KEY_ID_ENV_NAME
 from app.authentication_trust import (
@@ -2448,6 +2452,13 @@ def test_archive_export_creates_zip_and_outputs_fields(
     assert "Archive Format Version: 1" in output
     assert "Archive Members: 4" in output
     assert "Archive SHA-256:" in output
+    assert archive_authentication_path_for(archive_path_for(output_path)).is_file()
+    assert "Archive Authentication:" in output
+    assert "Archive Authentication Algorithm: archive-hmac-sha256-v1" in output
+    assert "Archive Authentication Protocol Version: 1" in output
+    assert "Archive Authentication Key ID:" in output
+    assert "Archive Authenticated At:" in output
+    assert "Archive HMAC:" in output
 
 
 def test_archive_export_zip_verifies(
@@ -2463,20 +2474,27 @@ def test_archive_export_zip_verifies(
         ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
     ) == 0
 
+    store = AuthenticationTrustStore(
+        keys=(
+            TrustedAuthenticationKey(
+                HMAC_KEY_ID,
+                HMAC_SECRET,
+                AuthenticationKeyStatus.ACTIVE,
+                datetime.fromisoformat(VALID_FROM),
+            ),
+        )
+    )
     assert verify_report_archive(
         archive_path=archive_path_for(output_path),
-        trust_store=AuthenticationTrustStore(
-            keys=(
-                TrustedAuthenticationKey(
-                    HMAC_KEY_ID,
-                    HMAC_SECRET,
-                    AuthenticationKeyStatus.ACTIVE,
-                    datetime.fromisoformat(VALID_FROM),
-                ),
-            )
-        ),
+        trust_store=store,
         verification_time=datetime.now(UTC),
     ).member_count == 4
+    assert verify_archive_authenticity(
+        archive_path=archive_path_for(output_path),
+        trust_store=store,
+        verification_time=datetime.now(UTC),
+        expected_archive_format_version=1,
+    ).filename == archive_path_for(output_path).name
 
 
 @pytest.mark.parametrize(
@@ -2626,6 +2644,11 @@ def test_verify_archive_tamper_returns_five(
         ["--verify-archive", "report.bundle.zip", "--output", "out.json"],
         ["--verify-archive", "report.bundle.zip", "--archive"],
         ["--verify-archive", "report.bundle.zip", "--format", "json"],
+        ["--verify-archive-authenticity", "report.bundle.zip", "--output", "out.json"],
+        ["--verify-archive-authenticity", "report.bundle.zip", "--archive"],
+        ["--verify-archive-authenticity", "report.bundle.zip", "--format", "json"],
+        ["--verify-archive-authenticity", "report.bundle.zip", "--status", "success"],
+        ["--verify-archive-authenticity", "report.bundle.zip", "--verify-archive", "report.bundle.zip"],
         ["--verify-archive", "report.bundle.zip", "--status", "success"],
     ],
 )
@@ -2652,4 +2675,75 @@ def test_verify_archive_failure_header_and_secret_omission(
     assert "Action: abort" in output
     assert "Retryable: false" in output
     assert "PRIVATE-ARCHIVE-ERROR" not in output
+    assert HMAC_SECRET_B64 not in output
+
+
+
+def test_verify_archive_authenticity_success_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+
+    assert script.main(["--verify-archive-authenticity", str(archive_path_for(output_path))]) == 0
+    output = capsys.readouterr().out
+
+    assert "Audit report archive authenticity verified." in output
+    assert "Algorithm: archive-hmac-sha256-v1" in output
+    assert "Protocol Version: 1" in output
+    assert "Archive Format Version: 1" in output
+    assert "Key ID:" in output
+    assert "Archive HMAC:" in output
+    assert HMAC_SECRET_B64 not in output
+
+
+def test_verify_archive_authenticity_does_not_call_internal_zip_verify(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+
+    def fail_internal(*args: object, **kwargs: object) -> None:
+        raise AssertionError("internal archive verification must not run")
+
+    monkeypatch.setattr(script, "verify_authenticated_report_archive", fail_internal)
+
+    assert script.main(["--verify-archive-authenticity", str(archive_path_for(output_path))]) == 0
+
+
+def test_verify_archive_authenticity_tamper_returns_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_authentication_key(monkeypatch)
+    output_path = tmp_path / "audit-report.json"
+    run_main(
+        monkeypatch,
+        tmp_path,
+        ["--format", "json", "--output", str(output_path), "--authenticate", "--archive"],
+    )
+    archive_path = archive_path_for(output_path)
+    archive_path.write_bytes(b"PRIVATE-ARCHIVE-SECRET")
+
+    assert script.main(["--verify-archive-authenticity", str(archive_path)]) == 5
+    output = capsys.readouterr().out
+
+    assert "[ERROR] Audit report archive authenticity verification failed" in output
+    assert "Action: abort" in output
+    assert "Retryable: false" in output
+    assert "PRIVATE-ARCHIVE-SECRET" not in output
     assert HMAC_SECRET_B64 not in output

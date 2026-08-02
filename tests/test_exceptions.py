@@ -1,6 +1,13 @@
 from app.exceptions import (
     ActiveAuthenticationKeyNotFoundError,
     AgenticAILabError,
+    ArchiveAuthenticationExportError,
+    ArchiveAuthenticationFilenameMismatchError,
+    ArchiveAuthenticationFormatVersionMismatchError,
+    ArchiveAuthenticationMetadataMismatchError,
+    ArchiveAuthenticationReadError,
+    ArchiveAuthenticityError,
+    ArchiveAuthenticityMismatchError,
     AttemptBudgetExceededError,
     AuditLogError,
     AuditLogParseError,
@@ -19,6 +26,7 @@ from app.exceptions import (
     DuplicateReportArchiveMemberError,
     ExecutionBudgetError,
     IncompleteReportBundleError,
+    InvalidArchiveAuthenticationFormatError,
     InvalidAuditEventError,
     InvalidAuthenticationFormatError,
     InvalidAuthenticationKeyError,
@@ -446,3 +454,36 @@ def test_concrete_report_archive_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 13
+
+
+
+def test_archive_authenticity_error_inherits_from_project_error() -> None:
+    assert issubclass(ArchiveAuthenticityError, AgenticAILabError)
+
+
+def test_concrete_archive_authenticity_errors_inherit_from_archive_authenticity_error() -> None:
+    for exception_type in (
+        ArchiveAuthenticationReadError,
+        InvalidArchiveAuthenticationFormatError,
+        ArchiveAuthenticationFilenameMismatchError,
+        ArchiveAuthenticationFormatVersionMismatchError,
+        ArchiveAuthenticityMismatchError,
+        ArchiveAuthenticationExportError,
+        ArchiveAuthenticationMetadataMismatchError,
+    ):
+        assert issubclass(exception_type, ArchiveAuthenticityError)
+
+
+def test_concrete_archive_authenticity_errors_are_distinct_classes() -> None:
+    classes = {
+        ArchiveAuthenticityError,
+        ArchiveAuthenticationReadError,
+        InvalidArchiveAuthenticationFormatError,
+        ArchiveAuthenticationFilenameMismatchError,
+        ArchiveAuthenticationFormatVersionMismatchError,
+        ArchiveAuthenticityMismatchError,
+        ArchiveAuthenticationExportError,
+        ArchiveAuthenticationMetadataMismatchError,
+    }
+
+    assert len(classes) == 8

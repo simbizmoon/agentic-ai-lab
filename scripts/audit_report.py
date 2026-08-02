@@ -12,6 +12,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.archive_authenticity import (
+    REPORT_ARCHIVE_FORMAT_VERSION,
+    archive_authentication_path_for,
+    verify_archive_authenticity,
+)
 from app.audit_report import (
     AuditReportFilter,
     AuditReportFormat,
@@ -26,6 +31,7 @@ from app.authentication_trust import (
     load_authentication_trust_store,
 )
 from app.exceptions import (
+    ArchiveAuthenticityError,
     AuditLogError,
     ReportArchiveError,
     ReportAuthenticityError,
@@ -35,9 +41,8 @@ from app.exceptions import (
 )
 from app.recovery import decide_recovery
 from app.report_archive import (
-    REPORT_ARCHIVE_FORMAT_VERSION,
     archive_path_for,
-    verify_report_archive,
+    verify_authenticated_report_archive,
 )
 from app.report_authenticity import (
     authentication_path_for,
@@ -126,6 +131,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verify an exported audit report ZIP archive without extracting it.",
     )
     parser.add_argument(
+        "--verify-archive-authenticity",
+        type=Path,
+        help="Verify only an exported audit report ZIP archive HMAC sidecar.",
+    )
+    parser.add_argument(
         "--revoked-key-policy",
         choices=[policy.value for policy in RevokedKeyPolicy],
         default=RevokedKeyPolicy.REJECT.value,
@@ -139,7 +149,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     selected_verify_modes = sum(
         value is not None
-        for value in (args.verify, args.verify_authenticity, args.verify_bundle, args.verify_archive)
+        for value in (
+            args.verify,
+            args.verify_authenticity,
+            args.verify_bundle,
+            args.verify_archive_authenticity,
+            args.verify_archive,
+        )
     )
     if selected_verify_modes > 1:
         parser.error("only one verify mode can be used at a time")
@@ -158,6 +174,12 @@ def main(argv: list[str] | None = None) -> int:
             args.verify_bundle,
             revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
         )
+    if args.verify_archive_authenticity is not None:
+        _validate_archive_authenticity_verify_args(parser, args)
+        return _run_verify_archive_authenticity(
+            args.verify_archive_authenticity,
+            revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
+        )
     if args.verify_archive is not None:
         _validate_archive_verify_args(parser, args)
         return _run_verify_archive(
@@ -165,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
             revoked_key_policy=RevokedKeyPolicy(args.revoked_key_policy),
         )
     if args.revoked_key_policy != RevokedKeyPolicy.REJECT.value:
-        parser.error("--revoked-key-policy can only be used with verify authenticity, bundle, or archive modes")
+        parser.error("--revoked-key-policy can only be used with verify authenticity, bundle, archive authenticity, or archive modes")
 
     if args.archive and args.output is None:
         parser.error("--archive requires --output")
@@ -203,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
                 authenticated_at = datetime.now(UTC)
                 trust_store = load_authentication_trust_store(environ=os.environ)
                 if args.archive:
-                    checksum, authentication, manifest, archive = export_json_report_archive(
+                    checksum, authentication, manifest, archive, archive_authentication = export_json_report_archive(
                         path=args.output,
                         json_text=rendered_report,
                         trust_store=trust_store,
@@ -217,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
                         authenticated_at=authenticated_at,
                     )
                     archive = None
+                    archive_authentication = None
                 print("Audit report exported successfully.")
                 print(f"Output: {args.output}")
                 print(f"Checksum: {checksum_path_for(args.output)}")
@@ -228,11 +251,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Key ID: {authentication.key_id}")
                 print(f"Authenticated At: {authentication.authenticated_at.isoformat()}")
                 print(f"HMAC: {authentication.digest}")
-                if archive is not None:
-                    print(f"Archive: {archive_path_for(args.output)}")
+                if archive is not None and archive_authentication is not None:
+                    archive_path = archive_path_for(args.output)
+                    print(f"Archive: {archive_path}")
                     print(f"Archive Format Version: {REPORT_ARCHIVE_FORMAT_VERSION}")
                     print(f"Archive Members: {archive.member_count}")
                     print(f"Archive SHA-256: {archive.archive_sha256}")
+                    print(f"Archive Authentication: {archive_authentication_path_for(archive_path)}")
+                    print(f"Archive Authentication Algorithm: {archive_authentication.algorithm}")
+                    print(f"Archive Authentication Protocol Version: {archive_authentication.protocol_version}")
+                    print(f"Archive Authentication Key ID: {archive_authentication.key_id}")
+                    print(f"Archive Authenticated At: {archive_authentication.authenticated_at.isoformat()}")
+                    print(f"Archive HMAC: {archive_authentication.digest}")
                 return 0
 
             checksum = export_json_report_with_checksum(
@@ -248,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         print(rendered_report)
         return 0
     except (
+        ArchiveAuthenticityError,
         AuditLogError,
         ReportArchiveError,
     ReportAuthenticityError,
@@ -330,6 +361,29 @@ def _validate_bundle_verify_args(
         parser.error("--verify-bundle cannot be used with --format json")
 
 
+
+def _validate_archive_authenticity_verify_args(
+    parser: argparse.ArgumentParser,
+    args: argparse.Namespace,
+) -> None:
+    if args.output is not None:
+        parser.error("--verify-archive-authenticity cannot be used with --output")
+    if args.authenticate:
+        parser.error("--verify-archive-authenticity cannot be used with --authenticate")
+    if args.archive:
+        parser.error("--verify-archive-authenticity cannot be used with --archive")
+    if args.since is not None:
+        parser.error("--verify-archive-authenticity cannot be used with --since")
+    if args.until is not None:
+        parser.error("--verify-archive-authenticity cannot be used with --until")
+    if args.model is not None:
+        parser.error("--verify-archive-authenticity cannot be used with --model")
+    if args.status != AuditStatusFilter.ALL.value:
+        parser.error("--verify-archive-authenticity cannot be used with --status")
+    if args.format == AuditReportFormat.JSON.value:
+        parser.error("--verify-archive-authenticity cannot be used with --format json")
+
+
 def _validate_archive_verify_args(
     parser: argparse.ArgumentParser,
     args: argparse.Namespace,
@@ -352,6 +406,40 @@ def _validate_archive_verify_args(
         parser.error("--verify-archive cannot be used with --format json")
 
 
+
+def _run_verify_archive_authenticity(
+    verify_path: Path,
+    *,
+    revoked_key_policy: RevokedKeyPolicy,
+) -> int:
+    try:
+        trust_store = load_authentication_trust_store(environ=os.environ)
+        result = verify_archive_authenticity(
+            archive_path=verify_path,
+            trust_store=trust_store,
+            verification_time=datetime.now(UTC),
+            expected_archive_format_version=REPORT_ARCHIVE_FORMAT_VERSION,
+            revoked_key_policy=revoked_key_policy,
+        )
+    except (ArchiveAuthenticityError, ReportAuthenticityError) as error:
+        _print_recovery_error(
+            header="[ERROR] Audit report archive authenticity verification failed",
+            error=error,
+        )
+        return 5
+
+    print("Audit report archive authenticity verified.")
+    print(f"Archive: {verify_path}")
+    print(f"Authentication: {archive_authentication_path_for(verify_path)}")
+    print(f"Algorithm: {result.algorithm}")
+    print(f"Protocol Version: {result.protocol_version}")
+    print(f"Archive Format Version: {result.archive_format_version}")
+    print(f"Key ID: {result.key_id}")
+    print(f"Authenticated At: {result.authenticated_at.isoformat()}")
+    print(f"Archive HMAC: {result.digest}")
+    return 0
+
+
 def _run_verify_archive(
     verify_path: Path,
     *,
@@ -359,13 +447,14 @@ def _run_verify_archive(
 ) -> int:
     try:
         trust_store = load_authentication_trust_store(environ=os.environ)
-        result = verify_report_archive(
+        result = verify_authenticated_report_archive(
             archive_path=verify_path,
             trust_store=trust_store,
             verification_time=datetime.now(UTC),
             revoked_key_policy=revoked_key_policy,
         )
     except (
+        ArchiveAuthenticityError,
         AuditLogError,
         ReportArchiveError,
         ReportAuthenticityError,
@@ -385,10 +474,15 @@ def _run_verify_archive(
     print(f"Members: {result.member_count}")
     print(f"Manifest Version: {result.manifest_version}")
     print(f"Report Schema Version: {result.report_schema_version}")
-    print(f"Authentication Protocol Version: {result.authentication_protocol_version}")
-    print(f"Algorithm: {result.algorithm}")
-    print(f"Key ID: {result.key_id}")
-    print(f"Authenticated At: {result.authenticated_at.isoformat()}")
+    print(f"Archive Authentication Protocol Version: {result.archive_authentication_protocol_version}")
+    print(f"Archive Authentication Algorithm: {result.archive_algorithm}")
+    print(f"Archive Authentication Key ID: {result.archive_key_id}")
+    print(f"Archive Authenticated At: {result.archive_authenticated_at.isoformat()}")
+    print(f"Archive HMAC: {result.archive_digest}")
+    print(f"Authentication Protocol Version: {result.report_authentication_protocol_version}")
+    print(f"Algorithm: {result.report_algorithm}")
+    print(f"Key ID: {result.report_key_id}")
+    print(f"Authenticated At: {result.report_authenticated_at.isoformat()}")
     print(f"Report Filename: {result.report_filename}")
     return 0
 

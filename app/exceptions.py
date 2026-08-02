@@ -319,3 +319,35 @@ class ReportArchiveDigestMismatchError(ReportArchiveError):
 
 class ReportArchiveMetadataMismatchError(ReportArchiveError):
     """Raised when archive metadata is inconsistent across members."""
+
+
+class ArchiveAuthenticityError(AgenticAILabError):
+    """Base exception for audit report archive authenticity errors."""
+
+
+class ArchiveAuthenticationReadError(ArchiveAuthenticityError):
+    """Raised when archive authentication data cannot be read."""
+
+
+class InvalidArchiveAuthenticationFormatError(ArchiveAuthenticityError):
+    """Raised when an archive authentication sidecar has an invalid format."""
+
+
+class ArchiveAuthenticationFilenameMismatchError(ArchiveAuthenticityError):
+    """Raised when an archive authentication sidecar references another archive."""
+
+
+class ArchiveAuthenticationFormatVersionMismatchError(ArchiveAuthenticityError):
+    """Raised when archive authentication uses a different archive format."""
+
+
+class ArchiveAuthenticityMismatchError(ArchiveAuthenticityError):
+    """Raised when an archive authentication code does not match."""
+
+
+class ArchiveAuthenticationExportError(ArchiveAuthenticityError):
+    """Raised when an archive authentication sidecar cannot be written safely."""
+
+
+class ArchiveAuthenticationMetadataMismatchError(ArchiveAuthenticityError):
+    """Raised when archive authentication metadata is inconsistent."""

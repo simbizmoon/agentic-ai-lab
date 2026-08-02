@@ -10,6 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 import pytest
 
 from app import report_archive
+from app.archive_authenticity import archive_authentication_path_for
 from app.authentication_trust import (
     AuthenticationKeyStatus,
     AuthenticationTrustStore,
@@ -17,6 +18,7 @@ from app.authentication_trust import (
     TrustedAuthenticationKey,
 )
 from app.exceptions import (
+    ArchiveAuthenticityMismatchError,
     AuthenticationFromFutureError,
     DuplicateReportArchiveMemberError,
     IncompleteReportBundleError,
@@ -38,12 +40,15 @@ from app.report_archive import (
     REPORT_ARCHIVE_FORMAT_VERSION,
     ZIP_MEMBER_MODE,
     ZIP_MEMBER_TIMESTAMP,
+    AuthenticatedReportArchiveResult,
     ReportArchiveExportResult,
     ReportArchiveVerificationResult,
     archive_path_for,
     expected_archive_members,
+    export_authenticated_report_archive,
     export_report_archive,
     validate_archive_member_name,
+    verify_authenticated_report_archive,
     verify_report_archive,
 )
 from app.report_authenticity import HMAC_ALGORITHM, HMAC_PROTOCOL_VERSION
@@ -565,3 +570,97 @@ def test_errors_do_not_expose_secret_member_or_digest(tmp_path: Path) -> None:
     assert SECRET.decode("ascii") not in message
     assert "audit-report.json" not in message
     assert "a" * 64 not in message
+
+
+
+def test_export_authenticated_report_archive_creates_archive_hmac(tmp_path: Path) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+
+    archive, authentication = export_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    assert isinstance(archive, ReportArchiveExportResult)
+    assert authentication.key_id == "key-1"
+    assert authentication.authenticated_at == AUTHENTICATED_AT
+    assert archive_authentication_path_for(archive_path).is_file()
+
+
+def test_verify_authenticated_report_archive_success(tmp_path: Path) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    export_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+
+    result = verify_authenticated_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        verification_time=VERIFICATION_TIME,
+    )
+
+    assert isinstance(result, AuthenticatedReportArchiveResult)
+    assert result.archive_authentication_protocol_version == 1
+    assert result.archive_key_id == "key-1"
+    assert result.archive_authenticated_at == AUTHENTICATED_AT
+    assert result.report_authentication_protocol_version == HMAC_PROTOCOL_VERSION
+    assert result.report_key_id == "key-1"
+    assert result.member_count == MAX_ARCHIVE_MEMBER_COUNT
+
+
+def test_verify_authenticated_report_archive_checks_hmac_before_zip_parser(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+    export_authenticated_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store(),
+        authenticated_at=AUTHENTICATED_AT,
+    )
+    archive_path.write_bytes(b"changed")
+
+    def fail_zip_verify(**kwargs: object) -> None:
+        raise AssertionError("internal archive verification must not run")
+
+    monkeypatch.setattr(report_archive, "verify_report_archive", fail_zip_verify)
+
+    with pytest.raises(ArchiveAuthenticityMismatchError):
+        verify_authenticated_report_archive(
+            archive_path=archive_path,
+            trust_store=trust_store(),
+            verification_time=VERIFICATION_TIME,
+        )
+
+
+def test_export_authenticated_report_archive_keeps_zip_when_hmac_export_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    report_path = export_bundle(tmp_path)
+    archive_path = archive_path_for(report_path)
+
+    def fail_export(**kwargs: object) -> None:
+        raise RuntimeError(PRIVATE_TEXT)
+
+    monkeypatch.setattr(report_archive, "export_archive_authentication_file", fail_export)
+
+    with pytest.raises(RuntimeError) as exc_info:
+        export_authenticated_report_archive(
+            report_path=report_path,
+            archive_path=archive_path,
+            trust_store=trust_store(),
+            authenticated_at=AUTHENTICATED_AT,
+        )
+
+    assert archive_path.exists()
+    assert PRIVATE_TEXT in str(exc_info.value)

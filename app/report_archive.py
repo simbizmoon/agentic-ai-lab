@@ -11,11 +11,21 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from zipfile import ZIP_DEFLATED, BadZipFile, LargeZipFile, ZipFile, ZipInfo
 
+from app.archive_authenticity import (
+    MAX_ARCHIVE_COMPRESSED_BYTES,
+    REPORT_ARCHIVE_FORMAT_VERSION,
+    ArchiveAuthentication,
+    archive_authentication_path_for,
+    build_archive_authentication,
+    export_archive_authentication_file,
+    verify_archive_authenticity,
+)
 from app.audit_report import validate_audit_report_json
 from app.authentication_trust import (
     AuthenticationTrustStore,
     RevokedKeyPolicy,
     ensure_key_trusted_for_verification,
+    select_signing_key,
 )
 from app.exceptions import (
     AuthenticationFilenameMismatchError,
@@ -56,10 +66,8 @@ from app.report_integrity import (
     parse_report_checksum,
 )
 
-REPORT_ARCHIVE_FORMAT_VERSION = 1
 ZIP_MEMBER_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 MAX_ARCHIVE_MEMBER_COUNT = 4
-MAX_ARCHIVE_COMPRESSED_BYTES = 20 * 1024 * 1024
 MAX_ARCHIVE_MEMBER_UNCOMPRESSED_BYTES = 10 * 1024 * 1024
 MAX_ARCHIVE_TOTAL_UNCOMPRESSED_BYTES = 20 * 1024 * 1024
 MAX_ARCHIVE_COMPRESSION_RATIO = 100.0
@@ -100,6 +108,25 @@ class ReportArchiveVerificationResult:
     report_filename: str
     archive_sha256: str
     member_count: int
+
+
+@dataclass(frozen=True)
+class AuthenticatedReportArchiveResult:
+    archive_format_version: int
+    archive_authentication_protocol_version: int
+    archive_algorithm: str
+    archive_key_id: str
+    archive_authenticated_at: datetime
+    archive_digest: str
+    archive_sha256: str
+    member_count: int
+    manifest_version: int
+    report_schema_version: int
+    report_authentication_protocol_version: int
+    report_algorithm: str
+    report_key_id: str
+    report_authenticated_at: datetime
+    report_filename: str
 
 
 def archive_path_for(report_path: Path) -> Path:
@@ -320,6 +347,83 @@ def verify_report_archive(
         report_filename=manifest.report.filename,
         archive_sha256=calculate_sha256(archive_path),
         member_count=len(members),
+    )
+
+
+
+def export_authenticated_report_archive(
+    *,
+    report_path: Path,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    authenticated_at: datetime,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+) -> tuple[ReportArchiveExportResult, ArchiveAuthentication]:
+    signing_key = select_signing_key(
+        trust_store=trust_store,
+        authenticated_at=authenticated_at,
+    )
+    archive = export_report_archive(
+        report_path=report_path,
+        archive_path=archive_path,
+        trust_store=trust_store,
+        verification_time=authenticated_at,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    authentication = build_archive_authentication(
+        archive_path=archive_path,
+        key=signing_key,
+        authenticated_at=authenticated_at,
+        archive_format_version=REPORT_ARCHIVE_FORMAT_VERSION,
+    )
+    export_archive_authentication_file(
+        path=archive_authentication_path_for(archive_path),
+        authentication=authentication,
+    )
+    return archive, authentication
+
+
+def verify_authenticated_report_archive(
+    *,
+    archive_path: Path,
+    trust_store: AuthenticationTrustStore,
+    verification_time: datetime,
+    revoked_key_policy: RevokedKeyPolicy = RevokedKeyPolicy.REJECT,
+    maximum_clock_skew: timedelta = MAX_AUTHENTICATION_CLOCK_SKEW,
+) -> AuthenticatedReportArchiveResult:
+    archive_authentication = verify_archive_authenticity(
+        archive_path=archive_path,
+        trust_store=trust_store,
+        verification_time=verification_time,
+        expected_archive_format_version=REPORT_ARCHIVE_FORMAT_VERSION,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    archive = verify_report_archive(
+        archive_path=archive_path,
+        trust_store=trust_store,
+        verification_time=verification_time,
+        revoked_key_policy=revoked_key_policy,
+        maximum_clock_skew=maximum_clock_skew,
+    )
+    return AuthenticatedReportArchiveResult(
+        archive_format_version=archive.archive_format_version,
+        archive_authentication_protocol_version=archive_authentication.protocol_version,
+        archive_algorithm=archive_authentication.algorithm,
+        archive_key_id=archive_authentication.key_id,
+        archive_authenticated_at=archive_authentication.authenticated_at,
+        archive_digest=archive_authentication.digest,
+        archive_sha256=archive.archive_sha256,
+        member_count=archive.member_count,
+        manifest_version=archive.manifest_version,
+        report_schema_version=archive.report_schema_version,
+        report_authentication_protocol_version=archive.authentication_protocol_version,
+        report_algorithm=archive.algorithm,
+        report_key_id=archive.key_id,
+        report_authenticated_at=archive.authenticated_at,
+        report_filename=archive.report_filename,
     )
 
 
