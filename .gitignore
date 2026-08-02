@@ -38,6 +38,7 @@ Thumbs.db
 
 # Logs and runtime data
 logs/
+reports/
 *.log
 tmp/
 .cache/

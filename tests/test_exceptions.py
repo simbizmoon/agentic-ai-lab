@@ -8,8 +8,11 @@ from app.exceptions import (
     ExecutionBudgetError,
     InvalidAuditEventError,
     InvalidMigrationRegistryError,
+    InvalidReportExportPathError,
     InvalidSchemaVersionError,
     MissingSchemaMigrationError,
+    ReportExportError,
+    ReportExportWriteError,
     SchemaCompatibilityError,
     SchemaDowngradeError,
     SchemaMigrationError,
@@ -168,3 +171,25 @@ def test_concrete_schema_migration_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 6
+
+
+def test_report_export_error_inherits_from_project_error() -> None:
+    assert issubclass(ReportExportError, AgenticAILabError)
+
+
+def test_concrete_report_export_errors_inherit_from_base_error() -> None:
+    for exception_type in (
+        InvalidReportExportPathError,
+        ReportExportWriteError,
+    ):
+        assert issubclass(exception_type, ReportExportError)
+
+
+def test_concrete_report_export_errors_are_distinct_classes() -> None:
+    exception_types = {
+        ReportExportError,
+        InvalidReportExportPathError,
+        ReportExportWriteError,
+    }
+
+    assert len(exception_types) == 3

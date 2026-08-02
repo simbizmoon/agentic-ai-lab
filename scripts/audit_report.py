@@ -20,8 +20,9 @@ from app.audit_report import (
     read_audit_events,
     render_audit_report,
 )
-from app.exceptions import AuditLogError
+from app.exceptions import AuditLogError, ReportExportError
 from app.recovery import decide_recovery
+from app.report_export import export_json_report
 
 AUDIT_LOG_PATH = PROJECT_ROOT / "logs" / "structured_analysis.jsonl"
 
@@ -62,12 +63,20 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[report_format.value for report_format in AuditReportFormat],
         default=AuditReportFormat.TEXT.value,
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Atomically export a JSON audit report to this file path.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.output is not None and args.format != AuditReportFormat.JSON.value:
+        parser.error("--output requires --format json")
+
     try:
         report_filter = AuditReportFilter(
             since=args.since,
@@ -90,9 +99,15 @@ def main(argv: list[str] | None = None) -> int:
             report_filter=report_filter,
             report_format=AuditReportFormat(args.format),
         )
+        if args.output is not None:
+            export_json_report(path=args.output, json_text=rendered_report)
+            print("Audit report exported successfully.")
+            print(f"Output: {args.output}")
+            return 0
+
         print(rendered_report)
         return 0
-    except AuditLogError as error:
+    except (AuditLogError, ReportExportError) as error:
         decision = decide_recovery(error)
         print("[ERROR] Audit report generation failed")
         print(f"Action: {decision.action.value}")

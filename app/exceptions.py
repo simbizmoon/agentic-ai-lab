@@ -110,3 +110,15 @@ class MissingSchemaMigrationError(SchemaMigrationError):
 
 class SchemaMigrationStepError(SchemaMigrationError):
     """Raised when a migration step fails or returns an invalid result."""
+
+
+class ReportExportError(AgenticAILabError):
+    """Base exception for audit report export errors."""
+
+
+class InvalidReportExportPathError(ReportExportError):
+    """Raised when an audit report export path is invalid."""
+
+
+class ReportExportWriteError(ReportExportError):
+    """Raised when an audit report cannot be written safely."""

@@ -11,6 +11,7 @@ from app.exceptions import (
     AttemptBudgetExceededError,
     AuditLogError,
     AuditReportValidationError,
+    ReportExportError,
     SchemaCompatibilityError,
     SchemaMigrationError,
     StructuredResponseIncompleteError,
@@ -179,6 +180,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="The schema payload could not be migrated safely.",
+        )
+
+    if isinstance(error, ReportExportError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The audit report could not be exported safely.",
         )
 
     if isinstance(error, ValueError):

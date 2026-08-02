@@ -7,7 +7,7 @@ import pytest
 
 import scripts.audit_report as script
 from app.audit_report import validate_audit_report_json
-from app.exceptions import AuditReportValidationError
+from app.exceptions import AuditReportValidationError, ReportExportWriteError
 from app.observability import AUDIT_SCHEMA_VERSION
 
 PRIVATE_INPUT = "착석 상태를 자동으로 감지하고 장시간 착석 시 사용자에게 진동 알림"
@@ -855,3 +855,222 @@ def test_script_payload_validation_failure_does_not_modify_log(
     script.main(["--format", "json"])
 
     assert path.read_text(encoding="utf-8") == before
+
+
+def test_json_output_can_be_exported_to_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "reports" / "audit-report.json"
+
+    assert run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)]) == 0
+
+    assert output_path.is_file()
+
+
+def test_json_output_export_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    assert run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)]) == 0
+
+
+def test_json_output_export_creates_parent_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "nested" / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    assert output_path.parent.is_dir()
+
+
+def test_json_output_export_file_passes_contract_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    validate_audit_report_json(output_path.read_text(encoding="utf-8"))
+
+
+def test_json_output_export_prints_success_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    output = capsys.readouterr().out
+
+    assert "Audit report exported successfully." in output
+    assert f"Output: {output_path}" in output
+
+
+def test_json_output_export_does_not_print_full_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output_path = tmp_path / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+    output = capsys.readouterr().out
+
+    assert not output.lstrip().startswith("{")
+    assert '"schema_version"' not in output
+    assert '"report_type"' not in output
+
+
+def test_output_without_output_keeps_json_stdout_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    run_main(monkeypatch, tmp_path, ["--format", "json"])
+
+    assert json.loads(capsys.readouterr().out)["report_type"] == "structured_analysis_audit_report"
+
+
+def test_text_format_with_output_exits_with_code_two(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--format", "text", "--output", str(tmp_path / "report.json")])
+
+    assert exc_info.value.code == 2
+
+
+def test_output_with_default_text_format_exits_with_code_two(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        script.main(["--output", str(tmp_path / "report.json")])
+
+    assert exc_info.value.code == 2
+
+
+def test_invalid_output_extension_returns_exit_code_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "audit-report.txt"
+
+    assert run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)]) == 5
+
+
+def test_export_write_failure_returns_exit_code_five(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def fail_export(**kwargs: object) -> None:
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report", fail_export)
+
+    assert script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")]) == 5
+
+
+def test_export_failure_outputs_abort_action(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def fail_export(**kwargs: object) -> None:
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report", fail_export)
+    script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
+
+    assert "Action: abort" in capsys.readouterr().out
+
+
+def test_export_failure_outputs_retryable_false(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def fail_export(**kwargs: object) -> None:
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report", fail_export)
+    script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
+
+    assert "Retryable: false" in capsys.readouterr().out
+
+
+def test_export_failure_does_not_print_success_message(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+
+    def fail_export(**kwargs: object) -> None:
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report", fail_export)
+    script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
+
+    assert "Audit report exported successfully." not in capsys.readouterr().out
+
+
+def test_export_failure_preserves_existing_target_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    configure_log(monkeypatch, tmp_path, success_event())
+    output_path = tmp_path / "audit-report.json"
+    output_path.write_text("existing", encoding="utf-8")
+
+    def fail_export(**kwargs: object) -> None:
+        raise ReportExportWriteError("PRIVATE-EXPORT-ERROR")
+
+    monkeypatch.setattr(script, "export_json_report", fail_export)
+    script.main(["--format", "json", "--output", str(output_path)])
+
+    assert output_path.read_text(encoding="utf-8") == "existing"
+
+
+def test_export_does_not_modify_source_audit_jsonl(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = configure_log(monkeypatch, tmp_path, success_event(), failure_event())
+    before = path.read_text(encoding="utf-8")
+
+    script.main(["--format", "json", "--output", str(tmp_path / "audit-report.json")])
+
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_export_uses_tmp_path_not_project_reports(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "reports" / "audit-report.json"
+
+    run_main(monkeypatch, tmp_path, ["--format", "json", "--output", str(output_path)])
+
+    assert output_path.exists()
+    assert not (script.PROJECT_ROOT / "reports" / "audit-report.json").exists()
+
+
+def test_export_script_does_not_create_openai_client() -> None:
+    assert not hasattr(script, "create_openai_client")
+
+
+def test_export_script_does_not_load_settings() -> None:
+    assert not hasattr(script, "load_settings")
+
+
+def test_export_script_does_not_access_env() -> None:
+    assert "dotenv" not in script.__dict__
