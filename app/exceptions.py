@@ -78,3 +78,7 @@ class InvalidAuditEventError(AuditLogError):
 
 class AuditReportValidationError(AuditLogError):
     """Raised when an audit report output contract is invalid."""
+
+
+class SchemaCompatibilityError(AgenticAILabError):
+    """Raised when a published schema contract changes unexpectedly."""

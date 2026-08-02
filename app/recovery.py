@@ -11,6 +11,7 @@ from app.exceptions import (
     AttemptBudgetExceededError,
     AuditLogError,
     AuditReportValidationError,
+    SchemaCompatibilityError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
     StructuredResponseRefusalError,
@@ -163,6 +164,13 @@ def decide_recovery(error: BaseException) -> RecoveryDecision:
             retryable=False,
             action=RecoveryAction.ABORT,
             reason="Structured analysis audit logging failed.",
+        )
+
+    if isinstance(error, SchemaCompatibilityError):
+        return RecoveryDecision(
+            retryable=False,
+            action=RecoveryAction.ABORT,
+            reason="The published audit report schema contract changed unexpectedly.",
         )
 
     if isinstance(error, ValueError):

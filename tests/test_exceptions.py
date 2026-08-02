@@ -7,6 +7,7 @@ from app.exceptions import (
     AuditReportValidationError,
     ExecutionBudgetError,
     InvalidAuditEventError,
+    SchemaCompatibilityError,
     StructuredAnalysisError,
     StructuredResponseIncompleteError,
     StructuredResponseParseError,
@@ -98,7 +99,6 @@ def test_audit_log_error_inherits_from_project_error() -> None:
 def test_audit_log_read_errors_inherit_from_audit_log_error() -> None:
     for exception_type in (
         AuditLogReadError,
-    AuditReportValidationError,
         AuditLogParseError,
         UnsupportedAuditSchemaError,
         InvalidAuditEventError,
@@ -110,7 +110,6 @@ def test_audit_log_read_errors_inherit_from_audit_log_error() -> None:
 def test_concrete_audit_log_read_errors_are_distinct_classes() -> None:
     exception_types = {
         AuditLogReadError,
-    AuditReportValidationError,
         AuditLogParseError,
         UnsupportedAuditSchemaError,
         InvalidAuditEventError,
@@ -118,3 +117,18 @@ def test_concrete_audit_log_read_errors_are_distinct_classes() -> None:
     }
 
     assert len(exception_types) == 5
+
+
+def test_schema_compatibility_error_inherits_from_project_error() -> None:
+    assert issubclass(SchemaCompatibilityError, AgenticAILabError)
+
+
+def test_schema_compatibility_error_is_distinct_class() -> None:
+    exception_types = {
+        SchemaCompatibilityError,
+        AuditLogError,
+        AuditReportValidationError,
+        InvalidAuditEventError,
+    }
+
+    assert len(exception_types) == 4

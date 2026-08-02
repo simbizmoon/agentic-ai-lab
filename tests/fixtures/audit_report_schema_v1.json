@@ -1,0 +1,363 @@
+{
+  "$defs": {
+    "AuditErrorCountPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        },
+        "error_type": {
+          "minLength": 1,
+          "title": "Error Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "error_type",
+        "count"
+      ],
+      "title": "AuditErrorCountPayload",
+      "type": "object"
+    },
+    "AuditModelStatsPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "average_success_elapsed_seconds": {
+          "minimum": 0.0,
+          "title": "Average Success Elapsed Seconds",
+          "type": "number"
+        },
+        "failure_count": {
+          "minimum": 0,
+          "title": "Failure Count",
+          "type": "integer"
+        },
+        "model": {
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "recorded_total_tokens": {
+          "minimum": 0,
+          "title": "Recorded Total Tokens",
+          "type": "integer"
+        },
+        "success_count": {
+          "minimum": 0,
+          "title": "Success Count",
+          "type": "integer"
+        },
+        "success_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Success Rate",
+          "type": "number"
+        },
+        "total_events": {
+          "minimum": 0,
+          "title": "Total Events",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model",
+        "total_events",
+        "success_count",
+        "failure_count",
+        "success_rate",
+        "recorded_total_tokens",
+        "average_success_elapsed_seconds"
+      ],
+      "title": "AuditModelStatsPayload",
+      "type": "object"
+    },
+    "AuditRecoveryActionCountPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/RecoveryAction"
+        },
+        "count": {
+          "minimum": 1,
+          "title": "Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action",
+        "count"
+      ],
+      "title": "AuditRecoveryActionCountPayload",
+      "type": "object"
+    },
+    "AuditReportCorrectionPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "average_attempts": {
+          "minimum": 0.0,
+          "title": "Average Attempts",
+          "type": "number"
+        },
+        "corrected_success_count": {
+          "minimum": 0,
+          "title": "Corrected Success Count",
+          "type": "integer"
+        },
+        "correction_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Correction Rate",
+          "type": "number"
+        }
+      },
+      "required": [
+        "corrected_success_count",
+        "correction_rate",
+        "average_attempts"
+      ],
+      "title": "AuditReportCorrectionPayload",
+      "type": "object"
+    },
+    "AuditReportFailuresPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "non_retryable_count": {
+          "minimum": 0,
+          "title": "Non Retryable Count",
+          "type": "integer"
+        },
+        "retryable_count": {
+          "minimum": 0,
+          "title": "Retryable Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "retryable_count",
+        "non_retryable_count"
+      ],
+      "title": "AuditReportFailuresPayload",
+      "type": "object"
+    },
+    "AuditReportFilterPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Since"
+        },
+        "status": {
+          "$ref": "#/$defs/AuditStatusFilter"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Until"
+        }
+      },
+      "required": [
+        "since",
+        "until",
+        "model",
+        "status"
+      ],
+      "title": "AuditReportFilterPayload",
+      "type": "object"
+    },
+    "AuditReportLatencyPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "average_success_elapsed_seconds": {
+          "minimum": 0.0,
+          "title": "Average Success Elapsed Seconds",
+          "type": "number"
+        },
+        "maximum_success_elapsed_seconds": {
+          "minimum": 0.0,
+          "title": "Maximum Success Elapsed Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "average_success_elapsed_seconds",
+        "maximum_success_elapsed_seconds"
+      ],
+      "title": "AuditReportLatencyPayload",
+      "type": "object"
+    },
+    "AuditReportSummaryPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "failure_count": {
+          "minimum": 0,
+          "title": "Failure Count",
+          "type": "integer"
+        },
+        "success_count": {
+          "minimum": 0,
+          "title": "Success Count",
+          "type": "integer"
+        },
+        "success_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Success Rate",
+          "type": "number"
+        },
+        "total_events": {
+          "minimum": 0,
+          "title": "Total Events",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_events",
+        "success_count",
+        "failure_count",
+        "success_rate"
+      ],
+      "title": "AuditReportSummaryPayload",
+      "type": "object"
+    },
+    "AuditReportUsagePayload": {
+      "additionalProperties": false,
+      "properties": {
+        "average_tokens": {
+          "minimum": 0.0,
+          "title": "Average Tokens",
+          "type": "number"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "title": "Total Tokens",
+          "type": "integer"
+        },
+        "usage_event_count": {
+          "minimum": 0,
+          "title": "Usage Event Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "usage_event_count",
+        "total_tokens",
+        "average_tokens"
+      ],
+      "title": "AuditReportUsagePayload",
+      "type": "object"
+    },
+    "AuditStatusFilter": {
+      "enum": [
+        "all",
+        "success",
+        "failure"
+      ],
+      "title": "AuditStatusFilter",
+      "type": "string"
+    },
+    "RecoveryAction": {
+      "enum": [
+        "retry_later",
+        "modify_request",
+        "fix_configuration",
+        "human_review",
+        "abort"
+      ],
+      "title": "RecoveryAction",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "correction": {
+      "$ref": "#/$defs/AuditReportCorrectionPayload"
+    },
+    "errors_by_type": {
+      "items": {
+        "$ref": "#/$defs/AuditErrorCountPayload"
+      },
+      "title": "Errors By Type",
+      "type": "array"
+    },
+    "failures": {
+      "$ref": "#/$defs/AuditReportFailuresPayload"
+    },
+    "filters": {
+      "$ref": "#/$defs/AuditReportFilterPayload"
+    },
+    "latency": {
+      "$ref": "#/$defs/AuditReportLatencyPayload"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/AuditModelStatsPayload"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "recorded_usage": {
+      "$ref": "#/$defs/AuditReportUsagePayload"
+    },
+    "recovery_actions": {
+      "items": {
+        "$ref": "#/$defs/AuditRecoveryActionCountPayload"
+      },
+      "title": "Recovery Actions",
+      "type": "array"
+    },
+    "report_type": {
+      "const": "structured_analysis_audit_report",
+      "title": "Report Type",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "summary": {
+      "$ref": "#/$defs/AuditReportSummaryPayload"
+    }
+  },
+  "required": [
+    "schema_version",
+    "report_type",
+    "filters",
+    "summary",
+    "correction",
+    "recorded_usage",
+    "latency",
+    "failures",
+    "errors_by_type",
+    "recovery_actions",
+    "models"
+  ],
+  "title": "AuditReportPayload",
+  "type": "object"
+}
