@@ -6,6 +6,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.document_workflow_state import (
+    DocumentWorkflowStatus,
+)
 from app.schemas.tool_workflow_event import ToolWorkflowEvent
 
 
@@ -18,6 +21,10 @@ class ToolWorkflowResult(BaseModel):
     tool_name: str | None = None
     observation: dict[str, Any] | None = None
     final_answer: str = Field(min_length=1)
+    workflow_status: DocumentWorkflowStatus = (
+        DocumentWorkflowStatus.COMPLETED
+    )
+    correction_attempted: bool = False
     events: list[ToolWorkflowEvent] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -44,5 +51,13 @@ class ToolWorkflowResult(BaseModel):
                 raise ValueError(
                     "observation must be absent when tool_used is false"
                 )
+
+        if (
+            self.workflow_status
+            != DocumentWorkflowStatus.COMPLETED
+        ):
+            raise ValueError(
+                "successful ToolWorkflowResult must be completed"
+            )
 
         return self

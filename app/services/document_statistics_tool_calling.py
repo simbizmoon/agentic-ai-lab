@@ -7,6 +7,10 @@ import time
 from enum import StrEnum
 from typing import Any
 
+from app.schemas.document_workflow_state import (
+    DocumentWorkflowState,
+    DocumentWorkflowStatus,
+)
 from app.schemas.tool_workflow_event import (
     ToolWorkflowEvent,
     ToolWorkflowEventType,
@@ -19,6 +23,19 @@ from app.tools.tool_dispatcher import (
 )
 from app.tools.tool_registry import (
     get_allowed_tool_schemas,
+)
+from app.workflows.document_workflow_failure import (
+    DocumentWorkflowFailure,
+    create_document_workflow_failure,
+)
+from app.workflows.document_workflow_steps import (
+    complete_direct_response,
+    complete_final_response,
+    mark_tool_selected,
+    record_tool_observation,
+    request_tool_correction,
+    retry_tool_execution,
+    start_model_decision,
 )
 
 TOOL_INSTRUCTIONS = (
@@ -76,10 +93,33 @@ class ToolCallingError(RuntimeError):
         *,
         code: ToolCallingErrorCode,
         safe_message: str,
+        failure: DocumentWorkflowFailure | None = None,
     ) -> None:
         super().__init__(safe_message)
         self.code = code
         self.safe_message = safe_message
+        self.failure = failure
+
+
+def _workflow_error(
+    state: DocumentWorkflowState,
+    *,
+    code: ToolCallingErrorCode,
+    safe_message: str,
+) -> ToolCallingError:
+    """Create a Tool error with a structured FAILED state."""
+
+    failure = create_document_workflow_failure(
+        state,
+        error_code=code.value,
+        safe_message=safe_message,
+    )
+
+    return ToolCallingError(
+        code=code,
+        safe_message=safe_message,
+        failure=failure,
+    )
 
 
 def _elapsed_ms(started_ns: int) -> float:
@@ -137,6 +177,23 @@ def _get_single_function_call(response: object) -> object | None:
     return function_calls[0]
 
 
+def _get_single_function_call_with_state(
+    response: object,
+    *,
+    state: DocumentWorkflowState,
+) -> object | None:
+    """Return one function call and preserve structural failures."""
+
+    try:
+        return _get_single_function_call(response)
+    except ToolCallingError as exc:
+        raise _workflow_error(
+            state,
+            code=exc.code,
+            safe_message=exc.safe_message,
+        ) from exc
+
+
 def _extract_function_call(
     function_call: object,
 ) -> tuple[str, str, str]:
@@ -165,6 +222,23 @@ def _extract_function_call(
         )
 
     return tool_name, arguments, call_id
+
+
+def _extract_function_call_with_state(
+    function_call: object,
+    *,
+    state: DocumentWorkflowState,
+) -> tuple[str, str, str]:
+    """Extract function-call metadata and preserve failures."""
+
+    try:
+        return _extract_function_call(function_call)
+    except ToolCallingError as exc:
+        raise _workflow_error(
+            state,
+            code=exc.code,
+            safe_message=exc.safe_message,
+        ) from exc
 
 
 def _execute_function_call(
@@ -216,6 +290,23 @@ def _get_final_text(response: object) -> str:
     return final_text.strip()
 
 
+def _get_final_text_with_state(
+    response: object,
+    *,
+    state: DocumentWorkflowState,
+) -> str:
+    """Return final text and preserve missing-text failures."""
+
+    try:
+        return _get_final_text(response)
+    except ToolCallingError as exc:
+        raise _workflow_error(
+            state,
+            code=exc.code,
+            safe_message=exc.safe_message,
+        ) from exc
+
+
 def run_document_tool_workflow(
     *,
     client: Any,
@@ -240,6 +331,13 @@ def run_document_tool_workflow(
         )
     ]
 
+    state = DocumentWorkflowState(
+        status=DocumentWorkflowStatus.RECEIVED,
+        user_request=user_request,
+        events=events,
+    )
+    state = start_model_decision(state)
+
     allowed_tools = get_allowed_tool_schemas()
 
     first_response = client.responses.create(
@@ -251,10 +349,16 @@ def run_document_tool_workflow(
         parallel_tool_calls=False,
     )
 
-    function_call = _get_single_function_call(first_response)
+    function_call = _get_single_function_call_with_state(
+        first_response,
+        state=state,
+    )
 
     if function_call is None:
-        final_answer = _get_final_text(first_response)
+        final_answer = _get_final_text_with_state(
+            first_response,
+            state=state,
+        )
 
         events.append(
             ToolWorkflowEvent(
@@ -263,13 +367,26 @@ def run_document_tool_workflow(
             )
         )
 
-        return ToolWorkflowResult(
-            tool_used=False,
+        state = complete_direct_response(
+            state,
             final_answer=final_answer,
             events=events,
         )
 
-    tool_name, _, _ = _extract_function_call(function_call)
+        return ToolWorkflowResult(
+            tool_used=False,
+            final_answer=state.final_answer,
+            workflow_status=state.status,
+            correction_attempted=(
+                state.correction_attempted
+            ),
+            events=state.events,
+        )
+
+    tool_name, _, _ = _extract_function_call_with_state(
+        function_call,
+        state=state,
+    )
 
     events.append(
         ToolWorkflowEvent(
@@ -277,6 +394,20 @@ def run_document_tool_workflow(
             event_type=ToolWorkflowEventType.TOOL_SELECTED,
             tool_name=tool_name,
         )
+    )
+
+    _, arguments_json, call_id = (
+        _extract_function_call_with_state(
+            function_call,
+            state=state,
+        )
+    )
+    state = mark_tool_selected(
+        state,
+        tool_name=tool_name,
+        call_id=call_id,
+        arguments_json=arguments_json,
+        events=events,
     )
 
     try:
@@ -292,9 +423,15 @@ def run_document_tool_workflow(
                 tool_name=tool_name,
             )
         )
+        state = record_tool_observation(
+            state,
+            observation=tool_result,
+            events=events,
+        )
     except ToolDispatchError as exc:
         if exc.code not in RECOVERABLE_TOOL_ERRORS:
-            raise ToolCallingError(
+            raise _workflow_error(
+                state,
                 code=ToolCallingErrorCode.TOOL_CALL_FAILED,
                 safe_message=exc.safe_message,
             ) from exc
@@ -315,6 +452,10 @@ def run_document_tool_workflow(
                     "error_code": exc.code.value,
                 },
             )
+        )
+        state = request_tool_correction(
+            state,
+            events=events,
         )
 
         correction_response = client.responses.create(
@@ -338,12 +479,16 @@ def run_document_tool_workflow(
             parallel_tool_calls=False,
         )
 
-        corrected_call = _get_single_function_call(
-            correction_response
+        corrected_call = (
+            _get_single_function_call_with_state(
+                correction_response,
+                state=state,
+            )
         )
 
         if corrected_call is None:
-            raise ToolCallingError(
+            raise _workflow_error(
+                state,
                 code=(
                     ToolCallingErrorCode.TOOL_CORRECTION_FAILED
                 ),
@@ -352,8 +497,18 @@ def run_document_tool_workflow(
                 ),
             )
 
-        tool_name, _, _ = _extract_function_call(
-            corrected_call
+        tool_name, arguments_json, corrected_call_id = (
+            _extract_function_call_with_state(
+                corrected_call,
+                state=state,
+            )
+        )
+        state = retry_tool_execution(
+            state,
+            tool_name=tool_name,
+            call_id=corrected_call_id,
+            arguments_json=arguments_json,
+            events=events,
         )
 
         try:
@@ -380,8 +535,14 @@ def run_document_tool_workflow(
                     tool_name=tool_name,
                 )
             )
+            state = record_tool_observation(
+                state,
+                observation=tool_result,
+                events=events,
+            )
         except ToolDispatchError as retry_exc:
-            raise ToolCallingError(
+            raise _workflow_error(
+                state,
                 code=(
                     ToolCallingErrorCode.TOOL_CORRECTION_FAILED
                 ),
@@ -415,7 +576,10 @@ def run_document_tool_workflow(
         tool_choice="none",
     )
 
-    final_answer = _get_final_text(final_response)
+    final_answer = _get_final_text_with_state(
+        final_response,
+        state=state,
+    )
 
     events.append(
         ToolWorkflowEvent(
@@ -423,13 +587,20 @@ def run_document_tool_workflow(
             event_type=ToolWorkflowEventType.FINAL_RESPONSE_CREATED,
         )
     )
+    state = complete_final_response(
+        state,
+        final_answer=final_answer,
+        events=events,
+    )
 
     return ToolWorkflowResult(
         tool_used=True,
-        tool_name=tool_name,
-        observation=tool_result,
-        final_answer=final_answer,
-        events=events,
+        tool_name=state.selected_tool_name,
+        observation=state.observation,
+        final_answer=state.final_answer,
+        workflow_status=state.status,
+        correction_attempted=state.correction_attempted,
+        events=state.events,
     )
 
 

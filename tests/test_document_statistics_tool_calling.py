@@ -794,3 +794,448 @@ def test_elapsed_ms_uses_performance_counter(
     )
 
     assert service._elapsed_ms(1_000_000_000) == 125.5
+
+
+def test_successful_workflow_exposes_completed_status() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            function_call_response(),
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert (
+        result.workflow_status
+        == DocumentWorkflowStatus.COMPLETED
+    )
+    assert result.correction_attempted is False
+
+
+def test_corrected_workflow_exposes_correction_attempt() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    invalid_response = SimpleNamespace(
+        id="resp_invalid_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"   "}',
+                call_id="call_invalid_state",
+            )
+        ],
+        output_text="",
+    )
+    corrected_response = SimpleNamespace(
+        id="resp_corrected_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"corrected text"}',
+                call_id="call_corrected_state",
+            )
+        ],
+        output_text="",
+    )
+    client = FakeClient(
+        [
+            invalid_response,
+            corrected_response,
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert (
+        result.workflow_status
+        == DocumentWorkflowStatus.COMPLETED
+    )
+    assert result.correction_attempted is True
+
+
+def test_workflow_error_preserves_failed_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowState,
+        DocumentWorkflowStatus,
+    )
+    from app.services import (
+        document_statistics_tool_calling as service,
+    )
+
+    state = DocumentWorkflowState(
+        status=DocumentWorkflowStatus.RECEIVED,
+        user_request="Analyze the document.",
+    )
+    state = service.start_model_decision(state)
+
+    error = service._workflow_error(
+        state,
+        code=service.ToolCallingErrorCode.INVALID_RESPONSE,
+        safe_message="The model response was invalid.",
+    )
+
+    assert (
+        error.code
+        == service.ToolCallingErrorCode.INVALID_RESPONSE
+    )
+    assert error.failure is not None
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.error_code == "invalid_response"
+    assert error.failure.state.error_message == (
+        "The model response was invalid."
+    )
+
+
+def test_legacy_tool_calling_error_can_omit_failure() -> None:
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        ToolCallingErrorCode,
+    )
+
+    error = ToolCallingError(
+        code=ToolCallingErrorCode.INVALID_RESPONSE,
+        safe_message="Invalid response.",
+    )
+
+    assert error.failure is None
+
+
+def test_unsupported_tool_error_preserves_failed_workflow_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        run_document_tool_workflow,
+    )
+
+    response = SimpleNamespace(
+        id="resp_unsupported_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="delete_all_files",
+                arguments="{}",
+                call_id="call_forbidden_state",
+            )
+        ],
+        output_text="",
+    )
+    client = FakeClient([response])
+
+    with pytest.raises(ToolCallingError) as exc_info:
+        run_document_tool_workflow(
+            client=client,
+            model="test-model",
+            user_request="Delete everything.",
+        )
+
+    error = exc_info.value
+
+    assert error.failure is not None
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.selected_tool_name == (
+        "delete_all_files"
+    )
+    assert error.failure.state.tool_call_id == (
+        "call_forbidden_state"
+    )
+    assert error.failure.state.error_code == (
+        "tool_call_failed"
+    )
+    assert error.failure.state.error_message == (
+        "unsupported tool: delete_all_files"
+    )
+
+
+def test_missing_corrected_call_preserves_failed_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        run_document_tool_workflow,
+    )
+
+    invalid_response = SimpleNamespace(
+        id="resp_invalid_correction_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"   "}',
+                call_id="call_invalid_correction_state",
+            )
+        ],
+        output_text="",
+    )
+    no_correction_response = SimpleNamespace(
+        id="resp_no_correction_state",
+        output=[],
+        output_text="I could not correct the arguments.",
+    )
+    client = FakeClient(
+        [
+            invalid_response,
+            no_correction_response,
+        ]
+    )
+
+    with pytest.raises(ToolCallingError) as exc_info:
+        run_document_tool_workflow(
+            client=client,
+            model="test-model",
+            user_request="Count the supplied document.",
+        )
+
+    error = exc_info.value
+
+    assert error.failure is not None
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.correction_attempted is True
+    assert error.failure.state.selected_tool_name == (
+        "get_document_statistics"
+    )
+    assert error.failure.state.error_code == (
+        "tool_correction_failed"
+    )
+
+
+def test_failed_corrected_tool_preserves_failed_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        run_document_tool_workflow,
+    )
+
+    invalid_response = SimpleNamespace(
+        id="resp_invalid_retry_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"   "}',
+                call_id="call_invalid_retry_state",
+            )
+        ],
+        output_text="",
+    )
+    still_invalid_response = SimpleNamespace(
+        id="resp_still_invalid_retry_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":""}',
+                call_id="call_still_invalid_retry_state",
+            )
+        ],
+        output_text="",
+    )
+    client = FakeClient(
+        [
+            invalid_response,
+            still_invalid_response,
+        ]
+    )
+
+    with pytest.raises(ToolCallingError) as exc_info:
+        run_document_tool_workflow(
+            client=client,
+            model="test-model",
+            user_request="Count the supplied document.",
+        )
+
+    error = exc_info.value
+
+    assert error.failure is not None
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.correction_attempted is True
+    assert error.failure.state.tool_call_id == (
+        "call_still_invalid_retry_state"
+    )
+    assert error.failure.state.error_code == (
+        "tool_correction_failed"
+    )
+
+
+def test_multiple_tool_calls_preserve_failed_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        run_document_tool_workflow,
+    )
+
+    response = SimpleNamespace(
+        id="resp_multiple_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"first"}',
+                call_id="call_multiple_1",
+            ),
+            SimpleNamespace(
+                type="function_call",
+                name="extract_document_keywords",
+                arguments=(
+                    '{"document_text":"second",'
+                    '"max_keywords":5}'
+                ),
+                call_id="call_multiple_2",
+            ),
+        ],
+        output_text="",
+    )
+    client = FakeClient([response])
+
+    with pytest.raises(ToolCallingError) as exc_info:
+        run_document_tool_workflow(
+            client=client,
+            model="test-model",
+            user_request="Run both document operations.",
+        )
+
+    error = exc_info.value
+
+    assert error.failure is not None
+    assert error.code.value == "multiple_tool_calls"
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.error_code == (
+        "multiple_tool_calls"
+    )
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+
+
+def test_invalid_function_call_preserves_failed_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        run_document_tool_workflow,
+    )
+
+    response = SimpleNamespace(
+        id="resp_invalid_function_state",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="",
+                arguments="{}",
+                call_id="call_invalid_function_state",
+            )
+        ],
+        output_text="",
+    )
+    client = FakeClient([response])
+
+    with pytest.raises(ToolCallingError) as exc_info:
+        run_document_tool_workflow(
+            client=client,
+            model="test-model",
+            user_request="Analyze the document.",
+        )
+
+    error = exc_info.value
+
+    assert error.failure is not None
+    assert error.code.value == "invalid_function_call"
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.error_code == (
+        "invalid_function_call"
+    )
+
+
+def test_missing_final_text_preserves_failed_state() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+    from app.services.document_statistics_tool_calling import (
+        ToolCallingError,
+        run_document_tool_workflow,
+    )
+
+    missing_text_response = SimpleNamespace(
+        id="resp_missing_final_state",
+        output=[],
+        output_text="",
+    )
+    client = FakeClient(
+        [
+            function_call_response(),
+            missing_text_response,
+        ]
+    )
+
+    with pytest.raises(ToolCallingError) as exc_info:
+        run_document_tool_workflow(
+            client=client,
+            model="test-model",
+            user_request="Count the document.",
+        )
+
+    error = exc_info.value
+
+    assert error.failure is not None
+    assert error.code.value == "missing_final_text"
+    assert (
+        error.failure.state.status
+        == DocumentWorkflowStatus.FAILED
+    )
+    assert error.failure.state.selected_tool_name == (
+        "get_document_statistics"
+    )
+    assert error.failure.state.observation is not None
+    assert error.failure.state.error_code == (
+        "missing_final_text"
+    )

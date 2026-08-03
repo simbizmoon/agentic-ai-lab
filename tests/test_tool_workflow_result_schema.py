@@ -147,3 +147,57 @@ def test_workflow_result_uses_independent_event_lists() -> None:
     assert first.events == []
     assert second.events == []
     assert first.events is not second.events
+
+
+def test_workflow_result_defaults_to_completed_status() -> None:
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+
+    result = ToolWorkflowResult(
+        tool_used=False,
+        final_answer="Completed without a Tool.",
+    )
+
+    assert (
+        result.workflow_status
+        == DocumentWorkflowStatus.COMPLETED
+    )
+    assert result.correction_attempted is False
+
+
+def test_workflow_result_accepts_correction_attempted() -> None:
+    result = ToolWorkflowResult(
+        tool_used=True,
+        tool_name="get_document_statistics",
+        observation={
+            "character_count": 5,
+            "word_count": 1,
+            "line_count": 1,
+        },
+        final_answer="The document contains one word.",
+        correction_attempted=True,
+    )
+
+    assert result.correction_attempted is True
+
+
+def test_workflow_result_rejects_noncompleted_status() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas.document_workflow_state import (
+        DocumentWorkflowStatus,
+    )
+
+    with pytest.raises(
+        ValidationError,
+        match="must be completed",
+    ):
+        ToolWorkflowResult(
+            tool_used=False,
+            final_answer="Not actually completed.",
+            workflow_status=(
+                DocumentWorkflowStatus.MODEL_DECISION
+            ),
+        )
