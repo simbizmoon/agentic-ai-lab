@@ -19,6 +19,9 @@ from app.schemas.agent_trace_archive_policy import (
 from app.schemas.agent_trace_export import (
     AgentTraceExportFormat,
 )
+from app.schemas.agent_trace_maintenance import (
+    AgentTraceMaintenanceStatus,
+)
 from app.schemas.agent_trace_retention import (
     AgentTraceRetentionPolicy,
 )
@@ -150,6 +153,11 @@ def test_service_archives_then_applies_retention(
         ),
     ).maintain("trace-001")
 
+    assert result.status is (
+        AgentTraceMaintenanceStatus.SUCCESS
+    )
+    assert result.archive is not None
+    assert result.retention is not None
     assert result.archive.archived is True
     assert len(result.archive.files) == 2
     assert result.retention.scanned_file_count == 2
