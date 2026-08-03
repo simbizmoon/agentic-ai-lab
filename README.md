@@ -39,10 +39,34 @@ source .venv/bin/activate
 
 ## Current Status
 
-Phase 3 — Structured Outputs와 데이터 검증 최종 정리
+Phase 8 — Planning Agent 완료
 
-현재 Lesson: Lesson 3.35 — AIRA 문서 분석 Structured Output
+현재 상태:
 
-Transparency·암호화 하위 시스템은 완료 상태로 동결했으며,
-이제 실제 AIRA 기능을 최소 구조로 구현한다.
+- Phase 8: COMPLETE
+- 마지막 Lesson: Lesson 8.33
+- 전체 pytest: 통과
+- 전체 Ruff: 통과
+- 다음 단계: Phase 9 — Research Agent Workflow
+
+완료된 주요 기능:
+
+- 구조화된 Plan 생성과 검증
+- Plan Lifecycle과 Scheduler
+- Tool Registry와 Step 실행
+- Plan Evaluation
+- 제한된 자동 Replanning
+- Agent Trace 기록
+- Trace Timeline과 Summary
+- JSON·Text·Markdown Export
+- Trace Archive와 Retention
+- Maintenance Report와 Alert
+- Notification Port
+- Phase 8 통합 E2E 테스트
+
+## Lesson Documents
+
+- [Phase 6 — RAG](docs/lessons/phase-6-rag.md)
+- [Phase 7 — Memory](docs/lessons/phase-7-memory.md)
+- [Phase 8 — Planning Agent](docs/lessons/phase-8-planning-agent.md)
 
