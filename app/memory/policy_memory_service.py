@@ -68,13 +68,13 @@ class PolicyMemoryService:
 
         return self.policy.evaluate(request)
 
-    def create(
+    def ensure_allowed(
         self,
         request: MemoryCreate,
         *,
         user_approved: bool = False,
-    ) -> MemoryRecord:
-        """Store a memory if policy requirements are satisfied."""
+    ) -> MemoryPolicyResult:
+        """Validate policy requirements without storing."""
 
         result = self.evaluate(request)
 
@@ -91,5 +91,20 @@ class PolicyMemoryService:
             raise MemoryApprovalRequiredError(
                 result=result
             )
+
+        return result
+
+    def create(
+        self,
+        request: MemoryCreate,
+        *,
+        user_approved: bool = False,
+    ) -> MemoryRecord:
+        """Store a memory if policy requirements are satisfied."""
+
+        self.ensure_allowed(
+            request,
+            user_approved=user_approved,
+        )
 
         return self.memory_service.create(request)

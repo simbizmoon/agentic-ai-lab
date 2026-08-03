@@ -42,6 +42,11 @@ class MemoryService:
 
         return self._store
 
+    def clock_now(self) -> datetime:
+        """Return the current validated UTC service time."""
+
+        return self._validated_now()
+
     def create(
         self,
         request: MemoryCreate,
