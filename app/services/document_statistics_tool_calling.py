@@ -1,4 +1,4 @@
-"""Single-tool Responses API workflow for document statistics."""
+"""Single-call Responses API workflow for registered document tools."""
 
 from __future__ import annotations
 
@@ -7,23 +7,39 @@ from enum import StrEnum
 from typing import Any
 
 from app.schemas.tool_workflow_result import ToolWorkflowResult
-from app.tools.tool_registry import (
-    get_allowed_tool_schemas,
-)
 from app.tools.tool_dispatcher import (
     ToolDispatchError,
     ToolErrorCode,
     dispatch_tool_call,
+)
+from app.tools.tool_registry import (
+    get_allowed_tool_schemas,
 )
 
 TOOL_INSTRUCTIONS = (
     "You are AIRA, a document research assistant. "
     "Use get_document_statistics when the user asks for exact "
     "character, word, or line counts. "
-    "Do not estimate these counts yourself. "
-    "If a tool result reports invalid arguments, correct the "
-    "arguments and call the same tool once more."
+    "Use extract_document_keywords when the user asks for "
+    "frequent or representative document keywords. "
+    "Do not estimate Tool results yourself. "
+    "Choose at most one Tool for the current workflow. "
+    "If a Tool result reports invalid arguments, correct the "
+    "arguments and call the same Tool once more."
 )
+
+FINAL_RESPONSE_INSTRUCTIONS = (
+    "A local Tool has already executed successfully. "
+    "The function_call_output contains the authoritative "
+    "Tool result. "
+    "Answer the user using that result. "
+    "Do not claim that the Tool is unavailable, that it "
+    "cannot be executed, or that the result is approximate. "
+    "Do not ask to run the Tool again. "
+    "Preserve exact counts, keywords, and other values from "
+    "the Tool result."
+)
+
 
 RECOVERABLE_TOOL_ERRORS = {
     ToolErrorCode.INVALID_JSON,
@@ -183,13 +199,14 @@ def _get_final_text(response: object) -> str:
     return final_text.strip()
 
 
-def run_document_statistics_tool_workflow(
+def run_document_tool_workflow(
     *,
     client: Any,
     model: str,
     user_request: str,
 ) -> ToolWorkflowResult:
-    """Run one local tool and preserve its Observation."""
+    """Run at most one registered document Tool."""
+
 
     if not user_request.strip():
         raise ValueError("user_request must not be empty")
@@ -290,7 +307,10 @@ def run_document_statistics_tool_workflow(
 
     final_response = client.responses.create(
         model=model,
-        instructions=TOOL_INSTRUCTIONS,
+        instructions=(
+            f"{TOOL_INSTRUCTIONS} "
+            f"{FINAL_RESPONSE_INSTRUCTIONS}"
+        ),
         previous_response_id=previous_response_id,
         input=[
             _tool_output_item(
@@ -313,18 +333,48 @@ def run_document_statistics_tool_workflow(
     )
 
 
-def answer_with_document_statistics_tool(
+def answer_with_document_tools(
     *,
     client: Any,
     model: str,
     user_request: str,
 ) -> str:
-    """Return only the final answer for backward compatibility."""
+    """Return only the final answer from the document Tool workflow."""
 
-    result = run_document_statistics_tool_workflow(
+    result = run_document_tool_workflow(
         client=client,
         model=model,
         user_request=user_request,
     )
 
     return result.final_answer
+
+
+def run_document_statistics_tool_workflow(
+    *,
+    client: Any,
+    model: str,
+    user_request: str,
+) -> ToolWorkflowResult:
+    """Backward-compatible alias for the generalized workflow."""
+
+    return run_document_tool_workflow(
+        client=client,
+        model=model,
+        user_request=user_request,
+    )
+
+
+def answer_with_document_statistics_tool(
+    *,
+    client: Any,
+    model: str,
+    user_request: str,
+) -> str:
+    """Backward-compatible alias for the generalized answer helper."""
+
+    return answer_with_document_tools(
+        client=client,
+        model=model,
+        user_request=user_request,
+    )

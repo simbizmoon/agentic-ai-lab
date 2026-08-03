@@ -98,7 +98,7 @@ def test_main_returns_tool_error_exit_code(
 
     monkeypatch.setattr(
         script,
-        "run_document_statistics_tool_workflow",
+        "run_document_tool_workflow",
         fail_tool_workflow,
     )
 
@@ -137,7 +137,7 @@ def test_main_prints_observation_and_final_answer(
     )
     monkeypatch.setattr(
         script,
-        "run_document_statistics_tool_workflow",
+        "run_document_tool_workflow",
         lambda **kwargs: SimpleNamespace(
             tool_used=True,
             tool_name="get_document_statistics",

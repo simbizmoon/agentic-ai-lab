@@ -8,6 +8,13 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.tools.document_keywords import (
+    DocumentKeywordsInput,
+    extract_document_keywords,
+)
+from app.tools.document_keywords_schema import (
+    DOCUMENT_KEYWORDS_TOOL,
+)
 from app.tools.document_statistics import (
     DocumentStatisticsInput,
     get_document_statistics,
@@ -49,6 +56,16 @@ class ToolDefinition:
             )
 
 
+DOCUMENT_KEYWORDS_DEFINITION = ToolDefinition(
+    name="extract_document_keywords",
+    input_model=DocumentKeywordsInput,
+    executor=extract_document_keywords,
+    schema=DOCUMENT_KEYWORDS_TOOL,
+    read_only=True,
+    requires_approval=False,
+)
+
+
 DOCUMENT_STATISTICS_DEFINITION = ToolDefinition(
     name="get_document_statistics",
     input_model=DocumentStatisticsInput,
@@ -62,6 +79,9 @@ DOCUMENT_STATISTICS_DEFINITION = ToolDefinition(
 TOOL_REGISTRY: dict[str, ToolDefinition] = {
     DOCUMENT_STATISTICS_DEFINITION.name: (
         DOCUMENT_STATISTICS_DEFINITION
+    ),
+    DOCUMENT_KEYWORDS_DEFINITION.name: (
+        DOCUMENT_KEYWORDS_DEFINITION
     ),
 }
 

@@ -65,6 +65,40 @@ def final_response() -> object:
     )
 
 
+def keyword_function_call_response() -> object:
+    """Return a model response selecting the keyword Tool."""
+
+    return SimpleNamespace(
+        id="resp_keywords",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="extract_document_keywords",
+                arguments=(
+                    '{"document_text":'
+                    '"agent tool agent workflow",'
+                    '"max_keywords":2}'
+                ),
+                call_id="call_keywords",
+            )
+        ],
+        output_text="",
+    )
+
+
+def keyword_final_response() -> object:
+    """Return the model answer after keyword observation."""
+
+    return SimpleNamespace(
+        id="resp_keywords_final",
+        output=[],
+        output_text=(
+            "The most frequent keywords are "
+            "agent and tool."
+        ),
+    )
+
+
 def test_tool_calling_executes_tool_and_returns_final_text() -> None:
     client = FakeClient(
         [
@@ -404,3 +438,126 @@ def test_tool_calling_uses_allowed_registry_schemas(
     assert client.responses.calls[0]["tools"] == [
         custom_schema
     ]
+
+
+def test_workflow_executes_keyword_tool() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_statistics_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            keyword_function_call_response(),
+            keyword_final_response(),
+        ]
+    )
+
+    result = run_document_statistics_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request=(
+            "Extract the two most frequent keywords from: "
+            "agent tool agent workflow"
+        ),
+    )
+
+    assert result.tool_used is True
+    assert result.tool_name == "extract_document_keywords"
+    assert result.observation == {
+        "keywords": [
+            {
+                "keyword": "agent",
+                "count": 2,
+            },
+            {
+                "keyword": "tool",
+                "count": 1,
+            },
+        ]
+    }
+    assert result.final_answer == (
+        "The most frequent keywords are "
+        "agent and tool."
+    )
+
+    assert len(client.responses.calls) == 2
+
+    first_call = client.responses.calls[0]
+    final_call = client.responses.calls[1]
+
+    assert first_call["tool_choice"] == "auto"
+    assert first_call["parallel_tool_calls"] is False
+
+    tool_output = final_call["input"][0]
+
+    assert tool_output["call_id"] == "call_keywords"
+    assert '"keyword": "agent"' in tool_output["output"]
+    assert '"count": 2' in tool_output["output"]
+    assert final_call["tool_choice"] == "none"
+
+
+def test_generalized_workflow_name_executes_statistics_tool() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            function_call_response(),
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert result.tool_used is True
+    assert result.tool_name == "get_document_statistics"
+
+
+def test_generalized_answer_helper_executes_keyword_tool() -> None:
+    from app.services.document_statistics_tool_calling import (
+        answer_with_document_tools,
+    )
+
+    client = FakeClient(
+        [
+            keyword_function_call_response(),
+            keyword_final_response(),
+        ]
+    )
+
+    answer = answer_with_document_tools(
+        client=client,
+        model="test-model",
+        user_request="Extract the document keywords.",
+    )
+
+    assert answer == (
+        "The most frequent keywords are "
+        "agent and tool."
+    )
+
+
+def test_legacy_workflow_wrapper_remains_compatible() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_statistics_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            keyword_function_call_response(),
+            keyword_final_response(),
+        ]
+    )
+
+    result = run_document_statistics_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Extract the document keywords.",
+    )
+
+    assert result.tool_name == "extract_document_keywords"

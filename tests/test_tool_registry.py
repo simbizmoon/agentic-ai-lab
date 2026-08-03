@@ -40,7 +40,8 @@ def test_unknown_tool_is_not_registered() -> None:
 
 def test_registry_contains_only_explicitly_allowed_tools() -> None:
     assert set(TOOL_REGISTRY) == {
-        "get_document_statistics"
+        "get_document_statistics",
+        "extract_document_keywords",
     }
 
 
@@ -181,7 +182,14 @@ def test_allowed_tool_schemas_come_from_registry() -> None:
 
     schemas = get_allowed_tool_schemas()
 
-    assert schemas == [DOCUMENT_STATISTICS_TOOL]
+    from app.tools.document_keywords_schema import (
+        DOCUMENT_KEYWORDS_TOOL,
+    )
+
+    assert schemas == [
+        DOCUMENT_STATISTICS_TOOL,
+        DOCUMENT_KEYWORDS_TOOL,
+    ]
 
 
 def test_allowed_tool_schema_names_match_registry_keys() -> None:
@@ -195,3 +203,24 @@ def test_allowed_tool_schema_names_match_registry_keys() -> None:
     }
 
     assert schema_names == set(TOOL_REGISTRY)
+
+
+def test_document_keywords_tool_is_registered() -> None:
+    from app.tools.document_keywords import (
+        DocumentKeywordsInput,
+        extract_document_keywords,
+    )
+    from app.tools.document_keywords_schema import (
+        DOCUMENT_KEYWORDS_TOOL,
+    )
+
+    definition = get_allowed_tool(
+        "extract_document_keywords"
+    )
+
+    assert definition is not None
+    assert definition.input_model is DocumentKeywordsInput
+    assert definition.executor is extract_document_keywords
+    assert definition.schema is DOCUMENT_KEYWORDS_TOOL
+    assert definition.read_only is True
+    assert definition.requires_approval is False

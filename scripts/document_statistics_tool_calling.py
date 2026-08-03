@@ -10,7 +10,7 @@ from app.config import load_settings
 from app.services.document_statistics_tool_calling import (
     ToolCallingError,
     ToolCallingErrorCode,
-    run_document_statistics_tool_workflow,
+    run_document_tool_workflow,
 )
 from app.services.openai_client import create_openai_client
 
@@ -84,7 +84,7 @@ def main() -> int:
     )
 
     try:
-        result = run_document_statistics_tool_workflow(
+        result = run_document_tool_workflow(
             client=client,
             model=settings.openai_model,
             user_request=user_request,
