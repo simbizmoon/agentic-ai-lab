@@ -236,3 +236,40 @@ Lesson 4.1에서는 복잡한 Agent Loop를 만들지 않고,
 - 품질 확인:
   - 전체 pytest 통과
   - ruff check 통과
+
+## Phase 5 — Workflow 및 상태 관리 완료
+
+- 상태: 완료
+- 구현:
+  - DocumentWorkflowState 상태 모델
+  - RECEIVED, MODEL_DECISION, TOOL_EXECUTION
+  - TOOL_CORRECTION, FINAL_RESPONSE
+  - COMPLETED, FAILED 상태 정의
+  - 명시적 상태 전이 허용 목록
+  - 잘못된 상태 전이 차단
+  - 단계별 Workflow helper 함수
+  - 기존 Tool Calling Workflow와 상태 머신 통합
+  - 성공 결과에 최종 상태와 교정 여부 노출
+  - 실패 상태와 안전한 오류 정보 구조화
+  - Tool 실행 실패를 FAILED 상태와 연결
+  - 응답 구조 오류와 최종 응답 누락을 FAILED 상태와 연결
+- 정상 성공 경로:
+  - RECEIVED
+  - MODEL_DECISION
+  - TOOL_EXECUTION
+  - FINAL_RESPONSE
+  - COMPLETED
+- Tool 교정 경로:
+  - RECEIVED
+  - MODEL_DECISION
+  - TOOL_EXECUTION
+  - TOOL_CORRECTION
+  - TOOL_EXECUTION
+  - FINAL_RESPONSE
+  - COMPLETED
+- 실패 경로:
+  - 각 비종료 상태에서 FAILED 전이
+- 품질 확인:
+  - Phase 5 관련 pytest 통과
+  - 전체 pytest 통과
+  - 전체 ruff check 통과
