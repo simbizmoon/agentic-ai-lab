@@ -213,3 +213,26 @@ Phase 4 — Tool Calling으로 이동한다.
 
 Lesson 4.1에서는 복잡한 Agent Loop를 만들지 않고,
 허용된 로컬 Tool 하나를 정의하고 호출하는 최소 흐름부터 학습한다.
+
+## Phase 4 — Tool Calling 완료
+
+- 상태: 완료
+- 구현:
+  - Responses API 기반 Tool Calling
+  - 문서 통계 Tool
+  - 문서 키워드 추출 Tool
+  - Tool Registry 및 Dispatcher
+  - 허용 Tool 및 승인 정책
+  - Pydantic 입력 검증
+  - Tool 인수 오류 1회 교정
+  - Observation과 Final Answer 분리
+  - 단일 Tool 요청 정책
+  - 구조화 Workflow 이벤트
+  - 누적 경과시간 관측
+- 실제 API 검증:
+  - 통계 요청 → get_document_statistics
+  - 키워드 요청 → extract_document_keywords
+  - 복합 요청 → 요청 분리 안내
+- 품질 확인:
+  - 전체 pytest 통과
+  - ruff check 통과
