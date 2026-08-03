@@ -1,0 +1,11 @@
+AIRA 프로젝트는 연구 문서 분석과 개발 의사결정을 지원하는 것을 목표로 한다.
+
+현재 프로젝트 문서에는 Phase 2와 Phase 3의 실제 완료 상태가 충분히
+반영되지 않아 코드 진행 상황과 문서 기록 사이에 차이가 있다.
+
+Phase 3에서는 Structured Outputs와 Pydantic 검증을 학습했지만,
+Transparency Log, Merkle Proof, Witness Quorum, Signed Gossip Bundle까지
+구현하면서 원래 학습 목표보다 보안 인프라가 과도하게 확장되었다.
+
+앞으로는 해당 보안 하위 시스템을 동결하고, 문서 분석, Tool Calling,
+상태 관리, RAG 등 AIRA의 핵심 기능을 작은 단위로 구현해야 한다.

@@ -15,6 +15,28 @@
 9. 실패 사례 분석
 10. 평가와 학습 기록
 
+## 전체 Phase 구조
+
+0. 프로젝트 기반
+1. Agentic AI 기초
+2. OpenAI API 기초
+3. Structured Outputs와 데이터 검증
+4. Tool Calling
+5. Workflow와 상태 관리
+6. RAG
+7. Memory
+8. Planning Agent
+9. Evals와 Guardrails
+10. Multi-Agent
+11. MCP·Plugins·Skills·Codex 통합
+12. 배포와 운영 및 최종 AIRA
+
+각 Phase는 앞 단계의 결과를 기반으로 진행한다.
+
+Single Agent와 최소 기능으로 먼저 구현하고,
+실제 필요가 확인된 경우에만 Planning, Memory 및
+Multi-Agent 구조로 확장한다.
+
 ## 평가 방식
 
 각 Phase는 다음 네 영역으로 평가한다.

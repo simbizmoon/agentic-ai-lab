@@ -137,3 +137,79 @@ Phase 0 이해도 평가 결과는 통과이다.
 ### 질문
 
 작성 예정
+
+## Session 003 — OpenAI API와 Structured Outputs
+
+### Phase 2 완료
+
+- OpenAI Python SDK와 Responses API 실제 호출
+- API Key와 Secret의 환경변수 관리
+- 설정 로더와 OpenAI Client 분리
+- Response ID, Request ID 및 Token Usage 확인
+- API 오류 분류와 종료 코드 처리
+
+### Phase 3 완료 내용
+
+- JSON Schema와 엄격한 Pydantic 모델
+- Responses API Structured Outputs
+- 모델 응답의 타입·필수 값·추가 필드 검증
+- 불완전 응답, 거부, 파싱 및 Validation 오류 처리
+- 제한된 교정 재시도와 실행 Budget
+- 감사 로그, 무결성, 서명 및 공개키 검증 심화 실습
+- Transparency Log, Merkle Proof, Witness Quorum
+- Signed Gossip Bundle과 Offline Verification
+- Trust Decision Receipt와 안전한 재사용 검증
+
+보안·감사 하위 시스템은 고급 심화 실습으로 완료했으며,
+AIRA 핵심 기능에 집중하기 위해 현재 상태로 동결한다.
+
+### Lesson 3.35 — AIRA 문서 분석 Structured Output
+
+추가한 구성:
+
+- DocumentFinding과 DocumentAnalysis 스키마
+- low, medium, high FindingSeverity
+- OpenAI Structured Output 기반 analyze_document 서비스
+- 로컬 UTF-8 문서 분석 CLI
+- 스키마 테스트 7개와 서비스 테스트 9개
+
+데이터 흐름:
+
+로컬 문서 → Responses API → DocumentAnalysis → Pydantic 검증 → CLI 출력
+
+실제 gpt-5 호출에서 문서 요약, 핵심 발견, 근거, 심각도,
+권고 조치 및 인간 검토 필요 여부가 구조화되어 반환되었다.
+
+### 검증 결과
+
+- 전체 테스트: 1685개 통과
+- Ruff: 통과
+- Compileall: 통과
+- Git diff 검사: 통과
+- 실제 Responses API 호출: 성공
+- 종료 코드: 0
+
+### 핵심 학습 내용
+
+1. Structured Output은 모델 출력에 명시적인 데이터 계약을 적용한다.
+2. Pydantic은 형식과 의미 규칙을 결정적으로 검증한다.
+3. LLM은 요약·발견·권고처럼 의미 해석이 필요한 작업을 담당한다.
+4. 코드는 허용 값, 오류 처리와 완료 조건을 검증한다.
+5. 문서에서 확인한 사실과 모델이 제안한 조치를 분리해야 한다.
+6. 기존 기능을 재사용하고 불필요한 추상화를 피해야 한다.
+7. Phase 3의 보안 기능은 유용했지만 원래 목표보다 과도하게 확장되었다.
+
+### Phase 3 최종 평가
+
+- 결과: 통과
+- Structured Output와 일반 JSON 출력의 차이를 설명했다.
+- LLM과 Pydantic의 역할을 구분했다.
+- 오류 유형에 따라 재시도, 요청 수정 및 인간 검토를 구분했다.
+- 고위험 권고에 Human-in-the-loop가 필요한 이유를 설명했다.
+
+### 다음 단계
+
+Phase 4 — Tool Calling으로 이동한다.
+
+Lesson 4.1에서는 복잡한 Agent Loop를 만들지 않고,
+허용된 로컬 Tool 하나를 정의하고 호출하는 최소 흐름부터 학습한다.

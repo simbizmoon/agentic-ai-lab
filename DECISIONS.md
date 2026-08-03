@@ -36,12 +36,13 @@
 
 ## D-006 — 기본 백엔드
 
-- 상태: 잠정 확정
+- 상태: 확정
 - 날짜: 2026-07-23
+- 확정일: 2026-08-03
 - 언어: Python
 - API Framework: FastAPI
 - 데이터 검증: Pydantic
-- 재검토: Phase 2 시작 전
+- 결정: Phase 2와 Phase 3 실습 결과 현재 구성을 유지한다.
 
 ## D-007 — 에이전트 개발 순서
 
@@ -70,3 +71,33 @@
 - 비용 증가 작업
 - 개인정보 외부 전송
 - 보안 설정 변경
+
+## D-010 — 전체 학습 Phase 구조
+
+- 상태: 확정
+- 날짜: 2026-08-03
+- 결정:
+  - Phase 3: Structured Outputs와 데이터 검증
+  - Phase 4: Tool Calling
+  - Phase 5: Workflow와 상태 관리
+  - Phase 6: RAG
+  - Phase 7: Memory
+  - Phase 8: Planning Agent
+  - Phase 9: Evals와 Guardrails
+  - Phase 10: Multi-Agent
+  - Phase 11: MCP·Plugins·Skills·Codex 통합
+  - Phase 12: 배포와 운영 및 최종 AIRA
+- 이유: 단일 모델 호출에서 시작하여 Tool, Workflow, 검색,
+  Memory, Planning 및 Multi-Agent 순으로 복잡도를 단계적으로 높인다.
+
+## D-011 — Phase 3 보안 심화 기능 동결
+
+- 상태: 확정
+- 날짜: 2026-08-03
+- 결정: Phase 3에서 구현한 Transparency Log, Merkle Proof,
+  Witness Quorum, Signed Gossip Bundle 및 Trust Decision Receipt는
+  심화 실습 완료 상태로 동결한다.
+- 이유: 해당 하위 시스템을 더 확장하지 않고 AIRA의 핵심 기능인
+  Tool Calling, Workflow, RAG, Memory 및 Planning 학습으로 이동한다.
+- 재개 조건: 실제 AIRA 운영 요구 또는 구체적인 보안 위협 모델이
+  확인된 경우에만 별도 결정 후 확장한다.

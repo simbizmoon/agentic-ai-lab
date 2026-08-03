@@ -39,7 +39,10 @@ source .venv/bin/activate
 
 ## Current Status
 
-Phase 2 — OpenAI API 기초 시작 준비
+Phase 3 — Structured Outputs와 데이터 검증 최종 정리
 
-현재 Lesson: API, SDK, HTTP Request와 Response
+현재 Lesson: Lesson 3.35 — AIRA 문서 분석 Structured Output
+
+Transparency·암호화 하위 시스템은 완료 상태로 동결했으며,
+이제 실제 AIRA 기능을 최소 구조로 구현한다.
 
