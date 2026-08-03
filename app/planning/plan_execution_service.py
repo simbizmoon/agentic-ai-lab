@@ -36,6 +36,24 @@ class PlanExecutionService:
         self._lifecycle = lifecycle
         self._step_executor = step_executor
 
+    @property
+    def scheduler(self) -> PlanScheduler:
+        """Return the configured plan scheduler."""
+
+        return self._scheduler
+
+    @property
+    def lifecycle(self) -> PlanLifecycleService:
+        """Return the configured lifecycle service."""
+
+        return self._lifecycle
+
+    @property
+    def step_executor(self) -> PlanStepExecutor:
+        """Return the configured step executor."""
+
+        return self._step_executor
+
     def execute_next(
         self,
         *,
