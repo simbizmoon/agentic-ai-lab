@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.tool_workflow_event import ToolWorkflowEvent
+
 
 class ToolWorkflowResult(BaseModel):
     """Preserve Tool usage, Observation, and final model answer."""
@@ -16,6 +18,7 @@ class ToolWorkflowResult(BaseModel):
     tool_name: str | None = None
     observation: dict[str, Any] | None = None
     final_answer: str = Field(min_length=1)
+    events: list[ToolWorkflowEvent] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_tool_state(self) -> ToolWorkflowResult:

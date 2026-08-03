@@ -6,6 +6,10 @@ import json
 from enum import StrEnum
 from typing import Any
 
+from app.schemas.tool_workflow_event import (
+    ToolWorkflowEvent,
+    ToolWorkflowEventType,
+)
 from app.schemas.tool_workflow_result import ToolWorkflowResult
 from app.tools.tool_dispatcher import (
     ToolDispatchError,
@@ -215,6 +219,15 @@ def run_document_tool_workflow(
     if not user_request.strip():
         raise ValueError("user_request must not be empty")
 
+    events = [
+        ToolWorkflowEvent(
+            event_type=ToolWorkflowEventType.REQUEST_RECEIVED,
+            details={
+                "request_length": len(user_request),
+            },
+        )
+    ]
+
     allowed_tools = get_allowed_tool_schemas()
 
     first_response = client.responses.create(
@@ -229,16 +242,40 @@ def run_document_tool_workflow(
     function_call = _get_single_function_call(first_response)
 
     if function_call is None:
+        final_answer = _get_final_text(first_response)
+
+        events.append(
+            ToolWorkflowEvent(
+                event_type=ToolWorkflowEventType.DIRECT_RESPONSE,
+            )
+        )
+
         return ToolWorkflowResult(
             tool_used=False,
-            final_answer=_get_final_text(first_response),
+            final_answer=final_answer,
+            events=events,
         )
 
     tool_name, _, _ = _extract_function_call(function_call)
 
+    events.append(
+        ToolWorkflowEvent(
+            event_type=ToolWorkflowEventType.TOOL_SELECTED,
+            tool_name=tool_name,
+        )
+    )
+
     try:
         call_id, tool_result = _execute_function_call(
             function_call
+        )
+        events.append(
+            ToolWorkflowEvent(
+                event_type=(
+                    ToolWorkflowEventType.TOOL_EXECUTION_SUCCEEDED
+                ),
+                tool_name=tool_name,
+            )
         )
     except ToolDispatchError as exc:
         if exc.code not in RECOVERABLE_TOOL_ERRORS:
@@ -249,6 +286,19 @@ def run_document_tool_workflow(
 
         _, _, failed_call_id = _extract_function_call(
             function_call
+        )
+
+        events.append(
+            ToolWorkflowEvent(
+                event_type=(
+                    ToolWorkflowEventType
+                    .TOOL_ARGUMENT_CORRECTION_REQUESTED
+                ),
+                tool_name=tool_name,
+                details={
+                    "error_code": exc.code.value,
+                },
+            )
         )
 
         correction_response = client.responses.create(
@@ -294,6 +344,24 @@ def run_document_tool_workflow(
             call_id, tool_result = _execute_function_call(
                 corrected_call
             )
+            events.append(
+                ToolWorkflowEvent(
+                    event_type=(
+                        ToolWorkflowEventType
+                        .TOOL_ARGUMENTS_CORRECTED
+                    ),
+                    tool_name=tool_name,
+                )
+            )
+            events.append(
+                ToolWorkflowEvent(
+                    event_type=(
+                        ToolWorkflowEventType
+                        .TOOL_EXECUTION_SUCCEEDED
+                    ),
+                    tool_name=tool_name,
+                )
+            )
         except ToolDispatchError as retry_exc:
             raise ToolCallingError(
                 code=(
@@ -329,11 +397,20 @@ def run_document_tool_workflow(
         tool_choice="none",
     )
 
+    final_answer = _get_final_text(final_response)
+
+    events.append(
+        ToolWorkflowEvent(
+            event_type=ToolWorkflowEventType.FINAL_RESPONSE_CREATED,
+        )
+    )
+
     return ToolWorkflowResult(
         tool_used=True,
         tool_name=tool_name,
         observation=tool_result,
-        final_answer=_get_final_text(final_response),
+        final_answer=final_answer,
+        events=events,
     )
 
 

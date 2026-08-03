@@ -92,3 +92,58 @@ def test_tool_workflow_result_rejects_extra_fields() -> None:
             final_answer="Result",
             unsupported=True,
         )
+
+
+def test_workflow_result_accepts_structured_events() -> None:
+    from app.schemas.tool_workflow_event import (
+        ToolWorkflowEvent,
+        ToolWorkflowEventType,
+    )
+
+    result = ToolWorkflowResult(
+        tool_used=True,
+        tool_name="get_document_statistics",
+        observation={
+            "character_count": 10,
+            "word_count": 2,
+            "line_count": 1,
+        },
+        final_answer="The document has two words.",
+        events=[
+            ToolWorkflowEvent(
+                event_type=(
+                    ToolWorkflowEventType.REQUEST_RECEIVED
+                ),
+                details={"request_length": 20},
+            ),
+            ToolWorkflowEvent(
+                event_type=(
+                    ToolWorkflowEventType.TOOL_SELECTED
+                ),
+                tool_name="get_document_statistics",
+            ),
+        ],
+    )
+
+    assert len(result.events) == 2
+    assert result.events[0].event_type.value == (
+        "request_received"
+    )
+    assert result.events[1].tool_name == (
+        "get_document_statistics"
+    )
+
+
+def test_workflow_result_uses_independent_event_lists() -> None:
+    first = ToolWorkflowResult(
+        tool_used=False,
+        final_answer="First answer.",
+    )
+    second = ToolWorkflowResult(
+        tool_used=False,
+        final_answer="Second answer.",
+    )
+
+    assert first.events == []
+    assert second.events == []
+    assert first.events is not second.events

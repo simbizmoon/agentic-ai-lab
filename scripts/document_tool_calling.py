@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
             "with the document."
         ),
     )
+    parser.add_argument(
+        "--show-events",
+        action="store_true",
+        help="Print structured Workflow events.",
+    )
 
     return parser.parse_args()
 
@@ -72,6 +77,31 @@ def build_user_request(
     )
 
 
+def print_workflow_events(events: list[object]) -> None:
+    """Print structured Workflow events."""
+
+    print("Events:")
+
+    for index, event in enumerate(events, start=1):
+        event_type = event.event_type
+        event_value = event_type.value
+        tool_name = event.tool_name
+        details = event.details
+
+        line = f"{index}. {event_value}"
+
+        if tool_name is not None:
+            line += f" [{tool_name}]"
+
+        print(line)
+
+        if details:
+            for key, value in details.items():
+                print(f"   - {key}: {value}")
+
+    print()
+
+
 def main() -> int:
     """Run the document Tool workflow."""
 
@@ -102,6 +132,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 3
+    if args.show_events:
+        print_workflow_events(result.events)
+
     if result.tool_used:
         print("Observation:")
         print(f"- Tool: {result.tool_name}")

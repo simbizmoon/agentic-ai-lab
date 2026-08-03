@@ -603,3 +603,121 @@ def test_tool_instructions_define_compound_request_policy() -> None:
     assert "multiple operations" in TOOL_INSTRUCTIONS
     assert "do not call any Tool" in TOOL_INSTRUCTIONS
     assert "separate requests" in TOOL_INSTRUCTIONS
+
+
+def test_workflow_records_successful_tool_events() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            function_call_response(),
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert [
+        event.event_type.value
+        for event in result.events
+    ] == [
+        "request_received",
+        "tool_selected",
+        "tool_execution_succeeded",
+        "final_response_created",
+    ]
+    assert result.events[1].tool_name == (
+        "get_document_statistics"
+    )
+
+
+def test_workflow_records_direct_response_events() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    direct_response = SimpleNamespace(
+        id="resp_direct_events",
+        output=[],
+        output_text="No Tool was needed.",
+    )
+    client = FakeClient([direct_response])
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Explain a concept.",
+    )
+
+    assert [
+        event.event_type.value
+        for event in result.events
+    ] == [
+        "request_received",
+        "direct_response",
+    ]
+
+
+def test_workflow_records_argument_correction_events() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    invalid_response = SimpleNamespace(
+        id="resp_invalid_events",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"   "}',
+                call_id="call_invalid_events",
+            )
+        ],
+        output_text="",
+    )
+    corrected_response = SimpleNamespace(
+        id="resp_corrected_events",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                name="get_document_statistics",
+                arguments='{"document_text":"corrected text"}',
+                call_id="call_corrected_events",
+            )
+        ],
+        output_text="",
+    )
+    client = FakeClient(
+        [
+            invalid_response,
+            corrected_response,
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert [
+        event.event_type.value
+        for event in result.events
+    ] == [
+        "request_received",
+        "tool_selected",
+        "tool_argument_correction_requested",
+        "tool_arguments_corrected",
+        "tool_execution_succeeded",
+        "final_response_created",
+    ]
+    assert result.events[2].details == {
+        "error_code": "argument_validation_failed"
+    }
