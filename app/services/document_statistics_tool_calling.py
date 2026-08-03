@@ -6,6 +6,7 @@ import json
 from enum import StrEnum
 from typing import Any
 
+from app.schemas.tool_workflow_result import ToolWorkflowResult
 from app.tools.document_statistics_schema import (
     DOCUMENT_STATISTICS_TOOL,
 )
@@ -182,13 +183,13 @@ def _get_final_text(response: object) -> str:
     return final_text.strip()
 
 
-def answer_with_document_statistics_tool(
+def run_document_statistics_tool_workflow(
     *,
     client: Any,
     model: str,
     user_request: str,
-) -> str:
-    """Run one local tool with at most one argument correction."""
+) -> ToolWorkflowResult:
+    """Run one local tool and preserve its Observation."""
 
     if not user_request.strip():
         raise ValueError("user_request must not be empty")
@@ -205,7 +206,12 @@ def answer_with_document_statistics_tool(
     function_call = _get_single_function_call(first_response)
 
     if function_call is None:
-        return _get_final_text(first_response)
+        return ToolWorkflowResult(
+            tool_used=False,
+            final_answer=_get_final_text(first_response),
+        )
+
+    tool_name, _, _ = _extract_function_call(function_call)
 
     try:
         call_id, tool_result = _execute_function_call(
@@ -257,6 +263,10 @@ def answer_with_document_statistics_tool(
                 ),
             )
 
+        tool_name, _, _ = _extract_function_call(
+            corrected_call
+        )
+
         try:
             call_id, tool_result = _execute_function_call(
                 corrected_call
@@ -293,4 +303,26 @@ def answer_with_document_statistics_tool(
         tool_choice="none",
     )
 
-    return _get_final_text(final_response)
+    return ToolWorkflowResult(
+        tool_used=True,
+        tool_name=tool_name,
+        observation=tool_result,
+        final_answer=_get_final_text(final_response),
+    )
+
+
+def answer_with_document_statistics_tool(
+    *,
+    client: Any,
+    model: str,
+    user_request: str,
+) -> str:
+    """Return only the final answer for backward compatibility."""
+
+    result = run_document_statistics_tool_workflow(
+        client=client,
+        model=model,
+        user_request=user_request,
+    )
+
+    return result.final_answer

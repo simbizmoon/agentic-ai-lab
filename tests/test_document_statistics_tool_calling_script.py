@@ -98,7 +98,7 @@ def test_main_returns_tool_error_exit_code(
 
     monkeypatch.setattr(
         script,
-        "answer_with_document_statistics_tool",
+        "run_document_statistics_tool_workflow",
         fail_tool_workflow,
     )
 
@@ -108,3 +108,59 @@ def test_main_returns_tool_error_exit_code(
     assert exit_code == 3
     assert "[tool_call_failed]" in captured.err
     assert "unsupported tool: dangerous_tool" in captured.err
+
+
+def test_main_prints_observation_and_final_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from types import SimpleNamespace
+
+    document = tmp_path / "document.txt"
+    document.write_text("valid text", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["document_statistics_tool_calling.py", str(document)],
+    )
+    monkeypatch.setattr(
+        script,
+        "load_settings",
+        lambda: SimpleNamespace(openai_model="test-model"),
+    )
+    monkeypatch.setattr(
+        script,
+        "create_openai_client",
+        lambda settings: object(),
+    )
+    monkeypatch.setattr(
+        script,
+        "run_document_statistics_tool_workflow",
+        lambda **kwargs: SimpleNamespace(
+            tool_used=True,
+            tool_name="get_document_statistics",
+            observation={
+                "character_count": 10,
+                "word_count": 2,
+                "line_count": 1,
+            },
+            final_answer=(
+                "The document has 10 characters, "
+                "2 words, and 1 line."
+            ),
+        ),
+    )
+
+    exit_code = script.main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "Observation:" in captured.out
+    assert "get_document_statistics" in captured.out
+    assert "character_count: 10" in captured.out
+    assert "word_count: 2" in captured.out
+    assert "line_count: 1" in captured.out
+    assert "Final Answer:" in captured.out
+    assert "The document has 10 characters" in captured.out

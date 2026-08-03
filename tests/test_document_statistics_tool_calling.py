@@ -304,3 +304,58 @@ def test_tool_calling_stops_after_failed_correction() -> None:
         == "tool_correction_failed"
     )
     assert len(client.responses.calls) == 2
+
+
+def test_workflow_result_preserves_observation() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_statistics_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            function_call_response(),
+            final_response(),
+        ]
+    )
+
+    result = run_document_statistics_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert result.tool_used is True
+    assert result.tool_name == "get_document_statistics"
+    assert result.observation == {
+        "character_count": 42,
+        "word_count": 7,
+        "line_count": 2,
+    }
+    assert result.final_answer == (
+        "The document has 42 characters, "
+        "7 words, and 2 lines."
+    )
+
+
+def test_workflow_result_preserves_direct_answer() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_statistics_tool_workflow,
+    )
+
+    direct_response = SimpleNamespace(
+        id="resp_direct",
+        output=[],
+        output_text="A Tool was not required.",
+    )
+    client = FakeClient([direct_response])
+
+    result = run_document_statistics_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Explain Tool Calling.",
+    )
+
+    assert result.tool_used is False
+    assert result.tool_name is None
+    assert result.observation is None
+    assert result.final_answer == "A Tool was not required."

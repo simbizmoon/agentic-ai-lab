@@ -10,7 +10,7 @@ from app.config import load_settings
 from app.services.document_statistics_tool_calling import (
     ToolCallingError,
     ToolCallingErrorCode,
-    answer_with_document_statistics_tool,
+    run_document_statistics_tool_workflow,
 )
 from app.services.openai_client import create_openai_client
 
@@ -84,7 +84,7 @@ def main() -> int:
     )
 
     try:
-        answer = answer_with_document_statistics_tool(
+        result = run_document_statistics_tool_workflow(
             client=client,
             model=settings.openai_model,
             user_request=user_request,
@@ -100,7 +100,18 @@ def main() -> int:
         print(f"Input error: {exc}", file=sys.stderr)
         return 2
 
-    print(answer)
+    if result.tool_used:
+        print("Observation:")
+        print(f"- Tool: {result.tool_name}")
+
+        if result.observation is not None:
+            for key, value in result.observation.items():
+                print(f"- {key}: {value}")
+
+        print()
+
+    print("Final Answer:")
+    print(result.final_answer)
     return 0
 
 
