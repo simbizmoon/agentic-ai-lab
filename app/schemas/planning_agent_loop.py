@@ -111,6 +111,7 @@ class PlanningAgentLoopResult(BaseModel):
         min_length=1
     )
     status: PlanningAgentLoopStatus
+    trace_id: str | None = None
 
     @model_validator(mode="after")
     def validate_result(
@@ -138,6 +139,14 @@ class PlanningAgentLoopResult(BaseModel):
         if len(plan_ids) != len(set(plan_ids)):
             raise ValueError(
                 "every attempt must use a new plan ID"
+            )
+
+        if (
+            self.trace_id is not None
+            and not self.trace_id.strip()
+        ):
+            raise ValueError(
+                "trace_id must not be blank"
             )
 
         final_decision = (
