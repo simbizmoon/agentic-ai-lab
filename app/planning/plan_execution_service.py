@@ -9,6 +9,7 @@ from app.planning.plan_scheduler import PlanScheduler
 from app.planning.plan_step_executor import (
     PlanStepExecutor,
 )
+from app.schemas.agent_trace import AgentTraceEventType
 from app.schemas.plan import Plan, PlanStep
 from app.schemas.plan_execution import (
     PlanExecutionResult,
@@ -19,6 +20,9 @@ from app.schemas.plan_schedule import (
 )
 from app.schemas.plan_step_execution import (
     PlanStepExecutionStatus,
+)
+from app.tracing.agent_trace_session import (
+    AgentTraceSession,
 )
 
 
@@ -59,6 +63,8 @@ class PlanExecutionService:
         *,
         plan: Plan,
         schedule_request: PlanScheduleRequest | None = None,
+        trace_session: AgentTraceSession | None = None,
+        attempt_number: int | None = None,
     ) -> PlanExecutionResult:
         """Execute the next scheduled step or steps."""
 
@@ -88,6 +94,21 @@ class PlanExecutionService:
         )
 
         for step_id in schedule.selected_step_ids:
+            step = self._get_step(
+                plan=current_plan,
+                step_id=step_id,
+            )
+
+            self._emit(
+                trace_session=trace_session,
+                event_type=AgentTraceEventType.STEP_STARTED,
+                message=f"Step {step_id} started.",
+                plan_id=current_plan.plan_id,
+                step_id=step_id,
+                tool_name=step.tool_name,
+                attempt_number=attempt_number,
+            )
+
             started = self._lifecycle.start_step(
                 current_plan,
                 step_id=step_id,
@@ -98,6 +119,20 @@ class PlanExecutionService:
                 plan=current_plan,
                 step_id=step_id,
             )
+
+            self._emit(
+                trace_session=trace_session,
+                event_type=AgentTraceEventType.TOOL_STARTED,
+                message=(
+                    f"Tool execution started for step "
+                    f"{step_id}."
+                ),
+                plan_id=current_plan.plan_id,
+                step_id=step_id,
+                tool_name=step.tool_name,
+                attempt_number=attempt_number,
+            )
+
             execution = self._step_executor.execute(step)
             step_results.append(execution)
 
@@ -105,18 +140,75 @@ class PlanExecutionService:
                 execution.status
                 is PlanStepExecutionStatus.SUCCEEDED
             ):
+                self._emit(
+                    trace_session=trace_session,
+                    event_type=(
+                        AgentTraceEventType.TOOL_COMPLETED
+                    ),
+                    message=(
+                        f"Tool execution completed for step "
+                        f"{step_id}."
+                    ),
+                    plan_id=current_plan.plan_id,
+                    step_id=step_id,
+                    tool_name=execution.tool_name,
+                    attempt_number=attempt_number,
+                )
+
                 completed = self._lifecycle.complete_step(
                     current_plan,
                     step_id=step_id,
                 )
                 current_plan = completed.plan
+
+                self._emit(
+                    trace_session=trace_session,
+                    event_type=(
+                        AgentTraceEventType.STEP_COMPLETED
+                    ),
+                    message=f"Step {step_id} completed.",
+                    plan_id=current_plan.plan_id,
+                    step_id=step_id,
+                    tool_name=execution.tool_name,
+                    attempt_number=attempt_number,
+                )
                 continue
+
+            self._emit(
+                trace_session=trace_session,
+                event_type=AgentTraceEventType.TOOL_FAILED,
+                message=(
+                    f"Tool execution failed for step "
+                    f"{step_id}."
+                ),
+                plan_id=current_plan.plan_id,
+                step_id=step_id,
+                tool_name=execution.tool_name,
+                attempt_number=attempt_number,
+                metadata={
+                    "error_message": execution.error_message
+                },
+            )
 
             failed = self._lifecycle.fail_step(
                 current_plan,
                 step_id=step_id,
             )
             current_plan = failed.plan
+
+            self._emit(
+                trace_session=trace_session,
+                event_type=AgentTraceEventType.STEP_FAILED,
+                message=f"Step {step_id} failed.",
+                plan_id=current_plan.plan_id,
+                step_id=step_id,
+                tool_name=execution.tool_name,
+                attempt_number=attempt_number,
+                metadata={
+                    "error_message": execution.error_message
+                },
+            )
+
             overall_status = (
                 PlanExecutionStatus.STEP_FAILED
             )
@@ -149,3 +241,31 @@ class PlanExecutionService:
         raise RuntimeError(
             f"scheduled step not found: {step_id}"
         )
+
+    @staticmethod
+    def _emit(
+        *,
+        trace_session: AgentTraceSession | None,
+        event_type: AgentTraceEventType,
+        message: str,
+        plan_id: str,
+        step_id: str,
+        tool_name: str | None,
+        attempt_number: int | None,
+        metadata: dict[str, object] | None = None,
+    ) -> None:
+        """Emit one execution event when tracing is enabled."""
+
+        if trace_session is None:
+            return
+
+        trace_session.emit(
+            event_type=event_type,
+            message=message,
+            plan_id=plan_id,
+            step_id=step_id,
+            tool_name=tool_name,
+            attempt_number=attempt_number,
+            metadata=metadata,
+        )
+

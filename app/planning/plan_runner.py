@@ -17,6 +17,9 @@ from app.schemas.plan_run import (
     PlanRunResult,
     PlanRunStatus,
 )
+from app.tracing.agent_trace_session import (
+    AgentTraceSession,
+)
 
 
 class PlanRunner:
@@ -50,6 +53,8 @@ class PlanRunner:
         *,
         plan: Plan,
         request: PlanRunRequest | None = None,
+        trace_session: AgentTraceSession | None = None,
+        attempt_number: int | None = None,
     ) -> PlanRunResult:
         """Run a plan until terminal, blocked, or cycle-limited."""
 
@@ -77,6 +82,8 @@ class PlanRunner:
                 schedule_request=(
                     options.schedule_request
                 ),
+                trace_session=trace_session,
+                attempt_number=attempt_number,
             )
             cycles.append(cycle)
             current_plan = cycle.plan

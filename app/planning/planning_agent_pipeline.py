@@ -132,6 +132,8 @@ class PlanningAgentPipeline:
         run_result = self.plan_runner.run(
             plan=lifecycle_result.plan,
             request=request.execution,
+            trace_session=trace_session,
+            attempt_number=attempt_number,
         )
 
         self._emit_run_result(

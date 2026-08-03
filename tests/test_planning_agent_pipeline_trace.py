@@ -33,9 +33,25 @@ def test_pipeline_records_high_level_events() -> None:
 
     events = recorder.get_trace("trace-001")
 
+    high_level_event_types = {
+        AgentTraceEventType.PLANNING_STARTED,
+        AgentTraceEventType.PLANNING_COMPLETED,
+        AgentTraceEventType.PLAN_STARTED,
+        AgentTraceEventType.PLAN_COMPLETED,
+        AgentTraceEventType.PLAN_FAILED,
+        AgentTraceEventType.PLAN_CANCELLED,
+        AgentTraceEventType.PLAN_BLOCKED,
+        AgentTraceEventType.EVALUATION_COMPLETED,
+    }
+    high_level_events = [
+        event
+        for event in events
+        if event.event_type in high_level_event_types
+    ]
+
     assert [
         event.event_type
-        for event in events
+        for event in high_level_events
     ] == [
         AgentTraceEventType.PLANNING_STARTED,
         AgentTraceEventType.PLANNING_COMPLETED,
@@ -48,7 +64,7 @@ def test_pipeline_records_high_level_events() -> None:
         event.attempt_number == 1
         for event in events
     )
-    assert events[1].plan_id == (
+    assert high_level_events[1].plan_id == (
         result.run.plan.plan_id
     )
 

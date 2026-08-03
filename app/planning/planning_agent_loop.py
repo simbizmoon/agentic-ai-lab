@@ -45,6 +45,28 @@ class PlanningAgentLoop:
         )
         self._replanning_service = replanning_service
 
+    @property
+    def pipeline(self) -> PlanningAgentPipeline:
+        """Return the configured planning pipeline."""
+
+        return self._pipeline
+
+    @property
+    def replan_context_service(
+        self,
+    ) -> ReplanContextService:
+        """Return the configured replan-context service."""
+
+        return self._replan_context_service
+
+    @property
+    def replanning_service(
+        self,
+    ) -> ReplanningService:
+        """Return the configured replanning service."""
+
+        return self._replanning_service
+
     def run(
         self,
         request: PlanningAgentLoopRequest,
