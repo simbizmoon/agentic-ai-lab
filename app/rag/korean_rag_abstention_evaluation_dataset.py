@@ -12,14 +12,19 @@ from app.schemas.retrieval_evaluation_dataset import (
     RetrievalEvaluationDocument,
 )
 
-
 KOREAN_ABSTENTION_MARKERS = [
     "근거가 부족",
     "근거만으로는",
+    "증거만으로는",
     "답변할 수 없",
+    "답할 수 없",
     "확인할 수 없",
     "정보가 부족",
+    "충분한 정보가 없",
+    "정보가 포함되어 있지 않",
+    "관련 증거가 검색되지 않",
     "제공된 정보",
+    "제공된 증거",
 ]
 
 

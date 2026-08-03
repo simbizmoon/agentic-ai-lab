@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-
 DEFAULT_ABSTENTION_MARKERS: tuple[str, ...] = (
     "근거가 부족",
     "근거만으로는",

@@ -57,3 +57,37 @@ def test_blank_marker_is_ignored() -> None:
     )
 
     assert matches == []
+
+
+def test_detects_actual_korean_openai_abstention_phrases() -> None:
+    markers = [
+        "증거만으로는",
+        "답할 수 없",
+        "충분한 정보가 없",
+        "정보가 포함되어 있지 않",
+        "관련 증거가 검색되지 않",
+    ]
+
+    answers = [
+        (
+            "제공된 증거에는 프랑스의 수도가 무엇인지 "
+            "답할 충분한 정보가 없습니다."
+        ),
+        (
+            "제공된 증거에는 해당 정보가 포함되어 있지 "
+            "않습니다. 따라서 제공된 증거만으로는 질문에 "
+            "답할 수 없습니다."
+        ),
+        (
+            "관련 증거가 검색되지 않았습니다. 이 증거만으로는 "
+            "질문에 답할 수 없습니다."
+        ),
+    ]
+
+    assert all(
+        is_abstention_answer(
+            answer_text=answer,
+            markers=markers,
+        )
+        for answer in answers
+    )
