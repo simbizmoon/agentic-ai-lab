@@ -721,3 +721,76 @@ def test_workflow_records_argument_correction_events() -> None:
     assert result.events[2].details == {
         "error_code": "argument_validation_failed"
     }
+
+
+def test_workflow_records_nonnegative_elapsed_times() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            function_call_response(),
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    assert result.events
+    assert all(
+        event.elapsed_ms >= 0.0
+        for event in result.events
+    )
+
+
+def test_workflow_elapsed_times_are_monotonic() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    client = FakeClient(
+        [
+            function_call_response(),
+            final_response(),
+        ]
+    )
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Count the supplied document.",
+    )
+
+    elapsed_times = [
+        event.elapsed_ms
+        for event in result.events
+    ]
+
+    assert elapsed_times == sorted(elapsed_times)
+
+
+def test_elapsed_ms_uses_performance_counter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import (
+        document_statistics_tool_calling as service,
+    )
+
+    counter_values = iter(
+        [
+            1_125_500_000,
+        ]
+    )
+
+    monkeypatch.setattr(
+        service.time,
+        "perf_counter_ns",
+        lambda: next(counter_values),
+    )
+
+    assert service._elapsed_ms(1_000_000_000) == 125.5

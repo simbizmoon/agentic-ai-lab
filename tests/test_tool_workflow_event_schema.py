@@ -18,6 +18,7 @@ def test_request_received_event() -> None:
     assert event.model_dump(mode="json") == {
         "event_type": "request_received",
         "tool_name": None,
+        "elapsed_ms": 0.0,
         "details": {
             "request_length": 25,
         },
@@ -89,6 +90,42 @@ def test_event_type_rejects_unknown_value() -> None:
         ToolWorkflowEvent.model_validate(
             {
                 "event_type": "unknown_event",
+                "details": {},
+            }
+        )
+
+
+def test_event_accepts_nonnegative_elapsed_time() -> None:
+    event = ToolWorkflowEvent(
+        event_type=ToolWorkflowEventType.REQUEST_RECEIVED,
+        elapsed_ms=125.75,
+    )
+
+    assert event.elapsed_ms == 125.75
+
+
+def test_event_defaults_elapsed_time_to_zero() -> None:
+    event = ToolWorkflowEvent(
+        event_type=ToolWorkflowEventType.DIRECT_RESPONSE,
+    )
+
+    assert event.elapsed_ms == 0.0
+
+
+def test_event_rejects_negative_elapsed_time() -> None:
+    with pytest.raises(ValidationError):
+        ToolWorkflowEvent(
+            event_type=ToolWorkflowEventType.REQUEST_RECEIVED,
+            elapsed_ms=-0.01,
+        )
+
+
+def test_event_rejects_string_elapsed_time_in_strict_mode() -> None:
+    with pytest.raises(ValidationError):
+        ToolWorkflowEvent.model_validate(
+            {
+                "event_type": "request_received",
+                "elapsed_ms": "12.5",
                 "details": {},
             }
         )

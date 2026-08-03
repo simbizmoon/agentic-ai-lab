@@ -88,7 +88,10 @@ def print_workflow_events(events: list[object]) -> None:
         tool_name = event.tool_name
         details = event.details
 
-        line = f"{index}. {event_value}"
+        line = (
+            f"{index}. {event_value} "
+            f"({event.elapsed_ms:.3f} ms)"
+        )
 
         if tool_name is not None:
             line += f" [{tool_name}]"

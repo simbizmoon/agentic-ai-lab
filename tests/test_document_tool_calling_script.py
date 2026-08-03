@@ -96,17 +96,12 @@ def test_main_prints_events_when_requested(
 
     assert exit_code == 0
     assert "Events:" in captured.out
-    assert "1. request_received" in captured.out
-    assert (
-        "2. tool_selected [extract_document_keywords]"
-        in captured.out
-    )
-    assert (
-        "3. tool_execution_succeeded "
-        "[extract_document_keywords]"
-        in captured.out
-    )
-    assert "4. final_response_created" in captured.out
+    assert "1. request_received (" in captured.out
+    assert "2. tool_selected (" in captured.out
+    assert "[extract_document_keywords]" in captured.out
+    assert "3. tool_execution_succeeded (" in captured.out
+    assert "4. final_response_created (" in captured.out
+    assert " ms)" in captured.out
     assert "Observation:" in captured.out
     assert "Final Answer:" in captured.out
 

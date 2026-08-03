@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from enum import StrEnum
 from typing import Any
 
@@ -79,6 +80,14 @@ class ToolCallingError(RuntimeError):
         super().__init__(safe_message)
         self.code = code
         self.safe_message = safe_message
+
+
+def _elapsed_ms(started_ns: int) -> float:
+    """Return milliseconds elapsed since the Workflow started."""
+
+    elapsed_ns = time.perf_counter_ns() - started_ns
+
+    return round(elapsed_ns / 1_000_000, 3)
 
 
 def _get_item_value(item: object, name: str) -> Any:
@@ -216,11 +225,14 @@ def run_document_tool_workflow(
     """Run at most one registered document Tool."""
 
 
+    started_ns = time.perf_counter_ns()
+
     if not user_request.strip():
         raise ValueError("user_request must not be empty")
 
     events = [
         ToolWorkflowEvent(
+            elapsed_ms=_elapsed_ms(started_ns),
             event_type=ToolWorkflowEventType.REQUEST_RECEIVED,
             details={
                 "request_length": len(user_request),
@@ -246,6 +258,7 @@ def run_document_tool_workflow(
 
         events.append(
             ToolWorkflowEvent(
+                elapsed_ms=_elapsed_ms(started_ns),
                 event_type=ToolWorkflowEventType.DIRECT_RESPONSE,
             )
         )
@@ -260,6 +273,7 @@ def run_document_tool_workflow(
 
     events.append(
         ToolWorkflowEvent(
+            elapsed_ms=_elapsed_ms(started_ns),
             event_type=ToolWorkflowEventType.TOOL_SELECTED,
             tool_name=tool_name,
         )
@@ -271,6 +285,7 @@ def run_document_tool_workflow(
         )
         events.append(
             ToolWorkflowEvent(
+                elapsed_ms=_elapsed_ms(started_ns),
                 event_type=(
                     ToolWorkflowEventType.TOOL_EXECUTION_SUCCEEDED
                 ),
@@ -290,6 +305,7 @@ def run_document_tool_workflow(
 
         events.append(
             ToolWorkflowEvent(
+                elapsed_ms=_elapsed_ms(started_ns),
                 event_type=(
                     ToolWorkflowEventType
                     .TOOL_ARGUMENT_CORRECTION_REQUESTED
@@ -346,6 +362,7 @@ def run_document_tool_workflow(
             )
             events.append(
                 ToolWorkflowEvent(
+                    elapsed_ms=_elapsed_ms(started_ns),
                     event_type=(
                         ToolWorkflowEventType
                         .TOOL_ARGUMENTS_CORRECTED
@@ -355,6 +372,7 @@ def run_document_tool_workflow(
             )
             events.append(
                 ToolWorkflowEvent(
+                    elapsed_ms=_elapsed_ms(started_ns),
                     event_type=(
                         ToolWorkflowEventType
                         .TOOL_EXECUTION_SUCCEEDED
@@ -401,6 +419,7 @@ def run_document_tool_workflow(
 
     events.append(
         ToolWorkflowEvent(
+            elapsed_ms=_elapsed_ms(started_ns),
             event_type=ToolWorkflowEventType.FINAL_RESPONSE_CREATED,
         )
     )

@@ -29,6 +29,7 @@ class ToolWorkflowEvent(BaseModel):
 
     event_type: ToolWorkflowEventType
     tool_name: str | None = None
+    elapsed_ms: float = Field(default=0.0, ge=0.0)
     details: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
