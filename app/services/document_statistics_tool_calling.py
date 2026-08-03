@@ -24,6 +24,10 @@ TOOL_INSTRUCTIONS = (
     "frequent or representative document keywords. "
     "Do not estimate Tool results yourself. "
     "Choose at most one Tool for the current workflow. "
+    "If the user asks for multiple operations that require "
+    "different Tools, do not call any Tool. Explain that this "
+    "workflow currently supports one Tool operation per request "
+    "and ask the user to split the operations into separate requests. "
     "If a Tool result reports invalid arguments, correct the "
     "arguments and call the same Tool once more."
 )
@@ -112,8 +116,8 @@ def _get_single_function_call(response: object) -> object | None:
         raise ToolCallingError(
             code=ToolCallingErrorCode.MULTIPLE_TOOL_CALLS,
             safe_message=(
-                "exactly one function call is allowed "
-                "in Lesson 4.2"
+                "this workflow allows at most one "
+                "Tool call per request"
             ),
         )
 

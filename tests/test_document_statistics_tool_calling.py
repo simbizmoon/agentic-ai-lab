@@ -184,7 +184,7 @@ def test_tool_calling_rejects_multiple_function_calls() -> None:
 
     with pytest.raises(
         ToolCallingError,
-        match="exactly one function call",
+        match="at most one Tool call",
     ):
         answer_with_document_statistics_tool(
             client=client,
@@ -561,3 +561,45 @@ def test_legacy_workflow_wrapper_remains_compatible() -> None:
     )
 
     assert result.tool_name == "extract_document_keywords"
+
+
+def test_compound_request_can_return_direct_limitation_message() -> None:
+    from app.services.document_statistics_tool_calling import (
+        run_document_tool_workflow,
+    )
+
+    direct_response = SimpleNamespace(
+        id="resp_compound",
+        output=[],
+        output_text=(
+            "This workflow currently supports one Tool operation "
+            "per request. Please request document statistics and "
+            "keyword extraction separately."
+        ),
+    )
+    client = FakeClient([direct_response])
+
+    result = run_document_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request=(
+            "Calculate the document statistics and also extract "
+            "the five most frequent keywords."
+        ),
+    )
+
+    assert result.tool_used is False
+    assert result.tool_name is None
+    assert result.observation is None
+    assert "one Tool operation per request" in result.final_answer
+    assert len(client.responses.calls) == 1
+
+
+def test_tool_instructions_define_compound_request_policy() -> None:
+    from app.services.document_statistics_tool_calling import (
+        TOOL_INSTRUCTIONS,
+    )
+
+    assert "multiple operations" in TOOL_INSTRUCTIONS
+    assert "do not call any Tool" in TOOL_INSTRUCTIONS
+    assert "separate requests" in TOOL_INSTRUCTIONS
