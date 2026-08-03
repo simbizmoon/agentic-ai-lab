@@ -67,6 +67,14 @@ class KeywordMemorySearcher:
                 memory=memory,
             )
 
+            has_relevance_signal = (
+                bool(scored.matched_terms)
+                or scored.breakdown.phrase_match > 0.0
+            )
+
+            if not has_relevance_signal:
+                continue
+
             if scored.score < request.minimum_score:
                 continue
 

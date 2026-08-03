@@ -156,7 +156,7 @@ def test_context_limit_can_be_smaller_than_search_limit() -> None:
     assert result.context.omitted_count == 1
 
 
-def test_context_score_can_be_stricter_than_search_score() -> None:
+def test_retrieval_excludes_memory_without_relevance_signal() -> None:
     service = make_service(
         memory(
             memory_id="strong",
@@ -179,7 +179,10 @@ def test_context_score_can_be_stricter_than_search_score() -> None:
         )
     )
 
-    assert len(result.search_results) == 2
+    assert len(result.search_results) == 1
+    assert result.search_results[0].memory.memory_id == (
+        "strong"
+    )
     assert result.retrieved_memory_ids == [
         "strong"
     ]
