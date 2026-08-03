@@ -359,3 +359,48 @@ def test_workflow_result_preserves_direct_answer() -> None:
     assert result.tool_name is None
     assert result.observation is None
     assert result.final_answer == "A Tool was not required."
+
+
+def test_tool_calling_uses_allowed_registry_schemas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import (
+        document_statistics_tool_calling as service,
+    )
+
+    custom_schema = {
+        "type": "function",
+        "name": "registry_tool",
+        "description": "Registry test Tool.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    }
+
+    monkeypatch.setattr(
+        service,
+        "get_allowed_tool_schemas",
+        lambda: [custom_schema],
+    )
+
+    direct_response = SimpleNamespace(
+        id="resp_direct",
+        output=[],
+        output_text="No Tool was required.",
+    )
+    client = FakeClient([direct_response])
+
+    result = service.run_document_statistics_tool_workflow(
+        client=client,
+        model="test-model",
+        user_request="Explain Tool Calling.",
+    )
+
+    assert result.tool_used is False
+    assert client.responses.calls[0]["tools"] == [
+        custom_schema
+    ]

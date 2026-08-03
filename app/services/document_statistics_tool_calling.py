@@ -7,8 +7,8 @@ from enum import StrEnum
 from typing import Any
 
 from app.schemas.tool_workflow_result import ToolWorkflowResult
-from app.tools.document_statistics_schema import (
-    DOCUMENT_STATISTICS_TOOL,
+from app.tools.tool_registry import (
+    get_allowed_tool_schemas,
 )
 from app.tools.tool_dispatcher import (
     ToolDispatchError,
@@ -194,11 +194,13 @@ def run_document_statistics_tool_workflow(
     if not user_request.strip():
         raise ValueError("user_request must not be empty")
 
+    allowed_tools = get_allowed_tool_schemas()
+
     first_response = client.responses.create(
         model=model,
         instructions=TOOL_INSTRUCTIONS,
         input=user_request,
-        tools=[DOCUMENT_STATISTICS_TOOL],
+        tools=allowed_tools,
         tool_choice="auto",
         parallel_tool_calls=False,
     )
@@ -244,7 +246,7 @@ def run_document_statistics_tool_workflow(
                     },
                 )
             ],
-            tools=[DOCUMENT_STATISTICS_TOOL],
+            tools=allowed_tools,
             tool_choice="auto",
             parallel_tool_calls=False,
         )
@@ -299,7 +301,7 @@ def run_document_statistics_tool_workflow(
                 },
             )
         ],
-        tools=[DOCUMENT_STATISTICS_TOOL],
+        tools=allowed_tools,
         tool_choice="none",
     )
 

@@ -129,3 +129,174 @@ def test_dispatch_rejects_extra_arguments() -> None:
         exc_info.value.code
         == ToolErrorCode.ARGUMENT_VALIDATION_FAILED
     )
+
+
+def test_dispatcher_uses_registered_tool_definition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.tools import tool_dispatcher
+
+    class FakeInput:
+        @classmethod
+        def model_validate(
+            cls,
+            raw_arguments: object,
+        ) -> object:
+            assert raw_arguments == {"value": "input"}
+            return object()
+
+    class FakeResult:
+        def model_dump(
+            self,
+            *,
+            mode: str,
+        ) -> dict[str, object]:
+            assert mode == "json"
+            return {"value": "output"}
+
+    class FakeDefinition:
+        input_model = FakeInput
+        requires_approval = False
+
+        @staticmethod
+        def executor(tool_input: object) -> FakeResult:
+            assert tool_input is not None
+            return FakeResult()
+
+    monkeypatch.setattr(
+        tool_dispatcher,
+        "get_allowed_tool",
+        lambda tool_name: (
+            FakeDefinition()
+            if tool_name == "registered_tool"
+            else None
+        ),
+    )
+    monkeypatch.setattr(
+        tool_dispatcher,
+        "BaseModel",
+        FakeResult,
+    )
+
+    result = tool_dispatcher.dispatch_tool_call(
+        tool_name="registered_tool",
+        arguments_json='{"value":"input"}',
+    )
+
+    assert result == {"value": "output"}
+
+
+def test_dispatcher_blocks_tool_without_required_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import BaseModel, ConfigDict
+
+    from app.tools import tool_dispatcher
+
+    class DangerousInput(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+
+        target: str
+
+    class DangerousOutput(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+
+        completed: bool
+
+    class DangerousDefinition:
+        input_model = DangerousInput
+        requires_approval = True
+
+        @staticmethod
+        def executor(tool_input: BaseModel) -> BaseModel:
+            return DangerousOutput(completed=True)
+
+    monkeypatch.setattr(
+        tool_dispatcher,
+        "get_allowed_tool",
+        lambda tool_name: (
+            DangerousDefinition()
+            if tool_name == "dangerous_tool"
+            else None
+        ),
+    )
+
+    with pytest.raises(ToolDispatchError) as exc_info:
+        tool_dispatcher.dispatch_tool_call(
+            tool_name="dangerous_tool",
+            arguments_json='{"target":"production"}',
+        )
+
+    assert (
+        exc_info.value.code
+        == ToolErrorCode.APPROVAL_REQUIRED
+    )
+    assert exc_info.value.safe_message == (
+        "human approval is required for tool: dangerous_tool"
+    )
+
+
+def test_dispatcher_executes_tool_after_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import BaseModel, ConfigDict
+
+    from app.tools import tool_dispatcher
+
+    class ApprovedInput(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+
+        target: str
+
+    class ApprovedOutput(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+
+        target: str
+        completed: bool
+
+    class ApprovedDefinition:
+        input_model = ApprovedInput
+        requires_approval = True
+
+        @staticmethod
+        def executor(tool_input: BaseModel) -> BaseModel:
+            validated = ApprovedInput.model_validate(tool_input)
+
+            return ApprovedOutput(
+                target=validated.target,
+                completed=True,
+            )
+
+    monkeypatch.setattr(
+        tool_dispatcher,
+        "get_allowed_tool",
+        lambda tool_name: (
+            ApprovedDefinition()
+            if tool_name == "approved_tool"
+            else None
+        ),
+    )
+
+    result = tool_dispatcher.dispatch_tool_call(
+        tool_name="approved_tool",
+        arguments_json='{"target":"staging"}',
+        approval_granted=True,
+    )
+
+    assert result == {
+        "target": "staging",
+        "completed": True,
+    }
+
+
+def test_read_only_tool_does_not_require_approval() -> None:
+    result = dispatch_tool_call(
+        tool_name="get_document_statistics",
+        arguments_json='{"document_text":"safe text"}',
+    )
+
+    assert result == {
+        "character_count": 9,
+        "word_count": 2,
+        "line_count": 1,
+    }
