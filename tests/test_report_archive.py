@@ -377,7 +377,12 @@ def test_verify_report_archive_rejects_duplicate_member(tmp_path: Path) -> None:
     members = expected_archive_members(report_path.name)
     with ZipFile(archive_path, "w", compression=ZIP_DEFLATED) as archive:
         archive.writestr(members[0], b"one")
-        archive.writestr(members[0], b"two")
+
+        with pytest.warns(
+            UserWarning,
+            match=r"Duplicate name: 'audit-report\.json'",
+        ):
+            archive.writestr(members[0], b"two")
 
     with pytest.raises(DuplicateReportArchiveMemberError):
         verify_report_archive(
