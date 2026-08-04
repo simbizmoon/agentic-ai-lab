@@ -10,309 +10,180 @@
 
 ## 현재 위치
 
-- 현재 Phase: Phase 9 — Single Research Agent Workflow
-- 현재 Lesson: Lesson 9.1 — Research Request Schema
-- 현재 상태: 시작
-- 완료된 Phase: Phase 0부터 Phase 8
-- 다음 단계: Research Request Domain Schema와 결정론적 검증 구현
-- 운영 원칙: Phase 9는 20개 Lesson으로 제한하며 Single-Agent Baseline 완성에 집중한다.
-- 후속 원칙: Phase 10에는 Multi-Agent Research System을 필수로 구현한다.
+- 현재 Phase: Phase 13 — Practical AIRA Integration and Delivery
+- 현재 상태: 시작 전
+- 완료된 Phase: Phase 0부터 Phase 12
+- 전체 테스트 기준선: 4048 passed
+- Ruff: All checks passed
+- 다음 단계: 최종 AIRA 사용 시나리오와 통합 경로 확정
+- 종료 원칙: Phase 13 완료 후 프로젝트를 종료하고 Backlog는 별도 관리
+- 범위 원칙: 실제 사용 가능한 최소 AIRA에 직접 필요한 작업만 수행
 
-## Phase 0 — 프로젝트 기반
+## 완료된 Phase
 
-- 상태: 완료
+- [x] Phase 0 — 프로젝트 기반
+- [x] Phase 1 — Agentic AI 기초
+- [x] Phase 2 — OpenAI API 기초
+- [x] Phase 3 — Structured Outputs와 데이터 검증
+- [x] Phase 4 — Tool Calling
+- [x] Phase 5 — Workflow와 상태 관리
+- [x] Phase 6 — RAG
+- [x] Phase 7 — Memory
+- [x] Phase 8 — Planning Agent
+- [x] Phase 9 — Single Research Agent
+- [x] Phase 10 — Multi-Agent Research System
+- [x] Phase 11 — Evals, Guardrails, Reliability
+- [x] Phase 12 — Application, Persistence, Background Jobs
 
-- [x] ChatGPT Project 생성
-- [x] Work와 Plugins 확인
-- [x] Ubuntu 개발환경 확인
-- [x] 저장공간 확인
-- [x] 프로젝트 경로 확정
-- [x] Git 저장소 초기화
-- [x] GitHub 원격 연결
-- [x] Python 가상환경 생성
-- [x] 기준 문서 작성
-- [x] 문서 검증
-- [x] 첫 Commit과 Push
-- [x] Codex CLI 설치
-- [x] Codex 읽기 전용 분석
-- [x] 제한된 Codex 문서 수정 실습
-- [x] Git Diff와 Commit 검증
-- [x] Phase 0 평가
+## 이미 확보된 핵심 자산
 
-## Phase 1 — Agentic AI 기초
+### 연구 기능
 
-- 상태: 완료
+- Research Request와 Task 분해
+- Search Query 계획
+- Source Search와 Reader Port
+- Evidence 추출
+- Source 품질 평가
+- Claim과 Citation 연결
+- Research Workspace
+- Report Synthesis
+- Single-Agent 및 Multi-Agent 연구 흐름
 
-- [x] 생성형 AI와 LLM
-- [x] Chatbot, Workflow 및 Agent
-- [x] Goal, Environment, State, Action, Observation
-- [x] Agent Loop
-- [x] Deterministic과 Probabilistic 처리
-- [x] 자율성 단계
-- [x] Agent가 필요하지 않은 문제
-- [x] 비교 실험
-- [x] 평가
+### 품질과 안전
 
-## Phase 2 — OpenAI API 기초
+- Evaluation Dataset과 Runner
+- Citation, Evidence, Claim Support 평가
+- Guardrail
+- Retry, Timeout, Cancellation
+- Reliability Metrics
+- E2E Evaluation
 
-- 상태: 완료
+### Application 기반
 
-- [x] API와 SDK
-- [x] API Key와 환경변수
-- [x] HTTP Request와 Response
-- [x] OpenAI Python SDK
-- [x] Responses API 첫 호출
-- [x] Token과 Context
-- [x] 오류 처리와 종료 코드
-- [x] 사용량·비용·로그 기초
-- [x] Secret 비노출 검증
-- [x] 평가
+- Execution, Evaluation, Guardrail, Job Repository
+- Background Job Lifecycle
+- Queue와 Lease
+- Retry Scheduling
+- Cancellation Persistence
+- Research, Tool, Workflow Application Service
+- Reliability Query
+- Transaction Boundary
+- Idempotency
+- Failure Mapping
+- Phase 12 E2E Flow
 
-## Phase 3 — Structured Outputs와 데이터 검증
-
-- 상태: 완료
-
-- [x] JSON과 JSON Schema
-- [x] Pydantic 모델과 검증
-- [x] Structured Outputs
-- [x] 모델 응답 검증
-- [x] 오류 분류와 복구
-- [x] 결정적 직렬화와 무결성 검증 실습
-- [x] 서명된 감사 산출물과 오프라인 검증 심화 실습
-- [x] 동일 입력 재사용과 의미적 충돌 검증
-- [x] AIRA 문서 분석 Structured Output
-- [x] Phase 3 최종 평가
-
-### Phase 3 범위 조정
-
-Phase 3에서 구현한 Transparency Log, Merkle Proof, Witness Quorum,
-Signed Gossip Bundle 및 Trust Decision Receipt는 고급 심화 실습으로
-완료하였다.
-
-이 하위 시스템은 현재 상태로 동결하며, 추가적인 암호화·분산 신뢰
-기능은 실제 AIRA 운영 요구가 확인되기 전까지 확장하지 않는다.
-
-Tool Calling은 다음 Phase에서 최소 단일 Tool부터 별도로 학습한다.
-
-## Phase 4 — Tool Calling
-
-- 상태: 진행 중
-
-- [~] Tool의 개념과 역할
-- [ ] 단일 Tool 정의와 호출
-- [ ] Tool 함수 Schema
-- [ ] Tool 호출 인수 검증
-- [ ] Tool 실행 결과를 Observation으로 전달
-- [ ] Tool 오류 처리
-- [ ] 허용 Tool과 금지 Tool
-- [ ] 여러 Tool 중 선택
-- [ ] Tool 호출 테스트
-- [ ] Phase 4 평가
-
-## Phase 5 — Workflow와 상태 관리
+## Phase 13 — Practical AIRA Integration and Delivery
 
 - 상태: 시작 전
+- 최대 Lesson: 10개
+- 최종 Phase: 예
 
-- [ ] Workflow와 Agent Loop의 차이
-- [ ] 단계별 Workflow 설계
-- [ ] Workflow State 정의
-- [ ] 단계 전환 조건
-- [ ] 상태 저장과 복원
-- [ ] Checkpoint와 Resume
-- [ ] Retry와 Timeout
-- [ ] Stop Condition
-- [ ] 실패 상태와 복구 경로
-- [ ] Human Approval 단계
-- [ ] Phase 5 평가
+### Lesson 13.1 — 제품 사용 시나리오와 범위 확정
 
-## Phase 6 — RAG
+- [ ] 핵심 사용자 1명과 주요 사용 시나리오 확정
+- [ ] 입력, 처리, 출력의 단일 기본 흐름 확정
+- [ ] 사용하지 않을 고급 기능 명시
+- 완료 결과: `AIRA_MVP_SPEC.md`
 
-- 상태: 완료
-- 상세 문서: `docs/lessons/phase-6-rag.md`
+### Lesson 13.2 — 기존 모듈 통합 지도
 
-## Phase 7 — Memory
+- [ ] 실제 기본 경로에 필요한 기존 모듈 선택
+- [ ] 중복 또는 미사용 모듈 분류
+- [ ] Composition Root 설계
+- 완료 결과: 한 장의 Runtime Architecture와 의존성 구성
 
-- 상태: 완료
-- 상세 문서: `docs/lessons/phase-7-memory.md`
+### Lesson 13.3 — AIRA CLI
 
-## Phase 8 — Planning Agent
+- [ ] 연구 질문 또는 파일 입력
+- [ ] Single Research Agent 실행
+- [ ] 진행 상태 표시
+- [ ] 보고서와 Citation 출력
+- 완료 결과: 실제 사용할 수 있는 CLI 명령
 
-- 상태: 완료
-- 마지막 Lesson: Lesson 8.33
-- 상세 문서: `docs/lessons/phase-8-planning-agent.md`
+### Lesson 13.4 — 최소 영속 저장
 
-## Phase 9 — Single Research Agent Workflow
+- [ ] 실행 요청과 결과 저장
+- [ ] 보고서 재조회
+- [ ] 중복 요청 처리
+- [ ] SQLite 또는 기존 In-Memory 중 실제 필요에 맞게 선택
+- 완료 결과: 프로그램 재실행 후 결과를 다시 확인할 수 있음
 
-- 상태: 진행 중
-- 현재 Lesson: Lesson 9.1 — Research Request Schema
-- 상세 문서: `docs/lessons/phase-9-research-agent.md`
+### Lesson 13.5 — 실제 연구 사례 1
 
-- [~] Research Request Schema
-- [ ] Research Task와 Task Graph Schema
-- [ ] Research Request Validator
-- [ ] Research Task Decomposer
-- [ ] Search Query Schema
-- [ ] Search Query Planner
-- [ ] Source Candidate Schema
-- [ ] Source Search Tool Contract
-- [ ] In-Memory Source Search Adapter
-- [ ] Source Document Schema
-- [ ] Source Reader Contract와 In-Memory Reader
-- [ ] Evidence Schema
-- [ ] Evidence Extractor Contract
-- [ ] Source Quality Evaluation
-- [ ] Claim과 Citation Schema
-- [ ] Research Workspace
-- [ ] Research Synthesizer
-- [ ] Research Quality Evaluator
-- [ ] Single Research Agent Pipeline 및 통합 E2E
-- [ ] Phase 9 문서화와 Baseline Report
+- [ ] 프로젝트 문서 분석 또는 기술 조사 실행
+- [ ] Source와 Citation 검토
+- [ ] 불필요한 단계와 기능 제거
+- 완료 결과: 첫 실제 AIRA 보고서
 
-### Phase 9 완료 기준
+### Lesson 13.6 — 실제 연구 사례 2와 품질 보완
 
-- [ ] Research Request가 엄격하게 검증된다.
-- [ ] 연구 요청이 실행 가능한 Research Task로 분해된다.
-- [ ] Search Query를 계획할 수 있다.
-- [ ] Source Search와 Source Reading이 Port로 분리된다.
-- [ ] Evidence를 추출하고 Source에 연결할 수 있다.
-- [ ] Source 품질을 평가할 수 있다.
-- [ ] Claim과 Citation을 검증할 수 있다.
-- [ ] Research Workspace가 전체 상태를 추적한다.
-- [ ] 근거 기반 최종 보고서를 생성할 수 있다.
-- [ ] Research 품질 평가를 수행할 수 있다.
-- [ ] Single-Agent 통합 E2E 테스트가 통과한다.
-- [ ] Phase 10 비교용 Baseline Metrics가 생성된다.
-- [ ] 전체 pytest와 Ruff가 통과한다.
+- [ ] 다른 유형의 연구 요청 실행
+- [ ] 평가와 Guardrail 확인
+- [ ] 품질이 낮은 지점만 최소 수정
+- 완료 결과: 재현 가능한 두 번째 사례
 
-## Phase 10 — Multi-Agent Research System
+### Lesson 13.7 — 실제 연구 사례 3과 사용성 평가
 
-- 상태: 시작 전
-- 필수 Phase: 예
+- [ ] 실용적인 세 번째 사례 실행
+- [ ] 시간, 비용, 결과 품질 기록
+- [ ] Single-Agent 기본 경로 확정
+- [ ] Multi-Agent는 필요할 때만 비교
+- 완료 결과: AIRA 효용 평가표
 
-- [ ] Single-Agent와 Multi-Agent 선택 기준
-- [ ] Agent Identity와 Role Schema
-- [ ] Agent Capability와 Tool Permission
-- [ ] Agent Registry
-- [ ] Agent Task Assignment
-- [ ] Agent Message Schema
-- [ ] Agent Mailbox
-- [ ] Shared Research Workspace
-- [ ] Delegation Service
-- [ ] Worker Agent Contract
-- [ ] Research Manager Agent
-- [ ] Search Agent
-- [ ] Source Reader Agent
-- [ ] Evidence Analyst Agent
-- [ ] Citation Verifier Agent
-- [ ] Critic Agent
-- [ ] Report Writer Agent
-- [ ] Sequential Multi-Agent Pipeline
-- [ ] Parallel Specialist 실행
-- [ ] Conflict Detection과 Revision
-- [ ] Multi-Agent Stop Condition
-- [ ] 비용과 지연 통제
-- [ ] Multi-Agent Trace
-- [ ] Single-Agent와 Multi-Agent 비교 Evaluation
-- [ ] Multi-Agent 통합 E2E
-- [ ] Phase 10 문서화
+### Lesson 13.8 — 선택적 최소 API
 
-## Phase 11 — Evals, Guardrails, Reliability
+- [ ] CLI만으로 충분한지 먼저 판단
+- [ ] 필요할 경우에만 FastAPI 실행·조회 Endpoint 추가
+- [ ] 복잡한 인증, 다중 사용자와 Web UI는 제외
+- 완료 결과: 선택적 로컬 API
 
-- 상태: 시작 전
-
-### Evals
-
-- [ ] Golden Research Dataset
-- [ ] Deterministic Eval
-- [ ] LLM-as-judge
-- [ ] Human Evaluation
-- [ ] Citation Accuracy
-- [ ] Evidence Coverage
-- [ ] Source Quality
-- [ ] Hallucination Evaluation
-- [ ] Trace Evaluation
-- [ ] Single-Agent와 Multi-Agent 비교
-- [ ] 비용과 지연 측정
-- [ ] Regression Test
-
-### Guardrails
-
-- [ ] Prompt Injection
-- [ ] Indirect Prompt Injection
-- [ ] 악성 Source 처리
-- [ ] Tool Misuse
-- [ ] Data Exfiltration
-- [ ] Excessive Agency
-- [ ] Least Privilege
-- [ ] Agent별 Tool Permission
-- [ ] 무한 Delegation 방지
-- [ ] 무한 Debate 방지
-- [ ] Approval Gate
-- [ ] Kill Switch
-- [ ] Threat Model
-- [ ] Phase 11 평가
-
-## Phase 12 — Application, Persistence, Background Jobs
-
-- 상태: 시작 전
-
-- [ ] CLI Interface
-- [ ] FastAPI
-- [ ] Research Job API
-- [ ] Research 진행 상태 API
-- [ ] Result와 Citation API
-- [ ] SQLite 또는 PostgreSQL
-- [ ] Research Repository
-- [ ] Source Repository
-- [ ] Evidence Repository
-- [ ] Citation Repository
-- [ ] Agent State Repository
-- [ ] Background Worker
-- [ ] Retry와 Timeout
-- [ ] Cancellation
-- [ ] Checkpoint와 Resume
-- [ ] 인증과 권한 기초
-- [ ] Phase 12 평가
-
-## Phase 13 — Deployment, Operations, Final AIRA
-
-- 상태: 시작 전
-
-### 배포와 운영
+### Lesson 13.9 — Docker와 운영 최소화
 
 - [ ] Dockerfile
-- [ ] Docker Compose
-- [ ] PostgreSQL
-- [ ] Redis와 Worker
-- [ ] Nginx
-- [ ] HTTPS
-- [ ] 개발·테스트·운영 환경
-- [ ] CI/CD
-- [ ] Structured Logging
-- [ ] Metrics와 Tracing
-- [ ] Backup과 Restore
-- [ ] Rollback
-- [ ] Cost Monitoring
-- [ ] OCI 배포
-- [ ] 운영 Runbook
+- [ ] 필요한 경우에만 Docker Compose
+- [ ] 환경변수와 Secret
+- [ ] 로그와 기본 백업 방법
+- 완료 결과: 재현 가능한 로컬 실행환경
 
-### 최종 AIRA 통합
+### Lesson 13.10 — 최종 문서화와 종료 평가
 
-- [ ] 전체 요구사항 확정
-- [ ] 전체 아키텍처 문서
-- [ ] Single Research Agent
-- [ ] Multi-Agent Research Team
-- [ ] RAG 지식베이스
-- [ ] Memory와 State
-- [ ] Planning Agent
-- [ ] Eval Dataset 실행
-- [ ] Guardrail 검증
-- [ ] Human Approval
-- [ ] CLI 또는 Web UI
-- [ ] 스테이징 배포
-- [ ] 운영 배포
-- [ ] 장애 복구 실험
-- [ ] Single-Agent와 Multi-Agent 최종 비교
+- [ ] 전체 아키텍처
 - [ ] 사용자 가이드
-- [ ] 개발자 가이드
-- [ ] 최종 발표와 평가
+- [ ] 개발자 메모
+- [ ] 알려진 제한
+- [ ] Backlog 분리
+- [ ] 최종 E2E와 실제 사용 검증
+- 완료 결과: Final AIRA Baseline
+
+## Phase 13 완료 기준
+
+- [ ] CLI에서 연구 요청을 실행할 수 있다.
+- [ ] Source, Evidence, Claim과 Citation을 추적할 수 있다.
+- [ ] 근거 기반 보고서를 생성한다.
+- [ ] 실행과 결과를 저장하고 재조회할 수 있다.
+- [ ] 기본 Eval과 Guardrail을 실행한다.
+- [ ] 실제 사용 사례 3개가 존재한다.
+- [ ] Docker에서 재현 가능하다.
+- [ ] 사용자 가이드가 존재한다.
+- [ ] 전체 pytest와 Ruff가 통과한다.
+- [ ] 불필요한 고급 기능이 기본 경로에서 제거되거나 비활성화된다.
+
+## 보류 Backlog
+
+아래 항목은 Phase 13 범위가 아니다.
+
+- [-] PostgreSQL 전환
+- [-] Redis Queue
+- [-] 분산 Worker
+- [-] Nginx와 HTTPS
+- [-] OCI 운영 배포
+- [-] CI/CD 고도화
+- [-] Prometheus, Grafana와 OpenTelemetry 전체 구성
+- [-] 복잡한 인증과 RBAC
+- [-] 협업 Workspace
+- [-] 상용 Web UI
+- [-] Kubernetes
+- [-] 추가 보안·암호화 하위 시스템
+
+Backlog 항목은 실제 사용 중 필요가 확인되고 사용자가 별도 승인한 경우에만
+새 프로젝트 또는 후속 버전으로 진행한다.

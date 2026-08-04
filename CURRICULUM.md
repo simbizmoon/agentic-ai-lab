@@ -2,18 +2,19 @@
 
 ## 교육 방식
 
-각 수업은 다음 구조로 진행한다.
+각 수업은 다음 구조를 기본으로 한다.
 
-1. 현재 위치와 학습 목표
-2. 초보자용 이론 설명
-3. 쉬운 비유
-4. 실제 개발 사례
-5. 시스템 설계
-6. 직접 실습
-7. Codex 작업
-8. 테스트
-9. 실패 사례 분석
-10. 평가와 학습 기록
+1. 현재 위치와 사용자 가치
+2. 필요한 핵심 이론
+3. 전체 구조
+4. 최소 구현
+5. 실제 실행
+6. 테스트와 실패 분석
+7. 사용성 평가
+8. 학습 기록
+
+모든 항목을 기계적으로 분리하지 않는다.
+간단한 Lesson은 필요한 항목만 사용한다.
 
 ## 전체 Phase 구조
 
@@ -26,40 +27,77 @@
 6. RAG
 7. Memory
 8. Planning Agent
-9. Evals와 Guardrails
-10. Multi-Agent
-11. MCP·Plugins·Skills·Codex 통합
-12. 배포와 운영 및 최종 AIRA
+9. Single Research Agent
+10. 제한된 Multi-Agent Research
+11. Evals, Guardrails, Reliability
+12. Application, Persistence, Background Jobs
+13. Practical AIRA Integration and Delivery
 
-각 Phase는 앞 단계의 결과를 기반으로 진행한다.
+Phase 0부터 Phase 12까지 완료하였다.
 
-Single Agent와 최소 기능으로 먼저 구현하고,
-실제 필요가 확인된 경우에만 Planning, Memory 및
-Multi-Agent 구조로 확장한다.
+Phase 13은 최종 Phase다.
+
+## 학습 및 개발 원칙
+
+- Single Agent를 기본으로 한다.
+- Planning과 Memory는 필요한 요청에만 사용한다.
+- Multi-Agent는 비교 평가에서 이점이 확인된 경우에만 사용한다.
+- 새 기능보다 실제 연구 흐름 완성을 우선한다.
+- 기존 코드 재사용을 우선한다.
+- 세부 추상화를 위한 추상화를 만들지 않는다.
+- 실제 실행 결과와 사용자 효용을 평가한다.
+- Phase 13 이후 신규 Phase는 만들지 않는다.
+
+## Phase 13 학습 범위
+
+1. 최종 AIRA 사용 시나리오 확정
+2. 기존 모듈의 통합 경로 정리
+3. CLI 연구 실행
+4. 최소 영속 저장
+5. 선택적인 최소 FastAPI
+6. 실제 문서 또는 연구 주제 실행
+7. 결과 품질과 비용 확인
+8. Docker 실행환경
+9. 사용자 가이드와 운영 메모
+10. 최종 평가
 
 ## 평가 방식
 
-각 Phase는 다음 네 영역으로 평가한다.
+각 Phase는 다음 영역으로 평가한다.
 
 - 개념 이해
 - 설계 판단
 - 구현 능력
 - 결과 검증
-
-핵심 개념을 설명하지 못하거나 테스트 결과를 해석하지 못하면
-보충 학습 후 다시 평가한다.
+- 실제 사용 가능성
+- 불필요한 복잡성 통제
 
 ## 최종 결과
 
-- AIRA Agentic Research Assistant
-- 프로젝트 문서
-- Agent 코드
-- Tool 모듈
-- RAG 지식베이스
-- Memory와 State 저장
-- Multi-Agent 구조
-- MCP Server
-- Eval 데이터셋
-- Guardrail
-- Docker 배포환경
-- 운영 Runbook
+필수:
+
+- AIRA CLI
+- Single Research Agent 기본 경로
+- Source, Evidence, Claim, Citation 추적
+- 근거 기반 보고서
+- Eval과 Guardrail
+- 실행 상태와 결과 저장
+- Docker 실행환경
+- 실제 사용 예제
+- 사용자 가이드
+
+선택:
+
+- 최소 FastAPI
+- SQLite
+- 제한된 Multi-Agent 비교
+- 간단한 Human Approval
+
+현재 완료 조건에 포함하지 않음:
+
+- Redis
+- Nginx
+- Kubernetes
+- 분산 Worker
+- 상용 Web UI
+- 대규모 운영 플랫폼
