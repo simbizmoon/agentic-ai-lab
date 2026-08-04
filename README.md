@@ -39,34 +39,36 @@ source .venv/bin/activate
 
 ## Current Status
 
-Phase 8 — Planning Agent 완료
+Phase 9 — Single Research Agent Workflow 진행 중
 
 현재 상태:
 
 - Phase 8: COMPLETE
-- 마지막 Lesson: Lesson 8.33
-- 전체 pytest: 통과
-- 전체 Ruff: 통과
-- 다음 단계: Phase 9 — Research Agent Workflow
+- Phase 9: IN PROGRESS
+- 현재 Lesson: Lesson 9.1 — Research Request Schema
+- 다음 단계: Research Request Domain Schema와 테스트 구현
+- Phase 10: Multi-Agent Research System 필수 구현
 
-완료된 주요 기능:
+Phase 9 목표:
 
-- 구조화된 Plan 생성과 검증
-- Plan Lifecycle과 Scheduler
-- Tool Registry와 Step 실행
-- Plan Evaluation
-- 제한된 자동 Replanning
-- Agent Trace 기록
-- Trace Timeline과 Summary
-- JSON·Text·Markdown Export
-- Trace Archive와 Retention
-- Maintenance Report와 Alert
-- Notification Port
-- Phase 8 통합 E2E 테스트
+- 연구 요청 구조화
+- Research Task 분해
+- Search Query 계획
+- Source 검색과 읽기
+- Evidence 추출
+- Source 품질 평가
+- Claim과 Citation 연결
+- Research Workspace
+- Research Synthesis
+- Research Quality Evaluation
+- Single-Agent Baseline Metrics
+- 통합 E2E 테스트
 
 ## Lesson Documents
 
 - [Phase 6 — RAG](docs/lessons/phase-6-rag.md)
 - [Phase 7 — Memory](docs/lessons/phase-7-memory.md)
 - [Phase 8 — Planning Agent](docs/lessons/phase-8-planning-agent.md)
+- [Phase 9 — Single Research Agent](docs/lessons/phase-9-research-agent.md)
+
 

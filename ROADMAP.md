@@ -10,11 +10,13 @@
 
 ## 현재 위치
 
-- 현재 Phase: Phase 4 — Tool Calling
-- 현재 Lesson: Lesson 4.1 — 단일 Tool 정의와 호출
-- 현재 상태: 시작 준비 완료
-- 다음 단계: 허용된 로컬 Tool 하나를 모델이 선택하고 실행하는 최소 흐름 구현
-- 운영 원칙: 복잡한 Agent Loop나 여러 Tool로 확장하지 않고 단일 Tool부터 시작한다.
+- 현재 Phase: Phase 9 — Single Research Agent Workflow
+- 현재 Lesson: Lesson 9.1 — Research Request Schema
+- 현재 상태: 시작
+- 완료된 Phase: Phase 0부터 Phase 8
+- 다음 단계: Research Request Domain Schema와 결정론적 검증 구현
+- 운영 원칙: Phase 9는 20개 Lesson으로 제한하며 Single-Agent Baseline 완성에 집중한다.
+- 후속 원칙: Phase 10에는 Multi-Agent Research System을 필수로 구현한다.
 
 ## Phase 0 — 프로젝트 기반
 
@@ -125,142 +127,159 @@ Tool Calling은 다음 Phase에서 최소 단일 Tool부터 별도로 학습한�
 
 ## Phase 6 — RAG
 
-- 상태: 시작 전
-
-- [ ] RAG 개념과 필요성
-- [ ] 문서 파싱
-- [ ] Chunking
-- [ ] Embedding
-- [ ] Vector Search
-- [ ] Keyword Search
-- [ ] Hybrid Search
-- [ ] Metadata Filtering
-- [ ] Reranking
-- [ ] Citation Grounding
-- [ ] Retrieval Eval
-- [ ] Phase 6 평가
+- 상태: 완료
+- 상세 문서: `docs/lessons/phase-6-rag.md`
 
 ## Phase 7 — Memory
 
-- 상태: 시작 전
-
-- [ ] Conversation History
-- [ ] Working Memory
-- [ ] Long-term Memory
-- [ ] 사용자 Memory와 프로젝트 Memory
-- [ ] Memory 저장 기준
-- [ ] Memory 검색과 주입
-- [ ] Memory 갱신과 삭제
-- [ ] Memory Policy
-- [ ] PostgreSQL 기반 저장
-- [ ] 개인정보와 보안
-- [ ] Phase 7 평가
+- 상태: 완료
+- 상세 문서: `docs/lessons/phase-7-memory.md`
 
 ## Phase 8 — Planning Agent
 
+- 상태: 완료
+- 마지막 Lesson: Lesson 8.33
+- 상세 문서: `docs/lessons/phase-8-planning-agent.md`
+
+## Phase 9 — Single Research Agent Workflow
+
+- 상태: 진행 중
+- 현재 Lesson: Lesson 9.1 — Research Request Schema
+- 상세 문서: `docs/lessons/phase-9-research-agent.md`
+
+- [~] Research Request Schema
+- [ ] Research Task와 Task Graph Schema
+- [ ] Research Request Validator
+- [ ] Research Task Decomposer
+- [ ] Search Query Schema
+- [ ] Search Query Planner
+- [ ] Source Candidate Schema
+- [ ] Source Search Tool Contract
+- [ ] In-Memory Source Search Adapter
+- [ ] Source Document Schema
+- [ ] Source Reader Contract와 In-Memory Reader
+- [ ] Evidence Schema
+- [ ] Evidence Extractor Contract
+- [ ] Source Quality Evaluation
+- [ ] Claim과 Citation Schema
+- [ ] Research Workspace
+- [ ] Research Synthesizer
+- [ ] Research Quality Evaluator
+- [ ] Single Research Agent Pipeline 및 통합 E2E
+- [ ] Phase 9 문서화와 Baseline Report
+
+### Phase 9 완료 기준
+
+- [ ] Research Request가 엄격하게 검증된다.
+- [ ] 연구 요청이 실행 가능한 Research Task로 분해된다.
+- [ ] Search Query를 계획할 수 있다.
+- [ ] Source Search와 Source Reading이 Port로 분리된다.
+- [ ] Evidence를 추출하고 Source에 연결할 수 있다.
+- [ ] Source 품질을 평가할 수 있다.
+- [ ] Claim과 Citation을 검증할 수 있다.
+- [ ] Research Workspace가 전체 상태를 추적한다.
+- [ ] 근거 기반 최종 보고서를 생성할 수 있다.
+- [ ] Research 품질 평가를 수행할 수 있다.
+- [ ] Single-Agent 통합 E2E 테스트가 통과한다.
+- [ ] Phase 10 비교용 Baseline Metrics가 생성된다.
+- [ ] 전체 pytest와 Ruff가 통과한다.
+
+## Phase 10 — Multi-Agent Research System
+
 - 상태: 시작 전
+- 필수 Phase: 예
 
-- [ ] Task Decomposition
-- [ ] ReAct
-- [ ] Plan-and-execute
-- [ ] Reflection과 Critic
-- [ ] Retry와 Replanning
-- [ ] 객관적 완료 조건
-- [ ] Stop Condition
-- [ ] Token과 비용 Budget
-- [ ] 장기 작업 State
-- [ ] Human Approval
-- [ ] Phase 8 평가
+- [ ] Single-Agent와 Multi-Agent 선택 기준
+- [ ] Agent Identity와 Role Schema
+- [ ] Agent Capability와 Tool Permission
+- [ ] Agent Registry
+- [ ] Agent Task Assignment
+- [ ] Agent Message Schema
+- [ ] Agent Mailbox
+- [ ] Shared Research Workspace
+- [ ] Delegation Service
+- [ ] Worker Agent Contract
+- [ ] Research Manager Agent
+- [ ] Search Agent
+- [ ] Source Reader Agent
+- [ ] Evidence Analyst Agent
+- [ ] Citation Verifier Agent
+- [ ] Critic Agent
+- [ ] Report Writer Agent
+- [ ] Sequential Multi-Agent Pipeline
+- [ ] Parallel Specialist 실행
+- [ ] Conflict Detection과 Revision
+- [ ] Multi-Agent Stop Condition
+- [ ] 비용과 지연 통제
+- [ ] Multi-Agent Trace
+- [ ] Single-Agent와 Multi-Agent 비교 Evaluation
+- [ ] Multi-Agent 통합 E2E
+- [ ] Phase 10 문서화
 
-## Phase 9 — Evals와 Guardrails
+## Phase 11 — Evals, Guardrails, Reliability
 
 - 상태: 시작 전
 
 ### Evals
 
-- [ ] Unit Test
-- [ ] Integration Test
-- [ ] End-to-end Test
-- [ ] Golden Dataset
+- [ ] Golden Research Dataset
 - [ ] Deterministic Eval
 - [ ] LLM-as-judge
 - [ ] Human Evaluation
+- [ ] Citation Accuracy
+- [ ] Evidence Coverage
+- [ ] Source Quality
+- [ ] Hallucination Evaluation
 - [ ] Trace Evaluation
-- [ ] Regression Test
+- [ ] Single-Agent와 Multi-Agent 비교
 - [ ] 비용과 지연 측정
+- [ ] Regression Test
 
 ### Guardrails
 
 - [ ] Prompt Injection
 - [ ] Indirect Prompt Injection
+- [ ] 악성 Source 처리
 - [ ] Tool Misuse
 - [ ] Data Exfiltration
 - [ ] Excessive Agency
 - [ ] Least Privilege
-- [ ] Sandboxing
-- [ ] Secret Management
+- [ ] Agent별 Tool Permission
+- [ ] 무한 Delegation 방지
+- [ ] 무한 Debate 방지
 - [ ] Approval Gate
 - [ ] Kill Switch
 - [ ] Threat Model
-- [ ] Phase 9 평가
-
-## Phase 10 — Multi-Agent
-
-- 상태: 시작 전
-
-- [ ] Single Agent와 Multi-Agent 선택 기준
-- [ ] 역할 분리 기준
-- [ ] Researcher
-- [ ] Analyst
-- [ ] Writer
-- [ ] Reviewer
-- [ ] Coordinator와 Manager Pattern
-- [ ] Handoff
-- [ ] Agent as Tool
-- [ ] Agent 간 Structured Output
-- [ ] Context Isolation
-- [ ] Shared State
-- [ ] 중복 작업 방지
-- [ ] 비용과 지연 통제
-- [ ] Single Agent와 Multi-Agent 비교 평가
-- [ ] Phase 10 평가
-
-## Phase 11 — MCP·Plugins·Skills·Codex 통합
-
-- 상태: 시작 전
-
-### MCP
-
-- [ ] MCP 개념
-- [ ] MCP Client
-- [ ] MCP Server
-- [ ] Tool과 Resource
-- [ ] Tool Discovery
-- [ ] Schema
-- [ ] 인증과 권한
-- [ ] 감사 로그
-- [ ] 프로젝트 MCP Server
-
-### ChatGPT와 Codex 통합
-
-- [ ] ChatGPT Projects와 Work 활용
-- [ ] Plugins와 Skills
-- [ ] Codex CLI
-- [ ] AGENTS.md
-- [ ] Codex 작업지시 작성
-- [ ] Diff 검토
-- [ ] 테스트 기반 완료 조건
-- [ ] Git Worktree
-- [ ] Harness Engineering
 - [ ] Phase 11 평가
 
-## Phase 12 — 배포와 운영 및 최종 AIRA
+## Phase 12 — Application, Persistence, Background Jobs
+
+- 상태: 시작 전
+
+- [ ] CLI Interface
+- [ ] FastAPI
+- [ ] Research Job API
+- [ ] Research 진행 상태 API
+- [ ] Result와 Citation API
+- [ ] SQLite 또는 PostgreSQL
+- [ ] Research Repository
+- [ ] Source Repository
+- [ ] Evidence Repository
+- [ ] Citation Repository
+- [ ] Agent State Repository
+- [ ] Background Worker
+- [ ] Retry와 Timeout
+- [ ] Cancellation
+- [ ] Checkpoint와 Resume
+- [ ] 인증과 권한 기초
+- [ ] Phase 12 평가
+
+## Phase 13 — Deployment, Operations, Final AIRA
 
 - 상태: 시작 전
 
 ### 배포와 운영
 
-- [ ] FastAPI
 - [ ] Dockerfile
 - [ ] Docker Compose
 - [ ] PostgreSQL
@@ -269,27 +288,31 @@ Tool Calling은 다음 Phase에서 최소 단일 Tool부터 별도로 학습한�
 - [ ] HTTPS
 - [ ] 개발·테스트·운영 환경
 - [ ] CI/CD
-- [ ] Logging
+- [ ] Structured Logging
 - [ ] Metrics와 Tracing
 - [ ] Backup과 Restore
 - [ ] Rollback
 - [ ] Cost Monitoring
+- [ ] OCI 배포
+- [ ] 운영 Runbook
 
 ### 최종 AIRA 통합
 
-- [ ] 요구사항 확정
-- [ ] 전체 아키텍처
-- [ ] Research 기능
-- [ ] 문서 분석 기능
+- [ ] 전체 요구사항 확정
+- [ ] 전체 아키텍처 문서
+- [ ] Single Research Agent
+- [ ] Multi-Agent Research Team
 - [ ] RAG 지식베이스
 - [ ] Memory와 State
 - [ ] Planning Agent
-- [ ] Multi-Agent 확장
-- [ ] Eval 데이터셋 실행
+- [ ] Eval Dataset 실행
 - [ ] Guardrail 검증
 - [ ] Human Approval
-- [ ] Web UI
+- [ ] CLI 또는 Web UI
 - [ ] 스테이징 배포
 - [ ] 운영 배포
 - [ ] 장애 복구 실험
+- [ ] Single-Agent와 Multi-Agent 최종 비교
+- [ ] 사용자 가이드
+- [ ] 개발자 가이드
 - [ ] 최종 발표와 평가
