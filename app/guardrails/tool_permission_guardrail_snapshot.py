@@ -1,0 +1,62 @@
+"""Snapshot supplied to tool permission guardrails."""
+
+from __future__ import annotations
+
+from typing import Self
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+)
+
+from app.guardrails.tool_permission import (
+    AgentToolPermissionProfile,
+    ToolCallRequest,
+)
+
+
+class ToolPermissionGuardrailSnapshot(BaseModel):
+    """Tool request, permission profile, and execution context."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        frozen=True,
+    )
+
+    request: ToolCallRequest
+    permission_profile: AgentToolPermissionProfile
+    expected_request_id: str
+    expected_workspace_id: str
+    prior_tool_call_count: int = Field(default=0, ge=0)
+    warn_on_high_risk: bool = True
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_snapshot(self) -> Self:
+        """Validate context values."""
+
+        if not self.expected_request_id.strip():
+            raise ValueError(
+                "expected_request_id must not be blank"
+            )
+
+        if not self.expected_workspace_id.strip():
+            raise ValueError(
+                "expected_workspace_id must not be blank"
+            )
+
+        for key, value in self.metadata.items():
+            if not key.strip():
+                raise ValueError(
+                    "metadata keys must not be blank"
+                )
+
+            if not value.strip():
+                raise ValueError(
+                    "metadata values must not be blank"
+                )
+
+        return self
