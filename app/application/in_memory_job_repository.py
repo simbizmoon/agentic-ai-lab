@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 from threading import RLock
 from typing import Any
@@ -214,6 +215,21 @@ class InMemoryApplicationJobRepository(
         )
 
         return ordered[:limit]
+
+    def snapshot_state(self) -> dict[str, object]:
+        """Return an isolated repository state snapshot."""
+
+        with self._lock:
+            return deepcopy(self._records)
+
+    def restore_state(
+        self,
+        snapshot: dict[str, object],
+    ) -> None:
+        """Restore a previously captured repository state."""
+
+        with self._lock:
+            self._records = deepcopy(snapshot)
 
     def clear(self) -> None:
         """Remove all stored jobs."""
