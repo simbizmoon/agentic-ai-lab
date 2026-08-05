@@ -29,7 +29,7 @@ class InMemoryResearchSourceSearchTool(
 ):
     """Search deterministic source records held in memory."""
 
-    _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+    _TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
 
     def __init__(
         self,
