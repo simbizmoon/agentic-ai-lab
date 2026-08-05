@@ -198,3 +198,77 @@ Kubernetes
 상용 수준 Web UI
 완전 자율 연구 조직
 대규모 운영 인프라
+
+---
+## 13. MVP 구현 완료 상태
+
+AIRA 로컬 문서 기반 MVP는 Phase 13에서 구현을 완료하였다.
+
+### 구현 완료 기능
+
+- `aira research` CLI 실행
+- 연구 질문 및 목표 검증
+- 하나 이상의 Markdown/Text 문서 입력
+- UTF-8 및 빈 문서 검증
+- 로컬 문서의 Source/Document 변환
+- 영어 및 한국어 키워드 검색
+- 단일 Research Agent Pipeline 실행
+- Task decomposition 및 Query planning
+- Source candidate 검색
+- Source document 읽기
+- Evidence 추출
+- Claim 및 Citation 생성
+- 결정론적 Report 합성
+- Research quality 평가
+- 최종 결과 Guardrail 검증
+- Markdown 보고서 저장
+- 전체 Pipeline JSON 저장
+- 실제 CLI subprocess E2E 테스트
+
+### 실행 명령
+
+```bash
+aira research \
+  --question "근거 기반 연구는 주장과 증거를 어떻게 연결하는가?" \
+  --objective "출처와 인용을 사용하여 근거 기반 연구의 추적 가능성을 설명한다." \
+  --source ./source.md \
+  --output-dir ./reports
+```
+
+출력 구조
+reports/
+└── <execution-id>/
+    ├── report.md
+    └── result.json
+MVP Guardrail
+
+결과 파일은 다음 조건을 모두 충족할 때만 저장한다.
+
+execution ID와 request ID가 일치할 것
+하나 이상의 Claim이 존재할 것
+하나 이상의 Citation이 존재할 것
+Citation이 실제 Evidence를 참조할 것
+Citation이 실제 Source를 참조할 것
+Report의 Claim 수가 Workspace의 Claim 수와 일치할 것
+Report의 Citation 수가 실제 Citation 수와 일치할 것
+현재 의도적 제한
+입력 형식은 Markdown과 일반 텍스트로 제한한다.
+검색 대상은 사용자가 제공한 로컬 문서로 제한한다.
+전체 문서를 하나의 Evidence 단위로 처리한다.
+Claim은 Evidence에서 결정론적으로 생성한다.
+보고서 일부 고정 문구는 영어로 출력될 수 있다.
+외부 웹 검색과 OpenAI 기반 합성은 기본 Runtime에 포함하지 않는다.
+Multi-Agent 실행은 기본값으로 사용하지 않는다.
+인증, 데이터베이스 및 분산 작업 큐는 포함하지 않는다.
+Phase 13 완료 판정
+
+다음 조건을 모두 만족하면 Phase 13과 AIRA MVP를 완료한 것으로 판정한다.
+
+전체 pytest 통과
+전체 Ruff 검사 통과
+git diff --check 통과
+실제 CLI 실행 성공
+report.md 생성 확인
+result.json JSON 유효성 확인
+Guardrail 단위 테스트 통과
+CLI subprocess E2E 테스트 통과

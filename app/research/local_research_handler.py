@@ -14,6 +14,9 @@ from app.research.local_document_adapter import (
 from app.research.local_runtime import (
     build_local_research_pipeline,
 )
+from app.research.research_result_guardrail import (
+    ResearchResultGuardrail,
+)
 from app.research.research_result_writer import (
     ResearchResultWriter,
 )
@@ -31,10 +34,14 @@ class LocalResearchHandler:
         *,
         id_factory: Callable[[], str] | None = None,
         writer: ResearchResultWriter | None = None,
+        guardrail: ResearchResultGuardrail | None = None,
         stdout: TextIO | None = None,
     ) -> None:
         self._id_factory = id_factory or self._default_id
         self._writer = writer or ResearchResultWriter()
+        self._guardrail = (
+            guardrail or ResearchResultGuardrail()
+        )
         self._stdout = stdout or sys.stdout
 
     def __call__(
@@ -68,6 +75,10 @@ class LocalResearchHandler:
         result = pipeline.run(
             request,
             workspace_id=f"{execution_id}-workspace",
+        )
+        self._guardrail.validate(
+            result,
+            execution_id=execution_id,
         )
         paths = self._writer.write(
             result,
