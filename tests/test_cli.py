@@ -165,15 +165,20 @@ def test_main_returns_error_for_short_question(
     assert "at least 10 characters" in captured.err
 
 
-def test_main_reports_unconnected_runtime(
+def test_main_runs_default_local_runtime(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     source = tmp_path / "source.md"
     source.write_text(
-        "Grounded research requires evidence.",
+        (
+            "# Grounded Research Evidence\n\n"
+            "Grounded research connects claims to "
+            "traceable evidence."
+        ),
         encoding="utf-8",
     )
+    output_dir = tmp_path / "reports"
 
     result = main(
         [
@@ -182,10 +187,22 @@ def test_main_reports_unconnected_runtime(
             "How does grounded research use evidence?",
             "--source",
             str(source),
+            "--output-dir",
+            str(output_dir),
         ]
     )
 
     captured = capsys.readouterr()
+    execution_dirs = list(output_dir.iterdir())
 
-    assert result == 2
-    assert "runtime is not connected yet" in captured.err
+    assert result == 0
+    assert captured.err == ""
+    assert "AIRA report:" in captured.out
+    assert "AIRA result:" in captured.out
+    assert len(execution_dirs) == 1
+    assert (
+        execution_dirs[0] / "report.md"
+    ).is_file()
+    assert (
+        execution_dirs[0] / "result.json"
+    ).is_file()

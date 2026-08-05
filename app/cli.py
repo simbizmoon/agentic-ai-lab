@@ -8,6 +8,10 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
+from app.research.local_research_handler import (
+    LocalResearchHandler,
+)
+
 ResearchHandler = Callable[
     [str, str, tuple[Path, ...], Path],
     int,
@@ -240,7 +244,7 @@ def main(
                 namespace,
                 research_handler=(
                     research_handler
-                    or unavailable_research_handler
+                    or LocalResearchHandler()
                 ),
             )
 
