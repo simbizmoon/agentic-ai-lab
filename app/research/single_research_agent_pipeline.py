@@ -4,127 +4,93 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.research.research_pipeline_error import (
-    ResearchPipelineError,
-)
-from app.research.research_quality_evaluator import (
-    ResearchQualityEvaluator,
-)
-from app.research.research_synthesizer import (
-    DeterministicResearchSynthesizer,
-)
+from app.research.research_pipeline_error import ResearchPipelineError
+from app.research.research_quality_evaluator import ResearchQualityEvaluator
+from app.research.research_synthesizer import DeterministicResearchSynthesizer
 from app.schemas.research_claim import ResearchClaimSet
-from app.schemas.research_evidence import ResearchEvidenceSet
-from app.schemas.research_pipeline import (
-    SingleResearchPipelineResult,
+from app.schemas.research_evidence import (
+    ResearchEvidence,
+    ResearchEvidenceSet,
+)
+from app.schemas.research_pipeline import SingleResearchPipelineResult
+from app.schemas.research_quality import (
+    ResearchQualityEvaluation,
+    ResearchQualityIssue,
+    ResearchQualityIssueCode,
+    ResearchQualityIssueSeverity,
 )
 from app.schemas.research_request import ResearchRequest
-from app.schemas.research_search_query import (
-    ResearchSearchQuerySet,
-)
-from app.schemas.research_source_candidate import (
-    ResearchSourceCandidateSet,
-)
+from app.schemas.research_search_query import ResearchSearchQuerySet
+from app.schemas.research_source_candidate import ResearchSourceCandidateSet
 from app.schemas.research_source_document import (
     ResearchSourceDocument,
     ResearchSourceDocumentSet,
 )
-from app.schemas.research_source_quality import (
-    ResearchSourceQualityEvaluation,
-)
+from app.schemas.research_source_quality import ResearchSourceQualityEvaluation
 from app.schemas.research_task import ResearchTaskGraph
 from app.schemas.research_workspace import ResearchWorkspace
 
 
 class ResearchRequestValidatorProtocol(Protocol):
-    """Contract for validating a research request."""
-
-    def validate(self, request: ResearchRequest) -> object:
-        """Validate one request."""
+    def validate(self, request: ResearchRequest) -> object: ...
 
 
 class ResearchTaskDecomposerProtocol(Protocol):
-    """Contract for decomposing a research request."""
-
-    def decompose(
-        self,
-        request: ResearchRequest,
-    ) -> ResearchTaskGraph:
-        """Create a research task graph."""
+    def decompose(self, request: ResearchRequest) -> ResearchTaskGraph: ...
 
 
 class ResearchQueryPlannerProtocol(Protocol):
-    """Contract for planning search queries."""
-
     def plan(
         self,
         *,
         request: ResearchRequest,
         task_graph: ResearchTaskGraph,
-    ) -> ResearchSearchQuerySet:
-        """Create a search query set."""
+    ) -> ResearchSearchQuerySet: ...
 
 
 class ResearchSourceSearcherProtocol(Protocol):
-    """Contract for discovering source candidates."""
-
     def search(
         self,
         query_set: ResearchSearchQuerySet,
-    ) -> ResearchSourceCandidateSet:
-        """Search for candidate sources."""
+    ) -> ResearchSourceCandidateSet: ...
 
 
 class ResearchSourceReaderProtocol(Protocol):
-    """Contract for reading candidate sources."""
-
     def read(
         self,
         candidate_set: ResearchSourceCandidateSet,
-    ) -> ResearchSourceDocumentSet:
-        """Read candidate source documents."""
+    ) -> ResearchSourceDocumentSet: ...
 
 
 class ResearchEvidenceExtractorProtocol(Protocol):
-    """Contract for extracting evidence."""
-
     def extract(
         self,
         document_set: ResearchSourceDocumentSet,
-    ) -> ResearchEvidenceSet:
-        """Extract evidence from source documents."""
+    ) -> ResearchEvidenceSet: ...
 
 
 class ResearchClaimBuilderProtocol(Protocol):
-    """Contract for building research claims."""
-
     def build(
         self,
         evidence_set: ResearchEvidenceSet,
-    ) -> ResearchClaimSet:
-        """Build claims from evidence."""
+    ) -> ResearchClaimSet: ...
 
 
 class ResearchSourceQualityEvaluatorProtocol(Protocol):
-    """Contract for evaluating source quality."""
-
     def evaluate(
         self,
         document: ResearchSourceDocument,
-    ) -> ResearchSourceQualityEvaluation:
-        """Evaluate one source document."""
+    ) -> ResearchSourceQualityEvaluation: ...
 
 
 class ResearchDocumentSelectionProtocol(Protocol):
-    """Contract for selecting readable source documents."""
-
     def select(
         self,
         *,
         document_set: ResearchSourceDocumentSet,
         evaluator: ResearchSourceQualityEvaluatorProtocol,
-    ) -> object:
-        """Return selected documents and matching evaluations."""
+        query_set: ResearchSearchQuerySet | None = None,
+    ) -> object: ...
 
 
 class SingleResearchAgentPipeline:
@@ -140,18 +106,10 @@ class SingleResearchAgentPipeline:
         source_reader: ResearchSourceReaderProtocol,
         evidence_extractor: ResearchEvidenceExtractorProtocol,
         claim_builder: ResearchClaimBuilderProtocol,
-        source_quality_evaluator: (
-            ResearchSourceQualityEvaluatorProtocol
-        ),
-        document_selector: (
-            ResearchDocumentSelectionProtocol | None
-        ) = None,
-        synthesizer: (
-            DeterministicResearchSynthesizer | None
-        ) = None,
-        quality_evaluator: (
-            ResearchQualityEvaluator | None
-        ) = None,
+        source_quality_evaluator: ResearchSourceQualityEvaluatorProtocol,
+        document_selector: ResearchDocumentSelectionProtocol | None = None,
+        synthesizer: DeterministicResearchSynthesizer | None = None,
+        quality_evaluator: ResearchQualityEvaluator | None = None,
     ) -> None:
         self._request_validator = request_validator
         self._task_decomposer = task_decomposer
@@ -160,57 +118,33 @@ class SingleResearchAgentPipeline:
         self._source_reader = source_reader
         self._evidence_extractor = evidence_extractor
         self._claim_builder = claim_builder
-        self._source_quality_evaluator = (
-            source_quality_evaluator
-        )
+        self._source_quality_evaluator = source_quality_evaluator
         self._document_selector = document_selector
-        self._synthesizer = (
-            synthesizer
-            or DeterministicResearchSynthesizer()
-        )
-        self._quality_evaluator = (
-            quality_evaluator
-            or ResearchQualityEvaluator()
-        )
+        self._synthesizer = synthesizer or DeterministicResearchSynthesizer()
+        self._quality_evaluator = quality_evaluator or ResearchQualityEvaluator()
 
     @property
-    def source_searcher(
-        self,
-    ) -> ResearchSourceSearcherProtocol:
-        """Return the configured source searcher."""
-
+    def source_searcher(self) -> ResearchSourceSearcherProtocol:
         return self._source_searcher
 
     @property
-    def source_reader(
-        self,
-    ) -> ResearchSourceReaderProtocol:
-        """Return the configured source reader."""
-
+    def source_reader(self) -> ResearchSourceReaderProtocol:
         return self._source_reader
 
     @property
-    def evidence_extractor(
-        self,
-    ) -> ResearchEvidenceExtractorProtocol:
-        """Return the configured evidence extractor."""
-
+    def evidence_extractor(self) -> ResearchEvidenceExtractorProtocol:
         return self._evidence_extractor
 
     @property
     def source_quality_evaluator(
         self,
     ) -> ResearchSourceQualityEvaluatorProtocol:
-        """Return the configured source-quality evaluator."""
-
         return self._source_quality_evaluator
 
     @property
     def document_selector(
         self,
     ) -> ResearchDocumentSelectionProtocol | None:
-        """Return the configured document selector."""
-
         return self._document_selector
 
     def run(
@@ -219,52 +153,27 @@ class SingleResearchAgentPipeline:
         *,
         workspace_id: str | None = None,
     ) -> SingleResearchPipelineResult:
-        """Run the complete research pipeline."""
-
-        resolved_workspace_id = (
-            workspace_id
-            or f"{request.request_id}-workspace"
-        )
-
+        resolved_workspace_id = workspace_id or f"{request.request_id}-workspace"
         if not resolved_workspace_id.strip():
-            raise ResearchPipelineError(
-                "workspace_id must not be blank"
-            )
+            raise ResearchPipelineError("workspace_id must not be blank")
 
         self._request_validator.validate(request)
-
-        task_graph = self._task_decomposer.decompose(
-            request
-        )
-
+        task_graph = self._task_decomposer.decompose(request)
         if not task_graph.tasks:
-            raise ResearchPipelineError(
-                "task decomposition produced no tasks"
-            )
+            raise ResearchPipelineError("task decomposition produced no tasks")
 
         query_set = self._query_planner.plan(
             request=request,
             task_graph=task_graph,
         )
-
         if not query_set.queries:
-            raise ResearchPipelineError(
-                "query planning produced no queries"
-            )
+            raise ResearchPipelineError("query planning produced no queries")
 
-        candidate_set = self._source_searcher.search(
-            query_set
-        )
-
+        candidate_set = self._source_searcher.search(query_set)
         if not candidate_set.candidates:
-            raise ResearchPipelineError(
-                "source search produced no candidates"
-            )
+            raise ResearchPipelineError("source search produced no candidates")
 
-        read_document_set = self._source_reader.read(
-            candidate_set
-        )
-
+        read_document_set = self._source_reader.read(candidate_set)
         if not read_document_set.successful_documents():
             raise ResearchPipelineError(
                 "source reading produced no readable documents"
@@ -272,31 +181,27 @@ class SingleResearchAgentPipeline:
 
         (
             document_set,
+            evidence_set,
             source_quality_evaluations,
-        ) = self._select_documents(read_document_set)
-
+            evidence_attempted_document_count,
+            no_evidence_document_count,
+        ) = self._select_documents_with_evidence(
+            read_document_set,
+            query_set=query_set,
+            maximum_sources=request.maximum_sources,
+        )
         if not document_set.successful_documents():
             raise ResearchPipelineError(
-                "source selection produced no readable documents"
+                "source selection produced no evidence-bearing documents"
             )
-
-        evidence_set = self._evidence_extractor.extract(
-            document_set
-        )
-
         if not evidence_set.evidence:
             raise ResearchPipelineError(
                 "evidence extraction produced no evidence"
             )
 
-        claim_set = self._claim_builder.build(
-            evidence_set
-        )
-
+        claim_set = self._claim_builder.build(evidence_set)
         if not claim_set.claims:
-            raise ResearchPipelineError(
-                "claim building produced no claims"
-            )
+            raise ResearchPipelineError("claim building produced no claims")
 
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
@@ -307,36 +212,214 @@ class SingleResearchAgentPipeline:
             document_set=document_set,
             evidence_set=evidence_set,
             claim_set=claim_set,
-            source_quality_evaluations=(
-                source_quality_evaluations
-            ),
+            source_quality_evaluations=source_quality_evaluations,
             metadata={
                 "pipeline": "single-research-agent",
-                "read_candidate_count": str(
-                    len(read_document_set.documents)
+                "read_candidate_count": str(len(read_document_set.documents)),
+                "evidence_attempted_document_count": str(
+                    evidence_attempted_document_count
                 ),
-                "selected_document_count": str(
-                    len(document_set.documents)
+                "selected_document_count": str(len(document_set.documents)),
+                "evidence_source_count": str(len(document_set.documents)),
+                "backfilled_document_count": str(
+                    max(
+                        0,
+                        evidence_attempted_document_count
+                        - len(document_set.documents),
+                    )
+                ),
+                "no_evidence_document_count": str(
+                    no_evidence_document_count
                 ),
             },
         )
-
         report = self._synthesizer.synthesize(workspace)
-
         quality = self._quality_evaluator.evaluate(
             workspace=workspace,
             report=report,
         )
-
+        if self._document_selector is not None:
+            quality = self._apply_minimum_evidence_source_gate(
+                quality=quality,
+                actual_sources=report.source_count,
+                maximum_sources=request.maximum_sources,
+            )
         return SingleResearchPipelineResult(
             workspace=workspace,
             report=report,
             quality=quality,
         )
 
+    def _select_documents_with_evidence(
+        self,
+        document_set: ResearchSourceDocumentSet,
+        *,
+        query_set: ResearchSearchQuerySet,
+        maximum_sources: int,
+    ) -> tuple[
+        ResearchSourceDocumentSet,
+        ResearchEvidenceSet,
+        list[ResearchSourceQualityEvaluation],
+        int,
+        int,
+    ]:
+        if self._document_selector is None:
+            selected, evaluations = self._select_documents(
+                document_set,
+                query_set=query_set,
+            )
+            evidence_set = self._evidence_extractor.extract(selected)
+            evidence_document_ids = {
+                item.document_id.strip().casefold()
+                for item in evidence_set.evidence
+            }
+            final_documents = [
+                document
+                for document in selected.successful_documents()
+                if document.document_id.strip().casefold()
+                in evidence_document_ids
+            ]
+            final_document_set = ResearchSourceDocumentSet(
+                request_id=selected.request_id,
+                documents=final_documents,
+            )
+            return (
+                final_document_set,
+                ResearchEvidenceSet(
+                    request_id=evidence_set.request_id,
+                    document_set=final_document_set,
+                    evidence=evidence_set.evidence,
+                ),
+                [
+                    evaluation
+                    for evaluation in evaluations
+                    if (
+                        evaluation.document.document_id
+                        .strip()
+                        .casefold()
+                        in evidence_document_ids
+                    )
+                ],
+                len(selected.successful_documents()),
+                len(selected.successful_documents()) - len(final_documents),
+            )
+
+        rank = getattr(self._document_selector, "rank", None)
+        if rank is None:
+            selected, evaluations = self._select_documents(
+                document_set,
+                query_set=query_set,
+            )
+            ranked_documents = selected.successful_documents()
+            ranked_evaluations = evaluations
+        else:
+            selection = rank(
+                document_set=document_set,
+                evaluator=self._source_quality_evaluator,
+                query_set=query_set,
+            )
+            ranked_documents = selection.document_set.successful_documents()
+            ranked_evaluations = selection.evaluations
+
+        evaluation_by_document_id = {
+            evaluation.document.document_id.strip().casefold(): evaluation
+            for evaluation in ranked_evaluations
+        }
+        selected_documents: list[ResearchSourceDocument] = []
+        selected_evidence: list[ResearchEvidence] = []
+        selected_evaluations: list[ResearchSourceQualityEvaluation] = []
+        attempted_count = 0
+        no_evidence_count = 0
+        seen_urls: set[str] = set()
+
+        for document in ranked_documents:
+            if len(selected_documents) >= maximum_sources:
+                break
+
+            normalized_url = document.candidate.normalized_url()
+            if normalized_url in seen_urls:
+                continue
+            seen_urls.add(normalized_url)
+            attempted_count += 1
+
+            single_document_set = ResearchSourceDocumentSet(
+                request_id=document_set.request_id,
+                documents=[document],
+            )
+            extracted = self._evidence_extractor.extract(single_document_set)
+            if not extracted.evidence:
+                no_evidence_count += 1
+                continue
+
+            selected_documents.append(document)
+            selected_evidence.extend(extracted.ordered_evidence())
+            evaluation = evaluation_by_document_id.get(
+                document.document_id.strip().casefold()
+            )
+            if evaluation is not None:
+                selected_evaluations.append(evaluation)
+
+        final_document_set = ResearchSourceDocumentSet(
+            request_id=document_set.request_id,
+            documents=selected_documents,
+        )
+        return (
+            final_document_set,
+            ResearchEvidenceSet(
+                request_id=document_set.request_id,
+                document_set=final_document_set,
+                evidence=selected_evidence,
+            ),
+            selected_evaluations,
+            attempted_count,
+            no_evidence_count,
+        )
+
+    @staticmethod
+    def _apply_minimum_evidence_source_gate(
+        *,
+        quality: ResearchQualityEvaluation,
+        actual_sources: int,
+        maximum_sources: int,
+    ) -> ResearchQualityEvaluation:
+        required_sources = min(2, maximum_sources)
+        if actual_sources >= required_sources:
+            return quality
+
+        retained_issues = [
+            issue
+            for issue in quality.issues
+            if issue.code
+            is not ResearchQualityIssueCode.LOW_SOURCE_DIVERSITY
+        ]
+        retained_issues.append(
+            ResearchQualityIssue(
+                code=ResearchQualityIssueCode.LOW_SOURCE_DIVERSITY,
+                severity=ResearchQualityIssueSeverity.ERROR,
+                message=(
+                    "The report contains evidence from fewer "
+                    "independent sources than required."
+                ),
+                related_ids=[],
+            )
+        )
+        return quality.model_copy(
+            update={
+                "issues": retained_issues,
+                "metadata": {
+                    **quality.metadata,
+                    "minimum_evidence_sources": str(required_sources),
+                    "actual_evidence_sources": str(actual_sources),
+                    "maximum_sources": str(maximum_sources),
+                },
+            }
+        )
+
     def _select_documents(
         self,
         document_set: ResearchSourceDocumentSet,
+        *,
+        query_set: ResearchSearchQuerySet,
     ) -> tuple[
         ResearchSourceDocumentSet,
         list[ResearchSourceQualityEvaluation],
@@ -346,9 +429,7 @@ class SingleResearchAgentPipeline:
             return (
                 document_set,
                 [
-                    self._source_quality_evaluator.evaluate(
-                        document
-                    )
+                    self._source_quality_evaluator.evaluate(document)
                     for document in successful
                 ],
             )
@@ -356,9 +437,6 @@ class SingleResearchAgentPipeline:
         selection = self._document_selector.select(
             document_set=document_set,
             evaluator=self._source_quality_evaluator,
+            query_set=query_set,
         )
-
-        return (
-            selection.document_set,
-            selection.evaluations,
-        )
+        return selection.document_set, selection.evaluations

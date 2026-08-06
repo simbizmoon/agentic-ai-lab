@@ -223,7 +223,10 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
 
             seen_urls.add(normalized_url)
             rank = len(candidates) + 1
-            metadata = {"provider": self.provider}
+            metadata = {
+                "provider": self.provider,
+                "search_query_text": query.query_text.strip(),
+            }
 
             if item.score is not None:
                 metadata["provider_score"] = str(item.score)

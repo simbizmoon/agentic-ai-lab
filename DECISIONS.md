@@ -615,3 +615,99 @@ Research Question
 - Only selected documents contribute evidence, claims, citations, and source-quality evaluations.
 - Local-document research retains its existing selection behavior.
 - Source authority alone is insufficient for final selection; topical relevance and source diversity require a separate follow-up design.
+---
+
+## D-028 — Evidence-aware Source Backfill 및 최소 Source 품질 Gate
+
+- 상태: 확정
+- 날짜: 2026-08-06
+- 적용 범위: Quality-aware Selector를 사용하는 Live Research Pipeline
+
+### 문제
+
+기존 Live Research Pipeline은 품질평가 후 `maximum_sources`만큼 문서를 먼저
+선택한 뒤 선택된 문서에 대해서만 Evidence를 추출하였다.
+
+이 구조에서는 선택된 문서가 `NO_EVIDENCE`를 반환해도 다음 순위 문서로
+교체되지 않았다. 따라서 검색·읽기 후보가 충분히 존재하더라도 최종 보고서가
+하나의 Evidence Source만 사용하는 문제가 발생하였다.
+
+또한 단일 Source 보고서가 Claim 및 Citation Coverage 점수만으로
+`excellent`, `passed=yes` 판정을 받을 수 있었다.
+
+### 결정
+
+- `maximum_sources`는 최초 선택 문서 수가 아니라 최종적으로 유효 Evidence를
+  제공한 Source의 최대 개수로 해석한다.
+- Quality-aware Selector는 품질 하한선을 통과한 전체 문서의 결정론적 순위를
+  제공할 수 있어야 한다.
+- Pipeline은 순위 문서를 하나씩 Evidence 추출기에 전달한다.
+- `NO_EVIDENCE` 문서는 최종 Source quota를 소비하지 않는다.
+- Evidence가 없는 문서가 나오면 다음 순위 문서로 Backfill한다.
+- 다음 중 하나가 충족되면 Backfill을 종료한다.
+  - 유효 Evidence Source 수가 `maximum_sources`에 도달함
+  - 적격 후보를 모두 소진함
+- 정규화된 URL이 같은 Source는 한 번만 시도하고 한 번만 계산한다.
+- 최종 `document_set`에는 실제 Evidence를 제공한 문서만 포함한다.
+- `source_quality_evaluations`도 최종 Evidence Source에 대응하는 평가만
+  포함한다.
+- Workspace metadata에는 최소한 다음을 기록한다.
+  - `read_candidate_count`
+  - `evidence_attempted_document_count`
+  - `selected_document_count`
+  - `evidence_source_count`
+  - `backfilled_document_count`
+  - `no_evidence_document_count`
+
+### 최소 Evidence Source Gate
+
+Quality-aware Selector가 활성화된 Live Pipeline에는 다음 기준을 적용한다.
+
+```text
+minimum_evidence_sources = min(2, maximum_sources)
+```
+
+- 실제 Evidence Source 수가 위 기준보다 적으면
+  `LOW_SOURCE_DIVERSITY`를 `error`로 기록한다.
+- 이 경우 점수 자체가 높더라도 최종 품질은 `passed=false`가 된다.
+- `maximum_sources=1`인 요청은 Source 1개로 통과할 수 있다.
+- 결정론적 Offline Baseline에는 이 Gate를 적용하지 않아 기존 호환성을
+  유지한다.
+
+### Evidence Noise 정책
+
+- Markdown 문서 색인
+- 다중 링크 카드 목록
+- 코드 실행 예시
+- 단순 함수 호출
+- Navigation fragment
+- 구조적 코드 블록
+
+위 항목은 Claim을 직접 지원하는 Evidence로 사용하지 않는다.
+
+Hard Filter를 약화하여 Source 수를 채우지 않는다. 깨끗한 Evidence를 제공하는
+후보가 없으면 Source 부족 상태를 정직하게 실패로 보고한다.
+
+### 검증 결과
+
+- 관련 회귀 테스트: `25 passed`
+- 전체 회귀 테스트: `4157 passed`
+- Ruff: 통과
+- `git diff --check`: 통과
+- Live Research:
+  - 읽은 후보: 9
+  - Evidence 시도 문서: 4
+  - 최종 Evidence Source: 1
+  - `NO_EVIDENCE`: 3
+  - Evidence noise: 없음
+  - 품질 결과: `passed=false`
+  - 품질 문제: `LOW_SOURCE_DIVERSITY/error`
+
+### 이유
+
+AIRA의 Source 개수는 검색결과나 읽은 문서 수가 아니라 실제 Claim을 지원하는
+Evidence Source 수를 의미해야 한다.
+
+근거가 부족한 경우 Source 수를 인위적으로 채우거나 품질을 통과시키는 것보다
+추가 조사 필요성과 불확실성을 명시하는 것이 프로젝트의 Citation,
+Evidence Sufficiency 및 신뢰성 원칙에 부합한다.

@@ -242,3 +242,141 @@ Authority-based selection solved the weak-source problem but did not solve topic
 Lesson:
 
 Source selection must combine authority with query relevance, document specificity, content usefulness, and redundancy control. Authority is a necessary signal, not a complete ranking strategy.
+---
+
+## 2026-08-06 — Evidence-aware Source Backfill과 정직한 품질 실패
+
+### 학습 목표
+
+검색 후보가 충분해도 실제 Evidence를 제공하는 Source가 부족할 수 있다는
+문제를 이해하고, Evidence 중심으로 Source quota와 품질 판정을 설계한다.
+
+### 최초 현상
+
+OpenAI Responses API 공식문서 조사에서 세 문서를 선택했지만 Hard Filter를
+적용한 뒤 실제로 남은 Evidence는 한 Source의 한 문단뿐이었다.
+
+그럼에도 기존 Quality Evaluator는 다음 결과를 냈다.
+
+```text
+quality ≈ 0.97
+quality level = excellent
+passed = yes
+```
+
+Claim Coverage와 Citation Coverage는 높았지만 독립 Source 수가 부족한
+구조적 문제가 품질 통과를 막지 못했다.
+
+### 잘못된 중간 접근
+
+처음에는 Source 선택 단계에서 최대 세 문서를 고르면 충분하다고 생각했다.
+
+그러나 문서 선택 이후 Evidence 추출 단계에서 다음 자료들이 제거되었다.
+
+- 코드 실행 예제
+- 단순 함수 호출
+- Markdown Navigation fragment
+- 문서 Index
+- 링크 카드 목록
+- 자연어 한 줄 뒤에 붙은 다중 Markdown 링크 목록
+
+즉, 선택 문서 수와 유효 Evidence Source 수는 서로 다른 값이었다.
+
+### 발견한 핵심 원인
+
+```text
+Source Selection
+→ maximum_sources만큼 먼저 고정
+→ Evidence Extraction
+→ 일부 문서가 NO_EVIDENCE
+→ 교체 없음
+```
+
+`NO_EVIDENCE` 문서가 최종 Source quota를 이미 소비한 것이 근본 원인이었다.
+
+### 해결 구조
+
+```text
+전체 적격 문서 Ranking
+→ 한 문서씩 Evidence 추출
+→ Evidence가 있으면 최종 Source로 채택
+→ NO_EVIDENCE이면 다음 후보로 Backfill
+→ maximum_sources 도달 또는 후보 소진
+```
+
+최종 Source 수는 검색결과 수나 읽은 문서 수가 아니라 Evidence를 실제로
+제공한 독립 Source 수로 계산한다.
+
+### 최소 Source 품질 Gate
+
+```text
+minimum_evidence_sources = min(2, maximum_sources)
+```
+
+- `maximum_sources >= 2`인데 Evidence Source가 1개이면 품질 실패
+- `maximum_sources = 1`이면 Source 1개로 통과 가능
+- Offline Baseline에는 적용하지 않아 기존 호환성 유지
+
+### 실패 사례 분석
+
+Backfill 도입 후 두 번째 Source가 확보된 것처럼 보였지만, Evidence 내용은
+다음과 같은 문서 색인이었다.
+
+```text
+- Multi-agent
+- Node reference
+- SDKs and CLI
+- OpenAI CLI
+```
+
+이 자료는 Responses API의 핵심 기능을 직접 설명하는 Evidence가 아니었다.
+
+다중 Markdown 링크 목록 Hard Filter를 추가한 뒤 해당 Source들은
+`NO_EVIDENCE`가 되었고 Pipeline은 다음 후보를 계속 시도했다.
+
+최종적으로 깨끗한 두 번째 Source를 찾지 못했으므로 다음 결과가 나왔다.
+
+```text
+read_candidate_count = 9
+evidence_attempted_document_count = 4
+selected_document_count = 1
+no_evidence_document_count = 3
+quality_passed = false
+LOW_SOURCE_DIVERSITY = error
+```
+
+### 검증
+
+- Backfill 성공
+- Source quota 조기 종료
+- 후보 소진
+- `maximum_sources=1`
+- 결정론
+
+위 다섯 시나리오를 회귀 테스트로 고정하였다.
+
+최종 결과:
+
+```text
+4157 passed
+All checks passed
+Live Evidence noise = 0
+```
+
+### 배운 점
+
+1. Source 수는 검색결과 수가 아니다.
+2. 읽은 문서 수 역시 Evidence Source 수가 아니다.
+3. 품질 점수가 높아도 최소 구조 요건을 충족하지 못하면 실패해야 한다.
+4. Hard Filter를 약화해 Source 수를 채우면 Research Agent의 신뢰성이
+   오히려 낮아진다.
+5. 근거가 부족하면 `passed=false`로 보고하는 것이 올바른 Agent 행동이다.
+6. Live 실패 사례는 단위 테스트만으로 발견하기 어려운 새로운 노이즈 형태를
+   보여준다.
+7. 실제 Live E2E와 결정론적 Regression Test를 함께 사용해야 한다.
+
+### 다음 학습 과제
+
+Evidence Source가 부족할 때 단순히 실패하는 데서 끝나지 않고, Agent가
+Query를 수정하거나 다른 공식 Source 유형을 탐색하는 제한된 Replanning으로
+연결해야 한다.

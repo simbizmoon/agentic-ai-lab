@@ -1303,3 +1303,99 @@ Backlog는 실제 사용 중 필요가 확인되고 사용자가 승인한 경�
 - Multi-Agent는 평가로 이점이 입증된 경우에만 채택한다.
 - 실제 코드·테스트·실행 결과가 문서의 주장보다 우선한다.
 - 중요한 변경은 `DECISIONS.md`에 이력을 남긴다.
+---
+
+# 24. 2026-08-06 Live Research Evidence 품질 개선 완료 기록
+
+## 작업 상태
+
+- [x] 검색 결과 Overfetch
+- [x] Query-aware Source Ranking
+- [x] Source Quality Floor
+- [x] 문서 관련성·유용성·Provider 점수 통합
+- [x] Source Redundancy 완화
+- [x] Query-aware Paragraph Evidence 추출
+- [x] 코드·실행지시·색인·Navigation Evidence Hard Filter
+- [x] 다중 Markdown 링크 목록 Hard Filter
+- [x] `NO_EVIDENCE` 상태 정합성 수정
+- [x] Evidence-aware Source Backfill
+- [x] 최소 Evidence Source Quality Gate
+- [x] Backfill 전용 결정론적 회귀 테스트
+- [x] 실제 OpenAI 공식문서 Live Research 검증
+
+## 확정된 실행 의미
+
+```text
+candidate_set
+= 검색에서 발견한 후보 전체
+
+read_document_set
+= Reader가 읽기를 시도한 문서 전체
+
+ranked eligible documents
+= 품질 하한선을 통과한 결정론적 순위 문서
+
+document_set
+= 실제 Evidence를 하나 이상 제공한 최종 문서
+
+evidence_set
+= 최종 document_set에 연결된 Evidence
+
+maximum_sources
+= 최종 유효 Evidence Source의 최대 개수
+```
+
+## Live 검증 결과
+
+연구 질문:
+
+```text
+OpenAI Responses API official documentation overview
+```
+
+조사 목적:
+
+```text
+Explain the Responses API using concise and authoritative web evidence.
+```
+
+최종 검증:
+
+- 검색·읽기 후보: 9
+- Evidence 추출 시도: 4
+- 최종 Evidence Source: 1
+- Evidence 수: 1
+- `NO_EVIDENCE` 문서: 3
+- Backfill 문서: 3
+- 코드·링크 색인 노이즈: 없음
+- 최종 품질 점수: 0.9565
+- 최소 Source Gate: 실패
+- 품질 결과: `passed=false`
+- 품질 문제: `LOW_SOURCE_DIVERSITY/error`
+
+## 해석
+
+Backfill은 정상 작동하였다.
+
+다만 품질 하한선을 통과한 나머지 후보에서 Responses API 질문을 직접
+지원하는 깨끗한 Evidence를 얻지 못했다. Pipeline은 문서 색인이나 코드 예시를
+Evidence로 채택하지 않았으며, Source 수를 인위적으로 채우지 않고 단일 Source
+상태를 품질 실패로 보고하였다.
+
+이는 기능 실패가 아니라 Evidence Sufficiency 정책이 정상 작동한 결과다.
+
+## 테스트 기준선
+
+- 전체 pytest: `4157 passed`
+- Ruff: `All checks passed`
+- `git diff --check`: 통과
+- Live E2E: 통과
+- Backfill 및 Source Gate 회귀 테스트: 통과
+
+## 다음 우선 과제
+
+- [ ] 검색 Query 다양화 또는 제한된 Replanning으로 독립 Source Coverage 개선
+- [ ] Evidence Sufficiency 결과를 Agent Loop의 추가 검색 결정과 연결
+- [ ] 공식 API Reference 외의 독립된 공식 Guide Source 탐색 전략 검토
+- [ ] Report의 영문 단수·복수 표현 개선
+- [ ] Live Result JSON에서 계산 속성인 `passed` 노출 여부 검토

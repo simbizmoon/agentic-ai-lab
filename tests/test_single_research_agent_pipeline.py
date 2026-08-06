@@ -4,6 +4,12 @@ from datetime import date
 
 import pytest
 
+from app.research.pipeline_analysis_adapters import (
+    DeterministicPipelineClaimBuilder,
+)
+from app.research.quality_aware_document_selector import (
+    ResearchDocumentSelection,
+)
 from app.research.research_pipeline_error import (
     ResearchPipelineError,
 )
@@ -322,6 +328,185 @@ def pipeline(
     )
 
 
+BACKFILL_CONTENT = {
+    "source-a": "Agent memory source A contains supported evidence.",
+    "source-b": "Navigation-only source B.",
+    "source-c": "Navigation-only source C.",
+    "source-d": "Agent memory source D contains supported evidence.",
+}
+
+
+class BackfillSourceSearcher:
+    """Produce four deterministic source candidates."""
+
+    def search(
+        self,
+        query_set: ResearchSearchQuerySet,
+    ) -> ResearchSourceCandidateSet:
+        candidates = [
+            ResearchSourceCandidate(
+                source_id=source_id,
+                request_id=query_set.request_id,
+                task_id="task-001",
+                query_id="query-001",
+                title=f"Agent memory {source_id}",
+                url=f"https://example.com/{source_id}",
+                source_type=ResearchSourceType.ACADEMIC,
+                rank=position,
+            )
+            for position, source_id in enumerate(
+                ("source-a", "source-b", "source-c", "source-d"),
+                start=1,
+            )
+        ]
+        return ResearchSourceCandidateSet(
+            request_id=query_set.request_id,
+            query_set=query_set,
+            candidates=candidates,
+        )
+
+
+class BackfillSourceReader:
+    """Read every backfill candidate into one document set."""
+
+    def read(
+        self,
+        candidate_set: ResearchSourceCandidateSet,
+    ) -> ResearchSourceDocumentSet:
+        documents = []
+        for candidate in candidate_set.candidates:
+            content = BACKFILL_CONTENT[candidate.source_id]
+            documents.append(
+                ResearchSourceDocument(
+                    document_id=f"document-{candidate.source_id}",
+                    candidate=candidate,
+                    status=ResearchSourceDocumentStatus.READ,
+                    content_type=ResearchSourceContentType.TEXT,
+                    content=content,
+                    language="en",
+                    sections=[],
+                    word_count=len(content.split()),
+                    character_count=len(content),
+                    reader="backfill-reader",
+                )
+            )
+        return ResearchSourceDocumentSet(
+            request_id=candidate_set.request_id,
+            documents=documents,
+        )
+
+
+class OrderedBackfillSelector:
+    """Return all documents in deterministic order."""
+
+    def select(
+        self,
+        *,
+        document_set: ResearchSourceDocumentSet,
+        evaluator: object,
+        query_set: ResearchSearchQuerySet | None = None,
+    ) -> ResearchDocumentSelection:
+        del query_set
+        evaluations = [
+            evaluator.evaluate(document)
+            for document in document_set.successful_documents()
+        ]
+        return ResearchDocumentSelection(
+            document_set=document_set,
+            evaluations=evaluations,
+        )
+
+    def rank(
+        self,
+        *,
+        document_set: ResearchSourceDocumentSet,
+        evaluator: object,
+        query_set: ResearchSearchQuerySet | None = None,
+    ) -> ResearchDocumentSelection:
+        return self.select(
+            document_set=document_set,
+            evaluator=evaluator,
+            query_set=query_set,
+        )
+
+
+class BackfillEvidenceExtractor:
+    """Return evidence for configured sources and record calls."""
+
+    def __init__(
+        self,
+        evidence_source_ids: set[str],
+    ) -> None:
+        self._evidence_source_ids = evidence_source_ids
+        self.calls: list[str] = []
+
+    def extract(
+        self,
+        document_set: ResearchSourceDocumentSet,
+    ) -> ResearchEvidenceSet:
+        document = document_set.documents[0]
+        source_id = document.candidate.source_id
+        self.calls.append(source_id)
+
+        if source_id not in self._evidence_source_ids:
+            return ResearchEvidenceSet(
+                request_id=document_set.request_id,
+                document_set=document_set,
+                evidence=[],
+            )
+
+        content = document.content
+        evidence = ResearchEvidence(
+            evidence_id=f"evidence-{source_id}",
+            request_id=document_set.request_id,
+            task_id=document.candidate.task_id,
+            source_id=source_id,
+            document_id=document.document_id,
+            excerpt=content,
+            start_character=0,
+            end_character=len(content),
+            evidence_type=ResearchEvidenceType.FACT,
+            stance=ResearchEvidenceStance.SUPPORTS,
+            relevance_score=0.9,
+            confidence_score=0.8,
+        )
+        return ResearchEvidenceSet(
+            request_id=document_set.request_id,
+            document_set=document_set,
+            evidence=[evidence],
+        )
+
+
+def backfill_request(
+    *,
+    maximum_sources: int,
+) -> ResearchRequest:
+    """Return a request with an explicit evidence-source limit."""
+
+    return request().model_copy(
+        update={"maximum_sources": maximum_sources}
+    )
+
+
+def backfill_pipeline(
+    *,
+    extractor: BackfillEvidenceExtractor,
+) -> SingleResearchAgentPipeline:
+    """Return a selector-enabled pipeline for backfill tests."""
+
+    return SingleResearchAgentPipeline(
+        request_validator=FakeRequestValidator(),
+        task_decomposer=FakeTaskDecomposer(),
+        query_planner=FakeQueryPlanner(),
+        source_searcher=BackfillSourceSearcher(),
+        source_reader=BackfillSourceReader(),
+        evidence_extractor=extractor,
+        claim_builder=DeterministicPipelineClaimBuilder(),
+        source_quality_evaluator=FakeSourceQualityEvaluator(),
+        document_selector=OrderedBackfillSelector(),
+    )
+
+
 def test_pipeline_runs_end_to_end() -> None:
     result = pipeline().run(request())
 
@@ -410,3 +595,116 @@ def test_pipeline_is_deterministic() -> None:
         first.model_dump(mode="json")
         == second.model_dump(mode="json")
     )
+def test_pipeline_backfills_no_evidence_documents() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
+
+    result = backfill_pipeline(extractor=extractor).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert [
+        document.candidate.source_id
+        for document in result.workspace.document_set.documents
+    ] == ["source-a", "source-d"]
+    assert extractor.calls == [
+        "source-a",
+        "source-b",
+        "source-c",
+        "source-d",
+    ]
+    assert result.workspace.metadata == {
+        "pipeline": "single-research-agent",
+        "read_candidate_count": "4",
+        "evidence_attempted_document_count": "4",
+        "selected_document_count": "2",
+        "evidence_source_count": "2",
+        "backfilled_document_count": "2",
+        "no_evidence_document_count": "2",
+    }
+    assert result.report.source_count == 2
+    assert result.quality.passed is True
+
+
+def test_pipeline_stops_after_reaching_source_quota() -> None:
+    extractor = BackfillEvidenceExtractor(
+        {"source-a", "source-b", "source-d"}
+    )
+
+    result = backfill_pipeline(extractor=extractor).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert extractor.calls == ["source-a", "source-b"]
+    assert [
+        document.candidate.source_id
+        for document in result.workspace.document_set.documents
+    ] == ["source-a", "source-b"]
+    assert result.workspace.metadata[
+        "evidence_attempted_document_count"
+    ] == "2"
+
+
+def test_pipeline_fails_quality_gate_when_candidates_are_exhausted() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a"})
+
+    result = backfill_pipeline(extractor=extractor).run(
+        backfill_request(maximum_sources=3)
+    )
+
+    assert extractor.calls == [
+        "source-a",
+        "source-b",
+        "source-c",
+        "source-d",
+    ]
+    assert result.report.source_count == 1
+    assert result.quality.passed is False
+    assert any(
+        issue.code.value == "low_source_diversity"
+        and issue.severity.value == "error"
+        for issue in result.quality.issues
+    )
+    assert result.quality.metadata[
+        "minimum_evidence_sources"
+    ] == "2"
+    assert result.quality.metadata[
+        "actual_evidence_sources"
+    ] == "1"
+
+
+def test_pipeline_accepts_one_source_when_maximum_is_one() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a"})
+
+    result = backfill_pipeline(extractor=extractor).run(
+        backfill_request(maximum_sources=1)
+    )
+
+    assert extractor.calls == ["source-a"]
+    assert result.report.source_count == 1
+    assert result.quality.passed is True
+    assert not any(
+        issue.severity.value == "error"
+        for issue in result.quality.issues
+    )
+
+
+def test_pipeline_backfill_is_deterministic() -> None:
+    first_extractor = BackfillEvidenceExtractor(
+        {"source-a", "source-d"}
+    )
+    second_extractor = BackfillEvidenceExtractor(
+        {"source-a", "source-d"}
+    )
+
+    first = backfill_pipeline(extractor=first_extractor).run(
+        backfill_request(maximum_sources=2)
+    )
+    second = backfill_pipeline(extractor=second_extractor).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert (
+        first.model_dump(mode="json")
+        == second.model_dump(mode="json")
+    )
+    assert first_extractor.calls == second_extractor.calls
