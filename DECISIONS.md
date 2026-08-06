@@ -465,7 +465,7 @@ AIRA 제품 목표와 통합 개발에 관한 문서 우선순위는 다음과 �
 2. 향후 작성할 `AIRA_TARGET_PRODUCT_SPEC.md`
 3. 향후 작성할 `AIRA_TARGET_ARCHITECTURE.md`
 4. `DECISIONS.md`
-5. 향후 작성할 `AIRA_PROJECT_AUDIT_REPORT.md`
+5. `AIRA_PROJECT_AUDIT_REPORT.md`
 6. 향후 작성할 `AIRA_INTEGRATION_PLAN.md`
 7. 기존 `MASTER.md`
 8. 기존 `ROADMAP.md`
@@ -500,3 +500,64 @@ AIRA의 핵심 목표 또는 주요 Architecture를 변경할 때에는 다음�
 단순 구현 편의를 이유로 AIRA의 최종 목표를 축소하지 않는다.
 
 기술적, 비용적 또는 보안상 한계가 확인되면 그 사실을 명확히 기록하고 단계적 구현 범위를 조정할 수 있다.
+
+---
+
+## D-026 — Live Research Vertical Slice 우선 통합
+
+- 상태: 확정
+- 날짜: 2026-08-06
+- 근거 문서:
+  - `AIRA_PROJECT_AUDIT_REPORT.md`
+  - `AIRA_CAPABILITY_MATRIX.md`
+
+결정:
+
+- Existing Capability Audit 결과, 기존 저장소는 Domain Schema, 검증,
+  OpenAI Planning, Tool 실행 기반, Trace, Usage, Budget 및 Application
+  실행관리 기능을 광범위하게 구현하고 있으며 현재 전체 테스트와 Ruff를
+  통과한다.
+- 현재 `aira research`는 최종 AIRA가 아니라 결정론적 Offline Research
+  Baseline으로 유지한다.
+- 첫 실제 제품 통합은 `Live Research Vertical Slice`로 수행한다.
+- Vertical Slice는 하나의 연구 질문을 입력받아 실제 인터넷 자료를 검색하고,
+  제한된 Source를 읽고, 실행별 폴더에 자료와 Metadata 및 실행정보를 저장한
+  뒤 결과를 다시 읽을 수 있는 최소 End-to-End 경로를 의미한다.
+- 첫 Vertical Slice는 Single-Agent 방식으로 구현한다.
+- 첫 구현의 신규 핵심 기능은 다음으로 제한한다.
+  1. 실제 Web Search Adapter
+  2. 실제 HTTP/HTML Source Reader
+  3. Source Artifact Writer
+  4. Concrete Live Research Runner
+  5. CLI Live 실행 경로
+- 기존 `ResearchRequest`, Search Query, Source Candidate, Source Document,
+  Search Port, Reader Port, Result Writer, Guardrail, Usage, Budget, Trace 및
+  Application Execution Service를 우선 재사용한다.
+- 범용 Planning Tool Loop는 첫 Vertical Slice의 필수 실행 경로에서 제외한다.
+  실제 Search와 Reader가 검증된 후 연결 가치를 다시 평가한다.
+- RAG, Memory, PDF/HWP/HWPX 고도화, Skill, MCP, Background Job 및
+  Multi-Agent는 첫 Vertical Slice 완료 이후 평가 결과에 따라 통합한다.
+- 신규 코드의 첫 목표는 기능 수가 아니라 다음 수직 경로의 실제 성공이다.
+
+```text
+Research Question
+→ Limited Query Planning
+→ Live Web Search
+→ Limited Source Selection
+→ HTTP/HTML Reading
+→ Source and Metadata Storage
+→ Usage, Error and Trace Storage
+→ Re-readable Run Result
+```
+
+완료 조건:
+
+- 실제 인터넷 검색 결과가 하나 이상 생성된다.
+- 최소 하나의 실제 웹 문서 본문을 읽는다.
+- 검색 Query, Source URL, 제목, Provider, 검색·수집 시각 및 오류 상태를
+  실행별 폴더에 저장한다.
+- Source 수와 Search 호출 수에 명시적인 상한을 둔다.
+- Offline Baseline의 기존 테스트를 깨뜨리지 않는다.
+- 전체 `pytest`와 Ruff가 통과한다.
+- 실제 API 또는 네트워크 Smoke Test 결과를 Fake 기반 Unit Test와 구분하여
+  기록한다.

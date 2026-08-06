@@ -36,8 +36,8 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 0 — Project Realignment and Source Preparation
-- 현재 상태: 진행 중
+- 현재 제품 단계: Stage 2 — Target Product and Architecture
+- 현재 상태: Existing Capability Audit 완료, Live Research Vertical Slice 설계 준비
 - 현재 기준일: 2026-08-06
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -51,7 +51,9 @@
 - [x] `AIRA_PROJECT_CHARTER.md`
 - [x] `DECISIONS.md` 재정렬
 - [x] `MASTER.md` 재정렬
-- [~] `ROADMAP.md` 재정렬
+- [x] `ROADMAP.md` 재정렬
+- [x] `AIRA_PROJECT_AUDIT_REPORT.md`
+- [x] `AIRA_CAPABILITY_MATRIX.md`
 
 다음 문서 점검 순서:
 
@@ -61,18 +63,22 @@
 - [ ] `LEARNING_LOG.md`
 - [ ] 기타 기존 핵심 문서
 
-기존 테스트 기준선 기록:
+현재 테스트 기준선:
 
-- Phase 13 당시 기록: `4048 passed`
-- Phase 13 당시 Ruff 기록: `All checks passed`
+- 기준일: 2026-08-06
+- Python: `3.12.3`
+- pytest: `9.1.1`
+- Ruff: `0.16.0`
+- 전체 테스트: `4088 passed in 15.93s`
+- Ruff: `All checks passed`
+- 테스트 및 정적 검사 후 Git 작업 트리 변경 없음
 
-주의:
+판정 원칙:
 
-- 위 테스트 수치는 과거 기록이다.
-- 현재 저장소의 최신 테스트 수와 실제 Runtime 상태는
-  Stage 1 Existing Capability Audit에서 다시 확인한다.
-- 파일 또는 클래스가 존재한다는 이유만으로 기능이 현재 Runtime에
-  연결되었다고 판단하지 않는다.
+- 전체 테스트 통과는 코드 기준선의 안정성을 의미한다.
+- Fake 또는 Stub 기반 테스트 통과가 실제 외부 API 실행을 의미하지는 않는다.
+- Implemented, Tested, Runtime-connected 및 Production-ready 상태를 계속
+  구분한다.
 
 ---
 
@@ -341,7 +347,10 @@ ChatGPT의 `Agentic AI Lab` 프로젝트를 AIRA 개발의 실제 Control Plane�
 
 ## 상태
 
-- [ ] 시작 전
+- [x] 핵심 Existing Capability Audit 완료
+- 세부 Component별 판정은 `AIRA_CAPABILITY_MATRIX.md`에서 관리한다.
+- 아래 Work Item 목록의 `[ ]`는 미구현을 뜻하지 않으며, 원래 감사 범위를 보존한 것이다.
+- 추가 확인이 필요한 항목은 후속 Architecture 및 Integration Work Item에서 다룬다.
 
 ## Work Items
 
@@ -472,13 +481,29 @@ ChatGPT의 `Agentic AI Lab` 프로젝트를 AIRA 개발의 실제 Control Plane�
 
 ## 완료 결과
 
-- `AIRA_PROJECT_AUDIT_REPORT.md`
-- `AIRA_CAPABILITY_MATRIX.md`
-- 실제 최신 테스트 기준선
-- 재사용 대상 목록
-- 통합 부채 목록
-- 중복 구현 목록
-- 위험 및 미확인 항목 목록
+- [x] 저장소 핵심 Capability Inventory 완료
+- [x] OpenAI Planning과 Structured Output 구현 확인
+- [x] Research Task·Query·Source·Document Domain 구조 확인
+- [x] Tool Registry, Plan 실행 및 Trace 기반 확인
+- [x] 실제 OpenAI Usage 추출과 Token·Attempt·Time Budget 확인
+- [x] Application Execution 및 Idempotency 기반 확인
+- [x] 현재 `aira research`가 Offline Deterministic Baseline임을 확정
+- [x] 실제 Web Search Adapter가 없음을 확인
+- [x] 실제 HTTP/HTML Source Reader가 없음을 확인
+- [x] Concrete Live Research Runner와 Composition Root가 없음을 확인
+- [x] 전체 테스트 `4088 passed`
+- [x] Ruff `All checks passed`
+- [x] `AIRA_PROJECT_AUDIT_REPORT.md` 작성
+- [x] `AIRA_CAPABILITY_MATRIX.md` 작성
+
+Stage 1 결론:
+
+```text
+Rewrite가 아니라 Integration-first
+→ Single-Agent Live Research Vertical Slice
+→ 실제 Search와 Reader 우선
+→ 기존 Capability 최대 재사용
+```
 
 ---
 
