@@ -8,6 +8,15 @@ from app.research.http_html_research_source_reader import (
 from app.research.live_runtime import (
     build_live_research_pipeline,
 )
+from app.research.live_source_quality_evaluator import (
+    LiveWebSourceQualityEvaluator,
+)
+from app.research.paragraph_evidence_extractor import (
+    ParagraphEvidenceExtractor,
+)
+from app.research.pipeline_analysis_adapters import (
+    PipelineEvidenceExtractorAdapter,
+)
 from app.research.pipeline_source_adapters import (
     PipelineSourceReaderAdapter,
     PipelineSourceSearchAdapter,
@@ -49,4 +58,16 @@ def test_live_runtime_composes_live_adapters() -> None:
     assert isinstance(
         pipeline.source_reader.reader,
         HttpHtmlResearchSourceReader,
+    )
+    assert isinstance(
+        pipeline.evidence_extractor,
+        PipelineEvidenceExtractorAdapter,
+    )
+    assert isinstance(
+        pipeline.evidence_extractor.extractor,
+        ParagraphEvidenceExtractor,
+    )
+    assert isinstance(
+        pipeline.source_quality_evaluator,
+        LiveWebSourceQualityEvaluator,
     )

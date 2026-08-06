@@ -5,9 +5,11 @@ from __future__ import annotations
 from app.research.http_html_research_source_reader import (
     HttpHtmlResearchSourceReader,
 )
-from app.research.local_runtime import (
-    LocalDocumentSourceQualityEvaluator,
-    WholeDocumentEvidenceExtractor,
+from app.research.live_source_quality_evaluator import (
+    LiveWebSourceQualityEvaluator,
+)
+from app.research.paragraph_evidence_extractor import (
+    ParagraphEvidenceExtractor,
 )
 from app.research.pipeline_analysis_adapters import (
     DeterministicPipelineClaimBuilder,
@@ -67,10 +69,10 @@ def build_live_research_pipeline(
             )
         ),
         evidence_extractor=PipelineEvidenceExtractorAdapter(
-            WholeDocumentEvidenceExtractor()
+            ParagraphEvidenceExtractor()
         ),
         claim_builder=DeterministicPipelineClaimBuilder(),
         source_quality_evaluator=(
-            LocalDocumentSourceQualityEvaluator()
+            LiveWebSourceQualityEvaluator()
         ),
     )

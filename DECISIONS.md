@@ -591,3 +591,16 @@ Research Question
   후속 비교·확장 후보로 유지한다.
 - 첫 구현에서는 복수 Provider, 자동 Fallback, Tavily Extract·Crawl·Research,
   Advanced Search 기본값 및 자동 Retry Loop를 제외한다.
+
+## Live Research Evidence Chunking and Source Quality
+
+- Live web documents no longer use the complete document as one evidence item.
+- Live evidence is selected deterministically from paragraph-sized chunks.
+- Each live source contributes at most three evidence items.
+- Each evidence excerpt is limited to 1,200 characters.
+- Evidence retains exact source-document character offsets for citation traceability.
+- Code-like API examples receive a relevance penalty but are not categorically removed.
+- Local-document research continues to use whole-document evidence.
+- Live web sources use a separate deterministic quality evaluator.
+- Source quality currently records authority, primary-source, recency, completeness, and traceability scores.
+- Source-quality scores do not yet reorder or filter search candidates.

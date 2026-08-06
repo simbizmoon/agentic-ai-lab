@@ -199,3 +199,23 @@ Phase 13 — Practical AIRA Integration and Delivery
 2. 기존 모듈 통합 지도 작성
 3. 불필요한 기본 경로 제거
 4. AIRA CLI 완성
+
+## Evidence Chunking and Source Quality
+
+Implemented and tested paragraph-based evidence extraction for live web research.
+
+Observed results:
+
+- 4,145 tests passed.
+- Ruff passed.
+- Live research completed successfully.
+- Three readable sources produced nine evidence items.
+- Every evidence excerpt was no longer than 1,200 characters.
+- Each source produced no more than three evidence items.
+- The generated Markdown report was 71 lines and 9,089 bytes.
+- No real-looking API key was exposed.
+- The official OpenAI documentation received a higher source-quality score than secondary sources.
+
+Key lesson:
+
+Chunking controls report size, but chunking alone does not guarantee answer quality. Source-quality evaluation must influence candidate selection or evidence ordering to prevent weaker third-party sources from receiving equal report space.

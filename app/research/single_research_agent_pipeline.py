@@ -186,6 +186,18 @@ class SingleResearchAgentPipeline:
 
         return self._source_reader
 
+    @property
+    def evidence_extractor(self):
+        """Return the configured evidence extractor."""
+
+        return self._evidence_extractor
+
+    @property
+    def source_quality_evaluator(self):
+        """Return the configured source-quality evaluator."""
+
+        return self._source_quality_evaluator
+
     def run(
         self,
         request: ResearchRequest,
