@@ -1,25 +1,82 @@
 # Agentic AI Lab — ROADMAP
 
-## 진행상태
+## 1. 문서 목적
+
+본 문서는 AIRA(Agentic Intelligence Research Assistant)의 현재 위치,
+향후 제품 통합 Stage, Integration Work Item, 공통 Gate 및 완료 기준을 관리한다.
+
+문서 역할은 다음과 같이 구분한다.
+
+- `AIRA_PROJECT_CHARTER.md`: 최종 제품 목표와 최상위 원칙
+- `MASTER.md`: 프로젝트 운영·개발·학습 원칙
+- `DECISIONS.md`: 확정 결정과 변경 이력
+- `ROADMAP.md`: 현재 위치와 향후 실행 순서
+- `AIRA_PROJECT_AUDIT_REPORT.md`: 실제 저장소 감사 결과
+- `AIRA_TARGET_ARCHITECTURE.md`: 목표 Runtime Architecture
+- `AIRA_INTEGRATION_PLAN.md`: 구체적인 통합 Work Item
+
+기존 Phase 0부터 Phase 13까지는 완료된 학습 및 구현 이력으로 보존한다.
+
+향후 AIRA 제품 통합은 신규 Phase 번호보다 Stage와 Integration Work Item으로
+관리한다.
+
+---
+
+## 2. 진행 상태 표기
 
 - `[ ]` 시작 전
 - `[~]` 진행 중
 - `[x]` 완료
-- `[!]` 보충 필요
+- `[!]` 보충 또는 재검증 필요
 - `[-]` 보류
+- `[?]` Existing Capability Audit에서 확인 필요
 
-## 현재 위치
+---
 
-- 현재 Phase: Phase 13 — Practical AIRA Integration and Delivery
-- 현재 상태: 시작 전
-- 완료된 Phase: Phase 0부터 Phase 12
-- 전체 테스트 기준선: 4048 passed
-- Ruff: All checks passed
-- 다음 단계: 최종 AIRA 사용 시나리오와 통합 경로 확정
-- 종료 원칙: Phase 13 완료 후 프로젝트를 종료하고 Backlog는 별도 관리
-- 범위 원칙: 실제 사용 가능한 최소 AIRA에 직접 필요한 작업만 수행
+## 3. 현재 위치
 
-## 완료된 Phase
+- 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
+- 현재 제품 단계: Stage 0 — Project Realignment and Source Preparation
+- 현재 상태: 진행 중
+- 현재 기준일: 2026-08-06
+- 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
+- 기본 실행 전략: LLM 기반 Single Research Agent 우선
+- 기본 관리 방식:
+  - ChatGPT `Agentic AI Lab` 프로젝트가 전체 프로젝트를 총괄한다.
+  - Codex가 실제 저장소 감사·구현·테스트의 주 실행 도구를 담당한다.
+  - 기존 코드를 감사하고 최대한 재사용한다.
+
+현재 완료 또는 작성된 기준 문서:
+
+- [x] `AIRA_PROJECT_CHARTER.md`
+- [x] `DECISIONS.md` 재정렬
+- [x] `MASTER.md` 재정렬
+- [~] `ROADMAP.md` 재정렬
+
+다음 문서 점검 순서:
+
+- [ ] `CURRICULUM.md`
+- [ ] `AGENTS.md`
+- [ ] `README.md`
+- [ ] `LEARNING_LOG.md`
+- [ ] 기타 기존 핵심 문서
+
+기존 테스트 기준선 기록:
+
+- Phase 13 당시 기록: `4048 passed`
+- Phase 13 당시 Ruff 기록: `All checks passed`
+
+주의:
+
+- 위 테스트 수치는 과거 기록이다.
+- 현재 저장소의 최신 테스트 수와 실제 Runtime 상태는
+  Stage 1 Existing Capability Audit에서 다시 확인한다.
+- 파일 또는 클래스가 존재한다는 이유만으로 기능이 현재 Runtime에
+  연결되었다고 판단하지 않는다.
+
+---
+
+## 4. 완료된 기존 학습·구현 Phase
 
 - [x] Phase 0 — 프로젝트 기반
 - [x] Phase 1 — Agentic AI 기초
@@ -31,159 +88,1190 @@
 - [x] Phase 7 — Memory
 - [x] Phase 8 — Planning Agent
 - [x] Phase 9 — Single Research Agent
-- [x] Phase 10 — Multi-Agent Research System
+- [x] Phase 10 — 제한된 Multi-Agent Research
 - [x] Phase 11 — Evals, Guardrails, Reliability
 - [x] Phase 12 — Application, Persistence, Background Jobs
+- [x] Phase 13 — Practical AIRA Integration and Delivery
 
-## 이미 확보된 핵심 자산
+위 Phase들은 다음 목적으로 유지한다.
 
-### 연구 기능
+- Agentic AI 핵심 개념 학습 이력
+- 개별 Component 구현 이력
+- Existing Capability Audit의 조사 대상
+- 향후 AIRA 통합 시 재사용 가능한 코드 자산
+- Regression 및 비교 기준
 
-- Research Request와 Task 분해
-- Search Query 계획
-- Source Search와 Reader Port
-- Evidence 추출
-- Source 품질 평가
-- Claim과 Citation 연결
-- Research Workspace
-- Report Synthesis
-- Single-Agent 및 Multi-Agent 연구 흐름
+---
 
-### 품질과 안전
+## 5. 기존 Phase 13 Baseline
 
-- Evaluation Dataset과 Runner
-- Citation, Evidence, Claim Support 평가
-- Guardrail
-- Retry, Timeout, Cancellation
-- Reliability Metrics
-- E2E Evaluation
+### 상태
 
-### Application 기반
+- 완료된 Baseline
+- 최종 AIRA는 아님
 
-- Execution, Evaluation, Guardrail, Job Repository
-- Background Job Lifecycle
-- Queue와 Lease
-- Retry Scheduling
-- Cancellation Persistence
-- Research, Tool, Workflow Application Service
-- Reliability Query
-- Transaction Boundary
-- Idempotency
-- Failure Mapping
-- Phase 12 E2E Flow
+### 유지 목적
 
-## Phase 13 — Practical AIRA Integration and Delivery
+- 결정론적 Offline Research Baseline
+- Schema 검증
+- Pipeline Regression Test
+- 외부 API 없는 실행 경로
+- 제한된 Fallback
+- 향후 LLM 기반 AIRA와의 비교 기준
 
-- 상태: 시작 전
-- 최대 Lesson: 10개
-- 최종 Phase: 예
+### 확인된 또는 확인이 필요한 한계
 
-### Lesson 13.1 — 제품 사용 시나리오와 범위 확정
+- [!] 인터넷 검색이 기본 Runtime에 연결되지 않음
+- [!] 외부 LLM이 기본 실행 경로에 연결되지 않음
+- [!] 기존 RAG와 Phase 13 Pipeline의 통합 부족
+- [!] 동적 Tool 선택 제한
+- [!] Evidence Sufficiency 기반 Replanning 제한
+- [!] Memory의 실제 Runtime 연결 부족
+- [!] Provider 교체 구조의 실제 Runtime 검증 부족
+- [!] 다수 Source의 의미 기반 비교·충돌 분석 제한
+- [!] Usage와 Cost 계산의 실제 Agent Budget 연결 여부 재확인 필요
 
-- [ ] 핵심 사용자 1명과 주요 사용 시나리오 확정
-- [ ] 입력, 처리, 출력의 단일 기본 흐름 확정
-- [ ] 사용하지 않을 고급 기능 명시
-- 완료 결과: `AIRA_MVP_SPEC.md`
+---
 
-### Lesson 13.2 — 기존 모듈 통합 지도
+## 6. 감사 대상인 기존 핵심 자산
 
-- [ ] 실제 기본 경로에 필요한 기존 모듈 선택
-- [ ] 중복 또는 미사용 모듈 분류
-- [ ] Composition Root 설계
-- 완료 결과: 한 장의 Runtime Architecture와 의존성 구성
+다음 기능은 기존 Phase에서 구현되었거나 관련 코드와 테스트가 존재하는 것으로
+기록되어 있다.
 
-### Lesson 13.3 — AIRA CLI
+실제 재사용 여부는 Stage 1 Existing Capability Audit에서 확인한다.
 
-- [ ] 연구 질문 또는 파일 입력
-- [ ] Single Research Agent 실행
-- [ ] 진행 상태 표시
-- [ ] 보고서와 Citation 출력
-- 완료 결과: 실제 사용할 수 있는 CLI 명령
+각 항목은 다음 상태로 분류한다.
 
-### Lesson 13.4 — 최소 영속 저장
+- Implemented
+- Tested
+- Runtime-connected
+- Production-ready
 
-- [ ] 실행 요청과 결과 저장
-- [ ] 보고서 재조회
-- [ ] 중복 요청 처리
-- [ ] SQLite 또는 기존 In-Memory 중 실제 필요에 맞게 선택
-- 완료 결과: 프로그램 재실행 후 결과를 다시 확인할 수 있음
+### 6.1 LLM 및 OpenAI
 
-### Lesson 13.5 — 실제 연구 사례 1
+- [?] OpenAI API Client
+- [?] OpenAI Responses API 호출
+- [?] OpenAI Python SDK
+- [?] Client Factory
+- [?] 환경변수와 Secret 처리
+- [?] Structured Outputs
+- [?] Tool Definition
+- [?] Tool Call 처리
+- [?] Tool Result 반환
+- [?] Multi-turn Tool Loop
+- [?] Retry와 Timeout
+- [?] 실제 API Smoke Test
+- [?] Fake 또는 Stub Client Test
 
-- [ ] 프로젝트 문서 분석 또는 기술 조사 실행
-- [ ] Source와 Citation 검토
-- [ ] 불필요한 단계와 기능 제거
-- 완료 결과: 첫 실제 AIRA 보고서
+### 6.2 Tool 및 Workflow
 
-### Lesson 13.6 — 실제 연구 사례 2와 품질 보완
+- [?] Tool Registry
+- [?] Tool 입력·출력 검증
+- [?] Tool Execution
+- [?] Tool Permission
+- [?] Workflow
+- [?] State 관리
+- [?] Scheduler
+- [?] Retry
+- [?] Cancellation
+- [?] Failure Mapping
+- [?] Idempotency
 
-- [ ] 다른 유형의 연구 요청 실행
-- [ ] 평가와 Guardrail 확인
-- [ ] 품질이 낮은 지점만 최소 수정
-- 완료 결과: 재현 가능한 두 번째 사례
+### 6.3 RAG 및 문서 처리
 
-### Lesson 13.7 — 실제 연구 사례 3과 사용성 평가
+- [?] TXT Reader
+- [?] Markdown Reader
+- [?] PDF Reader
+- [?] HWP 또는 HWPX 관련 구현
+- [?] Document Normalization
+- [?] Chunker
+- [?] Keyword Search
+- [?] Embedding Provider
+- [?] Vector Retriever
+- [?] Hybrid Retrieval
+- [?] Reranker
+- [?] Context Builder
+- [?] Citation Evaluator
+- [?] Abstention Evaluator
+- [?] Grounded Answer 생성
 
-- [ ] 실용적인 세 번째 사례 실행
-- [ ] 시간, 비용, 결과 품질 기록
-- [ ] Single-Agent 기본 경로 확정
-- [ ] Multi-Agent는 필요할 때만 비교
-- 완료 결과: AIRA 효용 평가표
+### 6.4 Research Agent
 
-### Lesson 13.8 — 선택적 최소 API
+- [?] Research Request
+- [?] Task 분해
+- [?] Search Query Planning
+- [?] Source Search Port
+- [?] Source Reader Port
+- [?] Evidence 추출
+- [?] Source 품질 평가
+- [?] Claim 생성
+- [?] Claim과 Citation 연결
+- [?] Research Workspace
+- [?] Report Synthesis
+- [?] Single Research Agent
+- [?] Multi-Agent Coordinator
+- [?] Specialist Agent
+- [?] Replanning
+- [?] Agent Loop
+- [?] 종료 조건
 
-- [ ] CLI만으로 충분한지 먼저 판단
-- [ ] 필요할 경우에만 FastAPI 실행·조회 Endpoint 추가
-- [ ] 복잡한 인증, 다중 사용자와 Web UI는 제외
-- 완료 결과: 선택적 로컬 API
+### 6.5 Memory
 
-### Lesson 13.9 — Docker와 운영 최소화
+- [?] Working State
+- [?] Memory Store
+- [?] Memory Search
+- [?] Context Builder
+- [?] Deduplication
+- [?] Relevance Policy
+- [?] Sensitive Data Detection
+- [?] Sanitization
+- [?] Long-term Memory Policy
 
+### 6.6 품질·안전·신뢰성
+
+- [?] Evaluation Dataset
+- [?] Evaluation Runner
+- [?] Retrieval Eval
+- [?] Citation Eval
+- [?] Evidence Coverage Eval
+- [?] Claim Support Eval
+- [?] Guardrail
+- [?] Prompt Injection 방어
+- [?] Reliability Metrics
+- [?] E2E Evaluation
+- [?] Tracing
+
+### 6.7 Usage 및 비용
+
+- [?] API Usage 수집
+- [?] Input Token 계산
+- [?] Output Token 계산
+- [?] Cached Token 처리
+- [?] Model Price Registry
+- [?] 가격 기준일 관리
+- [?] 실행 전 예상비용
+- [?] 실행 후 실제비용
+- [?] 실행별 비용 저장
+- [?] 누적비용 관리
+- [?] Budget Guardrail
+- [?] Budget 초과 중단
+- [?] Search API 비용 확장 가능성
+
+### 6.8 Application 및 Persistence
+
+- [?] Execution Repository
+- [?] Evaluation Repository
+- [?] Guardrail Repository
+- [?] Job Repository
+- [?] Background Job Lifecycle
+- [?] Queue와 Lease
+- [?] Retry Scheduling
+- [?] Cancellation Persistence
+- [?] Research Application Service
+- [?] Tool Application Service
+- [?] Workflow Application Service
+- [?] Reliability Query
+- [?] Transaction Boundary
+- [?] SQLite Adapter
+- [?] FastAPI Adapter
+- [?] CLI Composition Root
+
+---
+
+# 7. Stage 0 — Project Realignment and Source Preparation
+
+## 목표
+
+ChatGPT의 `Agentic AI Lab` 프로젝트를 AIRA 개발의 실제 Control Plane으로
+준비하고, 최상위 기준 문서와 기존 프로젝트 문서를 정렬한다.
+
+## 상태
+
+- [~] 진행 중
+
+## Work Items
+
+### 0.1 최상위 기준 문서
+
+- [x] `AIRA_PROJECT_CHARTER.md` 작성
+- [x] `DECISIONS.md` 수정
+- [x] `MASTER.md` 수정
+- [~] `ROADMAP.md` 수정
+
+### 0.2 기존 핵심 문서 점검
+
+- [ ] `CURRICULUM.md` 검토 및 수정
+- [ ] `AGENTS.md` 검토 및 수정
+- [ ] `README.md` 검토 및 수정
+- [ ] `LEARNING_LOG.md` 검토 및 수정
+- [ ] 기타 Phase·Lesson 상위 문서 목록 확인
+
+### 0.3 ChatGPT Project 준비
+
+- [ ] Project Instructions 작성
+- [ ] ChatGPT Project에 등록할 Source 파일 목록 확정
+- [ ] 파일 등록 순서 결정
+- [ ] 최초 Audit 대화용 시작 Prompt 작성
+- [ ] ChatGPT와 Codex의 작업 인계 형식 확정
+
+### 0.4 Audit 준비
+
+- [ ] 저장소 Inventory 명령 준비
+- [ ] 감사 대상 디렉터리 목록 확정
+- [ ] Capability Matrix Schema 확정
+- [ ] Codex Audit Prompt 작성
+- [ ] Audit 결과의 증거 기준 확정
+
+## 완료 결과
+
+- ChatGPT `Agentic AI Lab` 프로젝트가 AIRA 개발 Control Plane으로 준비됨
+- 프로젝트 Source 목록 확정
+- Project Instructions 확정
+- 첫 시작 Prompt 확정
+- Existing Capability Audit를 시작할 수 있음
+
+---
+
+# 8. Stage 1 — Existing Capability Audit
+
+## 목표
+
+`/home/moon/Project/agentic-ai-lab` 저장소의 실제 구현 상태를 사실에 근거해
+감사하고 재사용·수정·재작성·보류 대상을 확정한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 1.1 저장소 전체 Inventory
+
+- [ ] 디렉터리 Tree
+- [ ] Python Package 구조
+- [ ] 테스트 구조
+- [ ] 설정 파일
+- [ ] CLI Entry Point
+- [ ] Composition Root
+- [ ] 외부 의존성
+- [ ] 환경변수
+- [ ] Docker 관련 파일
+- [ ] 문서와 코드 연결 관계
+
+### 1.2 LLM 감사
+
+- [ ] Responses API
+- [ ] OpenAI SDK
+- [ ] Structured Outputs
+- [ ] Tool Calling
+- [ ] Multi-turn Tool Loop
+- [ ] 실제 API와 Fake Client 구분
+- [ ] Usage 반환
+- [ ] 오류 정규화
+- [ ] Retry 및 Timeout
+
+### 1.3 Tool과 Workflow 감사
+
+- [ ] Tool Registry
+- [ ] Tool 계약
+- [ ] Tool 실행
+- [ ] Permission
+- [ ] Workflow
+- [ ] Agent State
+- [ ] Scheduler
+- [ ] Retry
+- [ ] Cancellation
+
+### 1.4 RAG 감사
+
+- [ ] Document Model
+- [ ] Parser
+- [ ] Chunker
+- [ ] Keyword Search
+- [ ] Embedding
+- [ ] Retriever
+- [ ] Hybrid Retrieval
+- [ ] Reranking
+- [ ] Context Builder
+- [ ] Citation Grounding
+
+### 1.5 Memory 감사
+
+- [ ] Working State
+- [ ] Memory Store
+- [ ] Search
+- [ ] Dedup
+- [ ] Sanitizer
+- [ ] Sensitive Data Policy
+- [ ] Runtime 연결 여부
+
+### 1.6 Planning 및 Research 감사
+
+- [ ] Planning Agent
+- [ ] Query Planning
+- [ ] Replanning
+- [ ] Single Research Agent
+- [ ] Multi-Agent
+- [ ] Evidence
+- [ ] Claim
+- [ ] Citation
+- [ ] Report Writer
+- [ ] 종료 조건
+
+### 1.7 Evals·Guardrails·Tracing 감사
+
+- [ ] Evaluation Dataset
+- [ ] Evaluation Runner
+- [ ] Guardrails
+- [ ] Reliability
+- [ ] Tracing
+- [ ] E2E
+
+### 1.8 Usage 및 비용 감사
+
+- [ ] Token Usage
+- [ ] Price Registry
+- [ ] Cost Estimator
+- [ ] Actual Cost
+- [ ] Budget
+- [ ] Budget Guardrail
+- [ ] Cache
+- [ ] Search API 비용 확장
+
+### 1.9 Application 및 Persistence 감사
+
+- [ ] CLI
+- [ ] FastAPI
+- [ ] Repository
+- [ ] SQLite
+- [ ] Background Job
+- [ ] Queue
+- [ ] Retry
+- [ ] Cancellation
+- [ ] Idempotency
+
+### 1.10 실제 Runtime 추적
+
+- [ ] CLI 입력부터 보고서 저장까지 호출 경로
+- [ ] 실제 연결된 Module
+- [ ] 구현되었으나 미연결된 Module
+- [ ] 중복 또는 겹치는 구현
+- [ ] 미사용 코드
+- [ ] Baseline Runtime 한계
+
+## 분류 기준
+
+각 Component를 다음 중 하나로 결정한다.
+
+- 그대로 재사용
+- Adapter 추가
+- 부분 수정
+- 재작성
+- 보류
+- 폐기 후보
+
+## 완료 결과
+
+- `AIRA_PROJECT_AUDIT_REPORT.md`
+- `AIRA_CAPABILITY_MATRIX.md`
+- 실제 최신 테스트 기준선
+- 재사용 대상 목록
+- 통합 부채 목록
+- 중복 구현 목록
+- 위험 및 미확인 항목 목록
+
+---
+
+# 9. Stage 2 — Target Product and Architecture
+
+## 목표
+
+기존 Audit 결과를 바탕으로 최소 Single-Agent부터 통합 AIRA까지의
+목표 제품 구조와 Runtime Architecture를 확정한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 2.1 Product Specification
+
+- [ ] 주요 사용자
+- [ ] 관심 분야 조사
+- [ ] 연구주제 조사
+- [ ] 선행특허 조사
+- [ ] 인터넷 및 로컬 문서 통합
+- [ ] 입력 Schema
+- [ ] 출력 Report
+- [ ] 기능 범위
+- [ ] 비기능 요구사항
+- [ ] 초기 범위와 확장 범위
+
+### 2.2 Runtime Architecture
+
+- [ ] Single-Agent 기본 흐름
+- [ ] Composition Root
+- [ ] Agent State
+- [ ] Tool 계약
+- [ ] LLM Provider 계약
+- [ ] Search Provider 계약
+- [ ] Local Document Adapter 계약
+- [ ] Research Document Model
+- [ ] RAG 통합 구조
+- [ ] Evidence·Claim·Citation 구조
+- [ ] Recommendation 구조
+- [ ] Cost 및 Budget 구조
+- [ ] Trace 구조
+- [ ] Report Schema
+
+### 2.3 Tool 및 Skill Registry
+
+- [ ] 초기 Tool 목록
+- [ ] Tool별 권한
+- [ ] 비용 유형
+- [ ] Retry와 Timeout
+- [ ] 초기 Skill 후보
+- [ ] Skill 도입 시점
+- [ ] MCP/App 연결의 후순위 원칙
+
+### 2.4 Integration Plan
+
+- [ ] 재사용 순서
+- [ ] Adapter 목록
+- [ ] 수정 대상
+- [ ] 재작성 대상
+- [ ] 테스트 전략
+- [ ] E2E 시나리오
+- [ ] 비용 및 보안 Gate
+- [ ] Codex Work Item 분할
+
+## 완료 결과
+
+- `AIRA_TARGET_PRODUCT_SPEC.md`
+- `AIRA_TARGET_ARCHITECTURE.md`
+- `AIRA_TOOL_SKILL_REGISTRY.md`
+- `AIRA_INTEGRATION_PLAN.md`
+
+---
+
+# 10. Stage 3 — Minimal Intelligent Single Agent
+
+## 목표
+
+실제 LLM, Tool, 인터넷 또는 로컬 Source를 사용하여
+처음부터 끝까지 보고서를 생성하는 최소 Single Research Agent를 완성한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 3.1 LLM Foundation
+
+- [ ] 기존 OpenAI Responses API 코드 재사용
+- [ ] Provider-independent Interface
+- [ ] OpenAI Provider Adapter
+- [ ] Deterministic Test Provider
+- [ ] Structured Output
+- [ ] Usage 및 오류 정규화
+
+### 3.2 Research Request와 Planning
+
+- [ ] 연구 요청 구조화
+- [ ] 조사 목적
+- [ ] 범위
+- [ ] 하위 Task
+- [ ] 검색 Query
+- [ ] 완료 조건
+- [ ] 비용 및 반복 제한
+
+### 3.3 최소 Tool Set
+
+- [ ] 하나의 인터넷 검색 Tool
+- [ ] 웹페이지 Reader
+- [ ] TXT Reader
+- [ ] Markdown Reader
+- [ ] 기본 PDF Reader
+- [ ] Result 저장 Tool
+
+### 3.4 Evidence와 평가
+
+- [ ] Source 선택
+- [ ] Evidence 추출
+- [ ] 관련성 기본 평가
+- [ ] 중요도 기본 평가
+- [ ] 신뢰도 기본 평가
+- [ ] Evidence Sufficiency
+
+### 3.5 제한된 Agent Loop
+
+- [ ] Plan
+- [ ] Tool Selection
+- [ ] Execute
+- [ ] Observe
+- [ ] Update State
+- [ ] Replan
+- [ ] Complete 또는 Abstain
+- [ ] 종료 이유
+
+### 3.6 Report
+
+- [ ] 자료 정리
+- [ ] 요약
+- [ ] 기본 비교
+- [ ] 기본 분석
+- [ ] Claim
+- [ ] Citation
+- [ ] 근거 기반 제안사항
+- [ ] 한계와 불확실성
+- [ ] Markdown
+- [ ] JSON
+
+### 3.7 Cost와 Trace
+
+- [ ] Usage 기록
+- [ ] 실제 비용 기록
+- [ ] 최대 호출 수
+- [ ] 최대 반복 수
+- [ ] 실행당 비용 상한
+- [ ] Trace 저장
+
+## 완료 결과
+
+- 실제 인터넷 또는 로컬 자료를 사용해 보고서를 생성하는 최소 Single Agent
+- 실제 E2E 연구 예제
+- 비용과 Trace가 포함된 실행 결과
+- Phase 13 Baseline과 비교 결과
+
+---
+
+# 11. Stage 4 — Local Document Expansion
+
+## 목표
+
+사용자가 지정한 로컬 문서를 안전하게 읽고 원문 위치를 보존하여
+인터넷 자료와 함께 분석할 수 있도록 한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+- [ ] TXT
+- [ ] Markdown
+- [ ] PDF Text
+- [ ] Scanned PDF 처리 전략
+- [ ] HWP
+- [ ] HWPX
+- [ ] 파일 Metadata
+- [ ] Heading 또는 Section
+- [ ] 페이지 번호
+- [ ] 줄 또는 문단 위치
+- [ ] 표 처리
+- [ ] Citation 위치 보존
+- [ ] 허용된 경로
+- [ ] 파일 크기 제한
+- [ ] 민감문서 외부 전송 승인
+- [ ] Parser 실패 처리
+- [ ] 동일 문서 Hash와 Cache
+
+## 완료 결과
+
+- TXT/MD/PDF/HWP/HWPX를 공통 Research Document로 변환
+- 원문 위치를 추적할 수 있는 Evidence
+- 인터넷 Source와 통합 가능한 로컬 Source Adapter
+
+---
+
+# 12. Stage 5 — Internet Research Expansion
+
+## 목표
+
+일반 웹검색뿐 아니라 공식자료, 공개 PDF, 학술자료 및 특허자료를
+조사 목적에 맞게 검색하고 평가한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 5.1 일반 웹
+
+- [ ] Search Provider
+- [ ] Query
+- [ ] Pagination
+- [ ] Snippet
+- [ ] 원문 Fetch
+- [ ] HTML Parsing
+- [ ] 중복 제거
+- [ ] 실패 처리
+
+### 5.2 공식자료
+
+- [ ] 정부 및 공공기관
+- [ ] 국제기구
+- [ ] 기업 공식문서
+- [ ] API Documentation
+- [ ] Source 유형별 우선순위
+
+### 5.3 공개 PDF
+
+- [ ] PDF Download
+- [ ] Metadata
+- [ ] 페이지 위치
+- [ ] 접근 실패
+- [ ] 중복 문서
+
+### 5.4 학술자료
+
+- [ ] 공개 논문
+- [ ] Preprint
+- [ ] DOI 또는 식별자
+- [ ] 발행일
+- [ ] 저자
+- [ ] 기관
+- [ ] 원문 접근 상태
+
+### 5.5 특허자료
+
+- [ ] 한국어·영어 Query
+- [ ] 동의어
+- [ ] 기술 구성요소
+- [ ] 분류코드
+- [ ] 특허번호
+- [ ] 우선일
+- [ ] 출원일
+- [ ] 공개일
+- [ ] 출원인
+- [ ] 청구항
+- [ ] 법적 상태
+- [ ] 관련도와 위험도
+
+## 완료 결과
+
+- 일반 웹·공식자료·학술자료·특허자료 검색 경로
+- Source 유형별 Metadata와 평가
+- 중복 제거와 우선순위화
+
+---
+
+# 13. Stage 6 — Integrated RAG
+
+## 목표
+
+인터넷 및 로컬 문서를 공통 구조로 처리하고,
+Keyword와 Semantic Search를 결합하여 관련 Evidence만 LLM에 제공한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+- [ ] 기존 Chunker 통합
+- [ ] Chunk Metadata
+- [ ] Keyword Search
+- [ ] Embedding Provider
+- [ ] Vector Retrieval
+- [ ] Hybrid Retrieval
+- [ ] Metadata Filter
+- [ ] Reranker
+- [ ] Context Builder
+- [ ] Evidence Selection
+- [ ] Citation 위치 검증
+- [ ] Retrieval Cache
+- [ ] Embedding Cache
+- [ ] Retrieval Eval
+- [ ] 비용 비교
+
+## 완료 결과
+
+- 인터넷과 로컬 문서를 함께 검색하는 Hybrid RAG
+- 관련 Evidence 중심의 LLM Context
+- Retrieval 품질 및 비용 평가
+
+---
+
+# 14. Stage 7 — Agent Loop and Verification
+
+## 목표
+
+AIRA가 Evidence의 충분성, Source 품질 및 자료 간 충돌을 판단하고
+제한된 범위에서 조사계획을 수정하도록 한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 7.1 Evidence Sufficiency
+
+- [ ] Task별 Evidence Coverage
+- [ ] 부족한 정보 식별
+- [ ] 단일 Source 여부
+- [ ] 공식 Source 여부
+- [ ] 최신성 부족 여부
+
+### 7.2 Replanning
+
+- [ ] Query 수정
+- [ ] 동의어 확장
+- [ ] 다른 Source 유형 선택
+- [ ] 추가 Source 읽기
+- [ ] 최대 반복
+- [ ] 종료 조건
+
+### 7.3 Source Evaluation
+
+- [ ] 관련성
+- [ ] 중요도
+- [ ] 신뢰도
+- [ ] 최신성
+- [ ] Evidence Strength
+- [ ] Source 유형별 가중치
+
+### 7.4 Cross-validation
+
+- [ ] 독립 Source 비교
+- [ ] Supporting Evidence
+- [ ] Contradicting Evidence
+- [ ] 단일 Source 경고
+- [ ] 공식 확인 불가
+- [ ] 추가 조사 필요
+
+### 7.5 Claim 및 Recommendation 검증
+
+- [ ] Claim Support
+- [ ] 과도한 확장 탐지
+- [ ] Citation 존재
+- [ ] Citation 실제 지지 여부
+- [ ] Recommendation Grounding
+- [ ] Confidence
+- [ ] Abstention
+
+## 완료 결과
+
+- 제한된 Agentic Research Loop
+- 교차검증된 Claim
+- 충돌 및 불확실성 표시
+- 근거 기반 Recommendation
+
+---
+
+# 15. Stage 8 — Cost and Provider Optimization
+
+## 목표
+
+비용을 Agent 실행 제약으로 통합하고,
+업무별로 더 저렴한 API 또는 로컬 LLM을 선택할 수 있도록 한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 8.1 기존 비용 코드 통합
+
+- [ ] Usage Collector
+- [ ] Token Counter
+- [ ] Model Price Registry
+- [ ] 실행 전 예상비용
+- [ ] 실행 후 실제비용
+- [ ] 가격 기준일
+- [ ] 실행별 비용
+- [ ] 누적비용
+
+### 8.2 Budget Guardrail
+
+- [ ] 최대 LLM 호출
+- [ ] 최대 Search 호출
+- [ ] 최대 Tool 호출
+- [ ] 최대 Source
+- [ ] 최대 Chunk
+- [ ] 최대 Token
+- [ ] 최대 반복
+- [ ] 최대 실행시간
+- [ ] 실행당 비용
+- [ ] 중단 또는 승인 요청
+
+### 8.3 Cache
+
+- [ ] Query Cache
+- [ ] Source Cache
+- [ ] Parsing Cache
+- [ ] Embedding Cache
+- [ ] Result Cache
+- [ ] Cache 무효화
+
+### 8.4 Provider 비교
+
+- [ ] OpenAI Baseline
+- [ ] 다른 상용 LLM
+- [ ] OpenAI-compatible API
+- [ ] Ollama
+- [ ] 로컬 LLM
+- [ ] Deterministic Test Provider
+
+### 8.5 Model Routing
+
+- [ ] Query 생성
+- [ ] Search Result 분류
+- [ ] Chunk 관련성
+- [ ] Evidence 분석
+- [ ] 충돌 분석
+- [ ] 최종 Report
+- [ ] 작업별 품질·비용 비교
+
+## 완료 결과
+
+- 실행 전·후 비용 추적
+- 실제 Budget 중단
+- Cache 기반 비용 절감
+- Provider 교체 가능한 Runtime
+- 저가 또는 로컬 LLM 적용 범위 결정
+
+---
+
+# 16. Stage 9 — Evals and Real Research Validation
+
+## 목표
+
+AIRA의 기능 수가 아니라 실제 연구 품질, 신뢰성, 비용 및 재현성을
+동일한 평가 기준으로 검증한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+### 9.1 Golden Dataset
+
+- [ ] 관심 분야 조사
+- [ ] 특정 기술 연구주제
+- [ ] 공식 규정 조사
+- [ ] 인터넷과 로컬 문서 통합
+- [ ] 로컬 문서 비교
+- [ ] 선행특허 조사
+
+### 9.2 품질 평가
+
+- [ ] Search Relevance
+- [ ] Retrieval Relevance
+- [ ] Evidence Coverage
+- [ ] Source Quality
+- [ ] Citation Accuracy
+- [ ] Claim Support
+- [ ] Contradiction Detection
+- [ ] Hallucination Rate
+- [ ] Recommendation Grounding
+- [ ] Report Completeness
+- [ ] Trace Completeness
+
+### 9.3 운영 평가
+
+- [ ] Latency
+- [ ] Token Usage
+- [ ] API Cost
+- [ ] Reproducibility
+- [ ] Failure Recovery
+- [ ] Budget 동작
+- [ ] 동일 요청 Regression
+
+### 9.4 실제 사례
+
+- [ ] Agentic AI 기술 동향
+- [ ] 착석 상태 기반 행동관리 기술 조사
+- [ ] 특허 명세서와 선행특허 통합 분석
+- [ ] 추가 실제 사용자 과제
+
+## 완료 결과
+
+- Golden Dataset
+- Baseline Score
+- Regression 기준
+- 실제 연구 보고서
+- 품질·비용·처리시간 비교표
+
+---
+
+# 17. Stage 10 — Multi-Agent Experiment
+
+## 목표
+
+Single-Agent 대비 역할 분리가 실제 이점을 제공하는지 평가한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+- [ ] 역할 분리 후보 선정
+- [ ] Research Coordinator
+- [ ] Web Search Specialist
+- [ ] Local Document Specialist
+- [ ] Patent Search Specialist
+- [ ] Evidence Analyst
+- [ ] Claim Critic
+- [ ] Verification Agent
+- [ ] Report Writer
+- [ ] 동일 Dataset 비교
+- [ ] 품질 비교
+- [ ] 비용 비교
+- [ ] 처리시간 비교
+- [ ] Context 안정성 비교
+- [ ] 채택 또는 보류 결정
+
+## 채택 조건
+
+다음 중 하나 이상의 의미 있는 개선이 확인되어야 한다.
+
+- Evidence Coverage 향상
+- Citation Accuracy 향상
+- Contradiction Detection 향상
+- 복잡한 분석 품질 향상
+- Context 관리 향상
+- 처리시간 단축
+- 비용 대비 성능 향상
+- 실패 격리 향상
+
+개선이 입증되지 않으면 Single-Agent를 기본 경로로 유지한다.
+
+---
+
+# 18. Stage 11 — Productization
+
+## 목표
+
+연구 품질이 검증된 AIRA를 실제로 사용·운영하기 위한 최소 제품 형태로 정리한다.
+
+## 상태
+
+- [ ] 시작 전
+
+## Work Items
+
+- [ ] CLI 사용성 개선
+- [ ] 설정 파일
+- [ ] 실행 Profile
+- [ ] 결과 조회
+- [ ] SQLite 필요성 검토
+- [ ] FastAPI 필요성 검토
+- [ ] Background Job 필요성 검토
 - [ ] Dockerfile
-- [ ] 필요한 경우에만 Docker Compose
-- [ ] 환경변수와 Secret
-- [ ] 로그와 기본 백업 방법
-- 완료 결과: 재현 가능한 로컬 실행환경
-
-### Lesson 13.10 — 최종 문서화와 종료 평가
-
-- [ ] 전체 아키텍처
+- [ ] 필요한 경우 Docker Compose
+- [ ] Secret 관리
+- [ ] 로그
+- [ ] 기본 Backup
 - [ ] 사용자 가이드
-- [ ] 개발자 메모
+- [ ] 개발자 운영 메모
 - [ ] 알려진 제한
-- [ ] Backlog 분리
-- [ ] 최종 E2E와 실제 사용 검증
-- 완료 결과: Final AIRA Baseline
+- [ ] MCP 또는 ChatGPT App 검토
+- [ ] 배포 필요성 검토
 
-## Phase 13 완료 기준
+## 완료 결과
 
-- [ ] CLI에서 연구 요청을 실행할 수 있다.
-- [ ] Source, Evidence, Claim과 Citation을 추적할 수 있다.
-- [ ] 근거 기반 보고서를 생성한다.
-- [ ] 실행과 결과를 저장하고 재조회할 수 있다.
-- [ ] 기본 Eval과 Guardrail을 실행한다.
-- [ ] 실제 사용 사례 3개가 존재한다.
-- [ ] Docker에서 재현 가능하다.
-- [ ] 사용자 가이드가 존재한다.
-- [ ] 전체 pytest와 Ruff가 통과한다.
-- [ ] 불필요한 고급 기능이 기본 경로에서 제거되거나 비활성화된다.
+- 재현 가능한 실행환경
+- 사용자 가이드
+- 운영 메모
+- 필요에 맞는 최소 API 또는 Persistence
+- ChatGPT 연동의 후속 방향
 
-## 보류 Backlog
+---
 
-아래 항목은 Phase 13 범위가 아니다.
+# 19. 지속 관리 Track
+
+Stage와 별도로 다음 항목은 전체 기간 동안 지속적으로 관리한다.
+
+## 19.1 Cost
+
+- [ ] 기존 Usage 수집 코드 확인
+- [ ] 기존 Token 계산 코드 확인
+- [ ] Model Price Registry 확인
+- [ ] 가격 기준일 기록
+- [ ] 실행 전 예상비용
+- [ ] 실행 후 실제비용
+- [ ] Budget 초과 중단
+- [ ] Search API 비용 확장
+- [ ] Cache 효과 측정
+- [ ] Provider별 비용 비교
+
+## 19.2 Security and Privacy
+
+- [ ] 로컬 파일 접근 범위
+- [ ] Path Traversal 방지
+- [ ] URL Scheme 검증
+- [ ] 내부 네트워크 접근 제한
+- [ ] Prompt Injection 방어
+- [ ] Secret 관리
+- [ ] 민감문서 외부 전송 승인
+- [ ] 개인정보 Sanitization
+- [ ] 데이터 삭제 승인
+
+## 19.3 Evaluation
+
+- [ ] Golden Dataset
+- [ ] Stage별 Baseline
+- [ ] Regression 기준
+- [ ] Claim과 Citation 품질
+- [ ] Cost와 Latency
+- [ ] 실제 사용자 평가
+
+## 19.4 Documentation
+
+- [ ] 기준 문서 정합성
+- [ ] Architecture 갱신
+- [ ] Decisions 이력
+- [ ] Work Item 결과
+- [ ] 사용자 가이드
+- [ ] 알려진 제한
+
+## 19.5 Code Quality
+
+- [ ] pytest
+- [ ] Ruff
+- [ ] `git diff --check`
+- [ ] Type 검사 필요성
+- [ ] 중복 코드
+- [ ] 미사용 코드
+- [ ] 의존성 관리
+
+---
+
+# 20. 공통 Stage Gate
+
+각 Stage 또는 주요 Integration Work Item은 필요한 범위에서 다음 Gate를
+통과해야 한다.
+
+- [ ] 관련 기존 코드 Audit 완료
+- [ ] 재사용·Adapter·수정·재작성 결정 기록
+- [ ] Acceptance Criteria 충족
+- [ ] Unit Test 통과
+- [ ] Integration Test 통과
+- [ ] 실제 E2E 또는 산출물 확인
+- [ ] Ruff 통과
+- [ ] `git diff --check` 통과
+- [ ] Git Diff 검토
+- [ ] 비용 영향 기록
+- [ ] 보안 및 개인정보 영향 기록
+- [ ] 관련 문서 갱신
+- [ ] 사용자 승인
+- [ ] 의미 있는 Commit
+
+Fake 또는 Stub 테스트만 통과했다고 Production-ready로 분류하지 않는다.
+
+---
+
+# 21. 단계별 완료 기준
+
+## 21.1 Project Control Plane 완료
+
+- [ ] 기준 문서 정렬 완료
+- [ ] ChatGPT Project Source 목록 확정
+- [ ] Project Instructions 확정
+- [ ] 첫 시작 Prompt 확정
+- [ ] Codex 작업 인계 방식 확정
+- [ ] Audit Prompt 확정
+- [ ] Stage 1 시작 준비 완료
+
+## 21.2 Minimal Single-Agent Core 완료
+
+- [ ] LLM 기반 연구계획
+- [ ] 최소 Tool 선택
+- [ ] 인터넷 검색
+- [ ] 웹페이지 읽기
+- [ ] 로컬 TXT/Markdown 읽기
+- [ ] 기본 PDF
+- [ ] Evidence 추출
+- [ ] Source 기본 평가
+- [ ] Evidence 부족 시 제한된 Replanning
+- [ ] Claim과 Citation
+- [ ] 자료 정리·요약·비교·기본 분석
+- [ ] 근거 기반 제안사항
+- [ ] Markdown 및 JSON
+- [ ] Usage·Cost·Trace
+- [ ] 최대 반복 및 비용 제한
+- [ ] 실제 E2E 연구 예제
+
+## 21.3 Integrated AIRA 완료
+
+- [ ] 인터넷과 로컬 자료 통합
+- [ ] TXT, Markdown, PDF, HWP, HWPX
+- [ ] 공통 Research Document
+- [ ] Hybrid RAG
+- [ ] Source 중요도·신뢰도·최신성
+- [ ] Evidence 교차검증
+- [ ] 충돌 분석
+- [ ] Claim Support
+- [ ] Recommendation Grounding
+- [ ] Citation 검증
+- [ ] Provider 교체
+- [ ] Cache와 Budget
+- [ ] Golden Dataset
+- [ ] Regression 방지
+- [ ] 실제 관심 분야·연구주제·선행특허 조사 검증
+
+## 21.4 Multi-Agent 채택
+
+Multi-Agent는 완료 조건이 아니라 선택적 채택 조건이다.
+
+Single-Agent 대비 의미 있는 개선이 확인되지 않으면 보류한다.
+
+---
+
+# 22. 보류 Backlog
+
+다음 항목은 현재 핵심 Stage의 선행조건이 아니다.
 
 - [-] PostgreSQL 전환
 - [-] Redis Queue
+- [-] RabbitMQ
 - [-] 분산 Worker
-- [-] Nginx와 HTTPS
-- [-] OCI 운영 배포
-- [-] CI/CD 고도화
-- [-] Prometheus, Grafana와 OpenTelemetry 전체 구성
+- [-] Kubernetes
 - [-] 복잡한 인증과 RBAC
 - [-] 협업 Workspace
-- [-] 상용 Web UI
-- [-] Kubernetes
-- [-] 추가 보안·암호화 하위 시스템
+- [-] 상용 수준 Web UI
+- [-] 대규모 Observability
+- [-] Prometheus·Grafana 전체 구성
+- [-] OpenTelemetry 전체 구성
+- [-] Nginx와 HTTPS 운영 구성
+- [-] OCI 운영 배포
+- [-] 대규모 CI/CD
+- [-] 완전 자율 Multi-Agent 조직
+- [-] 추가 분산 신뢰·암호화 하위 시스템
+- [-] 외부 배포용 Plugin 패키지
 
-Backlog 항목은 실제 사용 중 필요가 확인되고 사용자가 별도 승인한 경우에만
-새 프로젝트 또는 후속 버전으로 진행한다.
+다음은 후순위 Productization 후보이며 완전 보류 항목과 구분한다.
+
+- [ ] MCP 또는 ChatGPT App
+- [ ] FastAPI
+- [ ] SQLite
+- [ ] Background Job
+- [ ] Docker Compose
+- [ ] 제한된 Web UI
+
+Backlog는 실제 사용 중 필요가 확인되고 사용자가 승인한 경우에만 진행한다.
+
+---
+
+# 23. 로드맵 운영 원칙
+
+- 기존 Phase 0~13은 완료 이력으로 보존한다.
+- 앞으로의 제품 통합은 Stage와 Work Item으로 관리한다.
+- 새 기능보다 Existing Capability Audit를 우선한다.
+- 새로 만들기 전에 기존 코드를 재사용할 수 있는지 확인한다.
+- 기능 수 증가보다 실제 연구 품질과 비용 개선을 우선한다.
+- 인터넷 검색과 로컬 문서 통합은 AIRA의 핵심 목표다.
+- 비용은 사후 기록이 아니라 Agent 실행 제약이다.
+- 초기에는 OpenAI를 사용할 수 있지만 Provider에 종속되지 않는다.
+- 로컬 LLM은 동일한 Eval을 통과한 범위에서 단계적으로 사용한다.
+- Multi-Agent는 평가로 이점이 입증된 경우에만 채택한다.
+- 실제 코드·테스트·실행 결과가 문서의 주장보다 우선한다.
+- 중요한 변경은 `DECISIONS.md`에 이력을 남긴다.
