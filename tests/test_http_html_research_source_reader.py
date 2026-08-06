@@ -365,4 +365,3 @@ def test_reader_stops_stream_when_size_limit_is_exceeded() -> None:
     assert document.error is not None
     assert document.error.error_type == "DocumentTooLarge"
     assert stream.chunks_yielded == 2
-
