@@ -79,7 +79,7 @@ class ConcreteAiraResearchRunner:
             result={
                 "request_id": workspace.request.request_id,
                 "workspace_id": workspace.workspace_id,
-                "stage": workspace.stage.value,
+                "stage": workspace.stage.name.casefold(),
                 "report_title": result.report.title,
                 "quality_score": result.quality.overall_score,
                 "quality_level": result.quality.quality_level.value,

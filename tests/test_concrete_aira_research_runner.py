@@ -92,6 +92,7 @@ def test_runner_executes_pipeline_and_maps_output() -> None:
     assert output.summary
     assert output.result["request_id"] == "research-001"
     assert output.result["workspace_id"] == "workspace-001"
+    assert output.result["stage"] == "claims_built"
     assert output.result["candidate_count"] == 1
     assert output.result["successful_document_count"] == 1
     assert output.result["failed_document_count"] == 0
