@@ -37,7 +37,7 @@
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
 - 현재 제품 단계: Stage 2 — Target Product and Architecture
-- 현재 상태: Existing Capability Audit 완료, Live Research Vertical Slice 설계 준비
+- 현재 상태: Target Architecture 및 첫 Search Provider 결정 완료, Tavily Search Adapter 구현 준비
 - 현재 기준일: 2026-08-06
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -54,6 +54,9 @@
 - [x] `ROADMAP.md` 재정렬
 - [x] `AIRA_PROJECT_AUDIT_REPORT.md`
 - [x] `AIRA_CAPABILITY_MATRIX.md`
+- [x] `AIRA_TARGET_ARCHITECTURE.md`
+- [x] `AIRA_INTEGRATION_PLAN.md`
+- [x] `AIRA_SEARCH_PROVIDER_DECISION.md`
 
 다음 문서 점검 순서:
 

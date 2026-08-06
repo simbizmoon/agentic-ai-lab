@@ -561,3 +561,33 @@ Research Question
 - 전체 `pytest`와 Ruff가 통과한다.
 - 실제 API 또는 네트워크 Smoke Test 결과를 Fake 기반 Unit Test와 구분하여
   기록한다.
+
+---
+
+## D-027 — 첫 Web Search Provider와 통합 방식
+
+- 상태: 확정
+- 날짜: 2026-08-06
+- 근거 문서: `AIRA_SEARCH_PROVIDER_DECISION.md`
+
+결정:
+
+- AIRA Live Research Vertical Slice의 첫 Web Search Provider는
+  Tavily Search API로 한다.
+- 초기 구현은 Tavily Python SDK가 아니라 직접 REST 호출과 `httpx` Adapter를
+  사용한다.
+- `httpx`는 현재 가상환경에 설치되어 있더라도 전이 의존성에 기대지 않고
+  `pyproject.toml`의 직접 Runtime Dependency로 선언한다.
+- Tavily 전용 설정은 초기에는 전역 OpenAI 설정과 분리한다.
+- 기본 환경변수는 `TAVILY_API_KEY`로 한다.
+- 선택적 Project 추적에는 `TAVILY_PROJECT_ID`를 사용한다.
+- 초기 Search 요청은 `search_depth=basic`, `auto_parameters=false`,
+  `include_answer=false`, `include_raw_content=false`,
+  `include_images=false`, `include_usage=true`를 사용한다.
+- Search Provider는 Search Result와 Metadata만 반환하고,
+  원문 수집은 별도 HTTP/HTML Source Reader가 담당한다.
+- Tavily 전용 응답 객체는 AIRA Domain으로 노출하지 않는다.
+- Brave Search API, SerpApi 및 OpenAI Built-in Web Search는
+  후속 비교·확장 후보로 유지한다.
+- 첫 구현에서는 복수 Provider, 자동 Fallback, Tavily Extract·Crawl·Research,
+  Advanced Search 기본값 및 자동 Retry Loop를 제외한다.
