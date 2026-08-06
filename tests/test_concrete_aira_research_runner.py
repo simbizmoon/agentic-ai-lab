@@ -1,5 +1,10 @@
 """Tests for the concrete AIRA research runner."""
 
+import json
+from pathlib import Path
+
+import pytest
+
 from app.application.research_execution import (
     ApplicationResearchExecutionRequest,
 )
@@ -11,6 +16,9 @@ from app.research.local_document_adapter import (
 )
 from app.research.local_runtime import (
     build_local_research_pipeline,
+)
+from app.research.research_result_writer import (
+    ResearchResultWriter,
 )
 from app.schemas.in_memory_research_document import (
     InMemoryResearchDocumentRecord,
@@ -80,11 +88,15 @@ def request() -> ApplicationResearchExecutionRequest:
     )
 
 
+def pipeline_factory(_research_request):
+    """Return one deterministic local research pipeline."""
+
+    return build_local_research_pipeline(bundle())
+
+
 def test_runner_executes_pipeline_and_maps_output() -> None:
     runner = ConcreteAiraResearchRunner(
-        pipeline_factory=lambda research_request: (
-            build_local_research_pipeline(bundle())
-        )
+        pipeline_factory=pipeline_factory
     )
 
     output = runner.execute(request())
@@ -99,5 +111,106 @@ def test_runner_executes_pipeline_and_maps_output() -> None:
     assert output.result["evidence_count"] == 1
     assert output.result["claim_count"] == 1
     assert output.result["citation_count"] == 1
+    assert output.result["artifact_paths"] == {}
     assert len(output.citation_ids) == 1
     assert output.artifact_ids == []
+
+
+def test_runner_writes_report_and_result_artifacts(
+    tmp_path: Path,
+) -> None:
+    runner = ConcreteAiraResearchRunner(
+        pipeline_factory=pipeline_factory,
+        writer=ResearchResultWriter(),
+        output_dir=tmp_path / "reports",
+        artifact_execution_id_factory=(
+            lambda _request: "artifact-execution-001"
+        ),
+    )
+
+    output = runner.execute(request())
+
+    execution_dir = (
+        tmp_path / "reports" / "artifact-execution-001"
+    )
+    report_path = execution_dir / "report.md"
+    result_path = execution_dir / "result.json"
+
+    assert report_path.is_file()
+    assert result_path.is_file()
+    assert output.artifact_ids == [
+        "artifact-execution-001:report",
+        "artifact-execution-001:result",
+    ]
+    assert output.result["artifact_paths"] == {
+        "execution_dir": str(execution_dir.resolve()),
+        "report": str(report_path.resolve()),
+        "result": str(result_path.resolve()),
+    }
+
+    payload = json.loads(
+        result_path.read_text(encoding="utf-8")
+    )
+    assert payload["workspace"]["request"]["request_id"] == (
+        "research-001"
+    )
+
+
+def test_runner_requires_writer_and_output_dir_together(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="writer and output_dir must be provided together",
+    ):
+        ConcreteAiraResearchRunner(
+            pipeline_factory=pipeline_factory,
+            writer=ResearchResultWriter(),
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="writer and output_dir must be provided together",
+    ):
+        ConcreteAiraResearchRunner(
+            pipeline_factory=pipeline_factory,
+            output_dir=tmp_path,
+        )
+
+
+def test_runner_rejects_blank_artifact_execution_id(
+    tmp_path: Path,
+) -> None:
+    runner = ConcreteAiraResearchRunner(
+        pipeline_factory=pipeline_factory,
+        writer=ResearchResultWriter(),
+        output_dir=tmp_path,
+        artifact_execution_id_factory=lambda _request: " ",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="artifact execution ID factory returned blank",
+    ):
+        runner.execute(request())
+
+
+def test_runner_preserves_writer_collision_failure(
+    tmp_path: Path,
+) -> None:
+    runner = ConcreteAiraResearchRunner(
+        pipeline_factory=pipeline_factory,
+        writer=ResearchResultWriter(),
+        output_dir=tmp_path,
+        artifact_execution_id_factory=(
+            lambda _request: "artifact-execution-001"
+        ),
+    )
+
+    runner.execute(request())
+
+    with pytest.raises(
+        ValueError,
+        match="execution directory already exists",
+    ):
+        runner.execute(request())
