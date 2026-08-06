@@ -27,8 +27,19 @@ class PipelineSourceSearchAdapter:
     def __init__(
         self,
         search_tool: ResearchSourceSearchTool,
+        *,
+        maximum_candidates: int | None = None,
     ) -> None:
+        if (
+            maximum_candidates is not None
+            and maximum_candidates < 1
+        ):
+            raise ValueError(
+                "maximum_candidates must be greater than zero"
+            )
+
         self._search_tool = search_tool
+        self._maximum_candidates = maximum_candidates
 
     @property
     def search_tool(self) -> ResearchSourceSearchTool:
@@ -58,6 +69,20 @@ class PipelineSourceSearchAdapter:
 
                 seen_source_ids.add(source_key)
                 candidates.append(candidate)
+
+                if (
+                    self._maximum_candidates is not None
+                    and len(candidates)
+                    >= self._maximum_candidates
+                ):
+                    break
+
+            if (
+                self._maximum_candidates is not None
+                and len(candidates)
+                >= self._maximum_candidates
+            ):
+                break
 
         return ResearchSourceCandidateSet(
             request_id=query_set.request_id,

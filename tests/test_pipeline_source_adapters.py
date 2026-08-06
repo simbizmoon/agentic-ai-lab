@@ -237,3 +237,74 @@ def test_reader_adapter_preserves_read_failures() -> None:
         ResearchSourceDocumentStatus.FAILED
     )
     assert documents.successful_documents() == []
+
+
+def test_search_adapter_limits_total_candidates() -> None:
+    records = [
+        InMemoryResearchSourceRecord(
+            source_id="source-001",
+            title="Grounded Research Evidence One",
+            url=(
+                "https://local.aira.invalid/source/"
+                "source-001"
+            ),
+            source_type=ResearchSourceType.OTHER,
+            snippet=(
+                "Grounded research uses traceable evidence."
+            ),
+            keywords=[
+                "grounded",
+                "research",
+                "evidence",
+                "traceable",
+            ],
+        ),
+        InMemoryResearchSourceRecord(
+            source_id="source-002",
+            title="Grounded Research Evidence Two",
+            url=(
+                "https://local.aira.invalid/source/"
+                "source-002"
+            ),
+            source_type=ResearchSourceType.OTHER,
+            snippet=(
+                "Traceable evidence supports grounded research."
+            ),
+            keywords=[
+                "grounded",
+                "research",
+                "evidence",
+                "traceable",
+            ],
+        ),
+    ]
+    adapter = PipelineSourceSearchAdapter(
+        InMemoryResearchSourceSearchTool(
+            records=records
+        ),
+        maximum_candidates=1,
+    )
+
+    candidates = adapter.search(query_set())
+
+    assert len(candidates.candidates) == 1
+    assert candidates.candidates[0].source_id == (
+        "source-001"
+    )
+
+
+def test_search_adapter_rejects_invalid_candidate_limit() -> None:
+    import pytest
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "maximum_candidates must be greater than zero"
+        ),
+    ):
+        PipelineSourceSearchAdapter(
+            InMemoryResearchSourceSearchTool(
+                records=source_records()
+            ),
+            maximum_candidates=0,
+        )

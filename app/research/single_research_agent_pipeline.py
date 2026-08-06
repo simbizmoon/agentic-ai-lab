@@ -170,6 +170,22 @@ class SingleResearchAgentPipeline:
             or ResearchQualityEvaluator()
         )
 
+    @property
+    def source_searcher(
+        self,
+    ) -> ResearchSourceSearcherProtocol:
+        """Return the configured source searcher."""
+
+        return self._source_searcher
+
+    @property
+    def source_reader(
+        self,
+    ) -> ResearchSourceReaderProtocol:
+        """Return the configured source reader."""
+
+        return self._source_reader
+
     def run(
         self,
         request: ResearchRequest,
