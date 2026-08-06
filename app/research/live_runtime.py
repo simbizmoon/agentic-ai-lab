@@ -23,6 +23,9 @@ from app.research.pipeline_source_adapters import (
     PipelineSourceReaderAdapter,
     PipelineSourceSearchAdapter,
 )
+from app.research.quality_aware_document_selector import (
+    QualityAwareDocumentSelector,
+)
 from app.research.research_request_validator import (
     ResearchRequestValidator,
 )
@@ -45,6 +48,11 @@ def build_live_research_pipeline(
 ) -> SingleResearchAgentPipeline:
     """Compose deterministic planning with live search and reading."""
 
+    search_candidate_count = min(
+        search_config.maximum_results,
+        request.maximum_sources * 3,
+    )
+
     return SingleResearchAgentPipeline(
         request_validator=ResearchRequestValidator(),
         task_decomposer=PipelineTaskDecomposerAdapter(),
@@ -53,14 +61,12 @@ def build_live_research_pipeline(
             TavilyResearchSourceSearchTool(
                 config=search_config.model_copy(
                     update={
-                        "maximum_results": min(
-                            search_config.maximum_results,
-                            request.maximum_sources,
-                        )
+                        "maximum_results": search_candidate_count,
                     }
                 )
             ),
-            maximum_candidates=request.maximum_sources,
+            maximum_candidates=search_candidate_count,
+            minimum_results_per_query=search_candidate_count,
         ),
         source_reader=PipelineSourceReaderAdapter(
             HttpHtmlResearchSourceReader(
@@ -74,5 +80,8 @@ def build_live_research_pipeline(
         claim_builder=DeterministicPipelineClaimBuilder(),
         source_quality_evaluator=(
             LiveWebSourceQualityEvaluator()
+        ),
+        document_selector=QualityAwareDocumentSelector(
+            maximum_documents=request.maximum_sources
         ),
     )

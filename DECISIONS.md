@@ -604,3 +604,14 @@ Research Question
 - Live web sources use a separate deterministic quality evaluator.
 - Source quality currently records authority, primary-source, recency, completeness, and traceability scores.
 - Source-quality scores do not yet reorder or filter search candidates.
+
+## Quality-Aware Live Source Selection
+
+- `maximum_sources` now means the maximum number of readable documents used for evidence and reporting.
+- Live search oversamples candidates up to three times `maximum_sources`, bounded by Tavily configuration.
+- All discovered candidates may be read before final document selection.
+- Successfully read documents are evaluated before evidence extraction.
+- Final documents are ordered by source-quality score, authority, primary-source score, provider score, and original rank.
+- Only selected documents contribute evidence, claims, citations, and source-quality evaluations.
+- Local-document research retains its existing selection behavior.
+- Source authority alone is insufficient for final selection; topical relevance and source diversity require a separate follow-up design.

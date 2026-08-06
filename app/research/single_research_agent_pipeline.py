@@ -13,18 +13,12 @@ from app.research.research_quality_evaluator import (
 from app.research.research_synthesizer import (
     DeterministicResearchSynthesizer,
 )
-from app.schemas.research_claim import (
-    ResearchClaimSet,
-)
-from app.schemas.research_evidence import (
-    ResearchEvidenceSet,
-)
+from app.schemas.research_claim import ResearchClaimSet
+from app.schemas.research_evidence import ResearchEvidenceSet
 from app.schemas.research_pipeline import (
     SingleResearchPipelineResult,
 )
-from app.schemas.research_request import (
-    ResearchRequest,
-)
+from app.schemas.research_request import ResearchRequest
 from app.schemas.research_search_query import (
     ResearchSearchQuerySet,
 )
@@ -38,21 +32,14 @@ from app.schemas.research_source_document import (
 from app.schemas.research_source_quality import (
     ResearchSourceQualityEvaluation,
 )
-from app.schemas.research_task import (
-    ResearchTaskGraph,
-)
-from app.schemas.research_workspace import (
-    ResearchWorkspace,
-)
+from app.schemas.research_task import ResearchTaskGraph
+from app.schemas.research_workspace import ResearchWorkspace
 
 
 class ResearchRequestValidatorProtocol(Protocol):
     """Contract for validating a research request."""
 
-    def validate(
-        self,
-        request: ResearchRequest,
-    ) -> object:
+    def validate(self, request: ResearchRequest) -> object:
         """Validate one request."""
 
 
@@ -128,6 +115,18 @@ class ResearchSourceQualityEvaluatorProtocol(Protocol):
         """Evaluate one source document."""
 
 
+class ResearchDocumentSelectionProtocol(Protocol):
+    """Contract for selecting readable source documents."""
+
+    def select(
+        self,
+        *,
+        document_set: ResearchSourceDocumentSet,
+        evaluator: ResearchSourceQualityEvaluatorProtocol,
+    ) -> object:
+        """Return selected documents and matching evaluations."""
+
+
 class SingleResearchAgentPipeline:
     """Run the complete single research-agent workflow."""
 
@@ -144,6 +143,9 @@ class SingleResearchAgentPipeline:
         source_quality_evaluator: (
             ResearchSourceQualityEvaluatorProtocol
         ),
+        document_selector: (
+            ResearchDocumentSelectionProtocol | None
+        ) = None,
         synthesizer: (
             DeterministicResearchSynthesizer | None
         ) = None,
@@ -161,6 +163,7 @@ class SingleResearchAgentPipeline:
         self._source_quality_evaluator = (
             source_quality_evaluator
         )
+        self._document_selector = document_selector
         self._synthesizer = (
             synthesizer
             or DeterministicResearchSynthesizer()
@@ -187,16 +190,28 @@ class SingleResearchAgentPipeline:
         return self._source_reader
 
     @property
-    def evidence_extractor(self):
+    def evidence_extractor(
+        self,
+    ) -> ResearchEvidenceExtractorProtocol:
         """Return the configured evidence extractor."""
 
         return self._evidence_extractor
 
     @property
-    def source_quality_evaluator(self):
+    def source_quality_evaluator(
+        self,
+    ) -> ResearchSourceQualityEvaluatorProtocol:
         """Return the configured source-quality evaluator."""
 
         return self._source_quality_evaluator
+
+    @property
+    def document_selector(
+        self,
+    ) -> ResearchDocumentSelectionProtocol | None:
+        """Return the configured document selector."""
+
+        return self._document_selector
 
     def run(
         self,
@@ -246,17 +261,23 @@ class SingleResearchAgentPipeline:
                 "source search produced no candidates"
             )
 
-        document_set = self._source_reader.read(
+        read_document_set = self._source_reader.read(
             candidate_set
         )
 
-        successful_documents = (
-            document_set.successful_documents()
-        )
-
-        if not successful_documents:
+        if not read_document_set.successful_documents():
             raise ResearchPipelineError(
                 "source reading produced no readable documents"
+            )
+
+        (
+            document_set,
+            source_quality_evaluations,
+        ) = self._select_documents(read_document_set)
+
+        if not document_set.successful_documents():
+            raise ResearchPipelineError(
+                "source selection produced no readable documents"
             )
 
         evidence_set = self._evidence_extractor.extract(
@@ -277,13 +298,6 @@ class SingleResearchAgentPipeline:
                 "claim building produced no claims"
             )
 
-        source_quality_evaluations = [
-            self._source_quality_evaluator.evaluate(
-                document
-            )
-            for document in successful_documents
-        ]
-
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
             request=request,
@@ -298,12 +312,16 @@ class SingleResearchAgentPipeline:
             ),
             metadata={
                 "pipeline": "single-research-agent",
+                "read_candidate_count": str(
+                    len(read_document_set.documents)
+                ),
+                "selected_document_count": str(
+                    len(document_set.documents)
+                ),
             },
         )
 
-        report = self._synthesizer.synthesize(
-            workspace
-        )
+        report = self._synthesizer.synthesize(workspace)
 
         quality = self._quality_evaluator.evaluate(
             workspace=workspace,
@@ -314,4 +332,33 @@ class SingleResearchAgentPipeline:
             workspace=workspace,
             report=report,
             quality=quality,
+        )
+
+    def _select_documents(
+        self,
+        document_set: ResearchSourceDocumentSet,
+    ) -> tuple[
+        ResearchSourceDocumentSet,
+        list[ResearchSourceQualityEvaluation],
+    ]:
+        if self._document_selector is None:
+            successful = document_set.successful_documents()
+            return (
+                document_set,
+                [
+                    self._source_quality_evaluator.evaluate(
+                        document
+                    )
+                    for document in successful
+                ],
+            )
+
+        selection = self._document_selector.select(
+            document_set=document_set,
+            evaluator=self._source_quality_evaluator,
+        )
+
+        return (
+            selection.document_set,
+            selection.evaluations,
         )

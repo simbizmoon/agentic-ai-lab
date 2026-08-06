@@ -21,6 +21,9 @@ from app.research.pipeline_source_adapters import (
     PipelineSourceReaderAdapter,
     PipelineSourceSearchAdapter,
 )
+from app.research.quality_aware_document_selector import (
+    QualityAwareDocumentSelector,
+)
 from app.research.tavily_research_source_search_tool import (
     TavilyResearchSourceSearchTool,
 )
@@ -71,3 +74,8 @@ def test_live_runtime_composes_live_adapters() -> None:
         pipeline.source_quality_evaluator,
         LiveWebSourceQualityEvaluator,
     )
+    assert isinstance(
+        pipeline.document_selector,
+        QualityAwareDocumentSelector,
+    )
+    assert pipeline.document_selector.maximum_documents == 3

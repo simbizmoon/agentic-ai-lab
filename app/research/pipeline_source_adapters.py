@@ -29,6 +29,7 @@ class PipelineSourceSearchAdapter:
         search_tool: ResearchSourceSearchTool,
         *,
         maximum_candidates: int | None = None,
+        minimum_results_per_query: int | None = None,
     ) -> None:
         if (
             maximum_candidates is not None
@@ -37,9 +38,20 @@ class PipelineSourceSearchAdapter:
             raise ValueError(
                 "maximum_candidates must be greater than zero"
             )
+        if (
+            minimum_results_per_query is not None
+            and minimum_results_per_query < 1
+        ):
+            raise ValueError(
+                "minimum_results_per_query must be "
+                "greater than zero"
+            )
 
         self._search_tool = search_tool
         self._maximum_candidates = maximum_candidates
+        self._minimum_results_per_query = (
+            minimum_results_per_query
+        )
 
     @property
     def search_tool(self) -> ResearchSourceSearchTool:
@@ -57,7 +69,19 @@ class PipelineSourceSearchAdapter:
         seen_source_ids: set[str] = set()
 
         for query in query_set.queries:
-            result = self._search_tool.search(query)
+            search_query = query
+
+            if self._minimum_results_per_query is not None:
+                search_query = query.model_copy(
+                    update={
+                        "maximum_results": max(
+                            query.maximum_results,
+                            self._minimum_results_per_query,
+                        )
+                    }
+                )
+
+            result = self._search_tool.search(search_query)
 
             for candidate in result.candidates:
                 source_key = (

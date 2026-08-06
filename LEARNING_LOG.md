@@ -219,3 +219,26 @@ Observed results:
 Key lesson:
 
 Chunking controls report size, but chunking alone does not guarantee answer quality. Source-quality evaluation must influence candidate selection or evidence ordering to prevent weaker third-party sources from receiving equal report space.
+
+## Quality-Aware Source Selection
+
+Implemented quality-aware document selection for live research.
+
+Validation results:
+
+- 4,146 tests passed.
+- Ruff passed.
+- Nine search candidates were collected for a three-source request.
+- Nine candidates were read.
+- Three documents were selected.
+- All selected documents came from the official OpenAI developer domain.
+- Secondary blog and compatibility-provider sources were removed.
+- Live quality score increased to 0.976.
+
+Failure analysis:
+
+Authority-based selection solved the weak-source problem but did not solve topical relevance. Generic API overview pages, documentation indexes, and code-heavy quickstart sections displaced the more directly relevant Responses API overview. Same-domain pages also occupied all available source slots.
+
+Lesson:
+
+Source selection must combine authority with query relevance, document specificity, content usefulness, and redundancy control. Authority is a necessary signal, not a complete ranking strategy.
