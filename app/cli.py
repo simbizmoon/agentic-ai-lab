@@ -8,12 +8,19 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
+from app.research.live_research_handler import (
+    LiveResearchHandler,
+)
 from app.research.local_research_handler import (
     LocalResearchHandler,
 )
 
 ResearchHandler = Callable[
     [str, str, tuple[Path, ...], Path],
+    int,
+]
+LiveResearchHandlerType = Callable[
+    [str, str, int, int, Path],
     int,
 ]
 
@@ -77,6 +84,47 @@ def build_parser() -> argparse.ArgumentParser:
         default="reports",
         metavar="PATH",
         help="Directory in which research results are stored.",
+    )
+
+    live_parser = subparsers.add_parser(
+        "research-live",
+        help="Create a grounded report from live web sources.",
+        description=(
+            "Run grounded research using Tavily search and "
+            "the safe HTTP source reader."
+        ),
+    )
+    live_parser.add_argument(
+        "--question",
+        required=True,
+        help="Research question to answer.",
+    )
+    live_parser.add_argument(
+        "--objective",
+        help=(
+            "Desired research outcome. When omitted, AIRA "
+            "creates a default objective from the question."
+        ),
+    )
+    live_parser.add_argument(
+        "--maximum-sources",
+        type=int,
+        default=3,
+        metavar="COUNT",
+        help="Maximum number of live sources to read.",
+    )
+    live_parser.add_argument(
+        "--maximum-bytes",
+        type=int,
+        default=1_000_000,
+        metavar="BYTES",
+        help="Maximum response size accepted per source.",
+    )
+    live_parser.add_argument(
+        "--output-dir",
+        default="reports/live",
+        metavar="PATH",
+        help="Directory in which live research results are stored.",
     )
 
     return parser
@@ -189,20 +237,19 @@ def validate_output_dir(value: str) -> Path:
     return output_dir.resolve()
 
 
-def unavailable_research_handler(
-    question: str,
-    objective: str,
-    sources: tuple[Path, ...],
-    output_dir: Path,
+def validate_positive_integer(
+    value: int,
+    *,
+    name: str,
 ) -> int:
-    """Report that runtime integration is not connected yet."""
+    """Require a positive CLI integer."""
 
-    del question, objective, sources, output_dir
+    if value < 1:
+        raise ValueError(
+            f"{name} must be greater than zero"
+        )
 
-    raise RuntimeError(
-        "AIRA research runtime is not connected yet. "
-        "Complete the LocalDocumentAdapter integration first."
-    )
+    return value
 
 
 def run_research_command(
@@ -210,7 +257,7 @@ def run_research_command(
     *,
     research_handler: ResearchHandler,
 ) -> int:
-    """Validate and execute one research command."""
+    """Validate and execute one local research command."""
 
     question = validate_question(namespace.question)
     objective = validate_objective(
@@ -228,10 +275,49 @@ def run_research_command(
     )
 
 
+def run_live_research_command(
+    namespace: argparse.Namespace,
+    *,
+    live_research_handler: LiveResearchHandlerType,
+) -> int:
+    """Validate and execute one live research command."""
+
+    question = validate_question(namespace.question)
+    objective = validate_objective(
+        namespace.objective,
+        question=question,
+    )
+    maximum_sources = validate_positive_integer(
+        namespace.maximum_sources,
+        name="maximum_sources",
+    )
+    maximum_bytes = validate_positive_integer(
+        namespace.maximum_bytes,
+        name="maximum_bytes",
+    )
+
+    if maximum_bytes < 1_024:
+        raise ValueError(
+            "maximum_bytes must be at least 1024"
+        )
+    output_dir = validate_output_dir(namespace.output_dir)
+
+    return live_research_handler(
+        question,
+        objective,
+        maximum_sources,
+        maximum_bytes,
+        output_dir,
+    )
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
     research_handler: ResearchHandler | None = None,
+    live_research_handler: (
+        LiveResearchHandlerType | None
+    ) = None,
 ) -> int:
     """Run the AIRA command-line interface."""
 
@@ -245,6 +331,15 @@ def main(
                 research_handler=(
                     research_handler
                     or LocalResearchHandler()
+                ),
+            )
+
+        if namespace.command == "research-live":
+            return run_live_research_command(
+                namespace,
+                live_research_handler=(
+                    live_research_handler
+                    or LiveResearchHandler()
                 ),
             )
 

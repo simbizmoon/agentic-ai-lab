@@ -206,3 +206,121 @@ def test_main_runs_default_local_runtime(
     assert (
         execution_dirs[0] / "result.json"
     ).is_file()
+
+
+def test_parser_accepts_live_research_command() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(
+        [
+            "research-live",
+            "--question",
+            "How does live grounded research work?",
+        ]
+    )
+
+    assert namespace.command == "research-live"
+    assert namespace.maximum_sources == 3
+    assert namespace.maximum_bytes == 1_000_000
+    assert namespace.output_dir == "reports/live"
+
+
+def test_main_calls_injected_live_research_handler(
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(
+        question: str,
+        objective: str,
+        maximum_sources: int,
+        maximum_bytes: int,
+        output_dir: Path,
+    ) -> int:
+        captured["question"] = question
+        captured["objective"] = objective
+        captured["maximum_sources"] = maximum_sources
+        captured["maximum_bytes"] = maximum_bytes
+        captured["output_dir"] = output_dir
+        return 0
+
+    result = main(
+        [
+            "research-live",
+            "--question",
+            "How does live grounded research work?",
+            "--maximum-sources",
+            "2",
+            "--maximum-bytes",
+            "2048",
+            "--output-dir",
+            str(tmp_path / "live-reports"),
+        ],
+        live_research_handler=handler,
+    )
+
+    assert result == 0
+    assert captured["maximum_sources"] == 2
+    assert captured["maximum_bytes"] == 2048
+    assert captured["output_dir"] == (
+        tmp_path / "live-reports"
+    ).resolve()
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "message"),
+    [
+        (
+            "--maximum-sources",
+            "0",
+            "maximum_sources must be greater than zero",
+        ),
+        (
+            "--maximum-bytes",
+            "0",
+            "maximum_bytes must be greater than zero",
+        ),
+    ],
+)
+def test_live_research_rejects_nonpositive_limits(
+    option: str,
+    value: str,
+    message: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(
+        [
+            "research-live",
+            "--question",
+            "How does live grounded research work?",
+            option,
+            value,
+        ],
+        live_research_handler=lambda *args: 0,
+    )
+
+    captured = capsys.readouterr()
+
+    assert result == 2
+    assert message in captured.err
+
+def test_live_research_rejects_too_small_maximum_bytes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = main(
+        [
+            "research-live",
+            "--question",
+            "How does live grounded research work?",
+            "--maximum-bytes",
+            "100",
+        ],
+        live_research_handler=lambda *args: 0,
+    )
+
+    captured = capsys.readouterr()
+
+    assert result == 2
+    assert (
+        "maximum_bytes must be at least 1024"
+        in captured.err
+    )
