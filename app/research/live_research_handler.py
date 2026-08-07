@@ -18,8 +18,14 @@ from app.config import Settings, load_settings
 from app.research.concrete_aira_research_runner import (
     ConcreteAiraResearchRunner,
 )
+from app.research.generative_pipeline_claim_builder import (
+    GenerativePipelineClaimBuilder,
+)
 from app.research.live_runtime import (
     build_live_research_pipeline,
+)
+from app.research.openai_evidence_claim_generator import (
+    OpenAIEvidenceClaimGenerator,
 )
 from app.research.openai_semantic_citation_evaluator import (
     OpenAISemanticCitationEvaluator,
@@ -98,6 +104,12 @@ class LiveResearchHandler:
         openai_client = self._openai_client_factory(
             settings
         )
+        claim_builder = GenerativePipelineClaimBuilder(
+            generator=OpenAIEvidenceClaimGenerator(
+                client=openai_client,
+                model=settings.openai_model,
+            )
+        )
         semantic_citation_verifier = (
             SemanticCitationVerificationService(
                 evaluator=OpenAISemanticCitationEvaluator(
@@ -135,6 +147,7 @@ class LiveResearchHandler:
                     semantic_citation_verifier=(
                         semantic_citation_verifier
                     ),
+                    claim_builder=claim_builder,
                 )
             ),
             writer=self._writer,
