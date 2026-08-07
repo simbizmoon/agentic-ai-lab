@@ -31,6 +31,9 @@ from app.research.tavily_research_source_search_tool import (
     TavilyResearchSourceSearchTool,
 )
 from app.schemas.research_request import ResearchRequest
+from app.schemas.research_search_budget import (
+    ResearchSearchBudget,
+)
 from app.schemas.tavily_search_config import TavilySearchConfig
 
 
@@ -56,6 +59,17 @@ def test_live_runtime_composes_live_adapters() -> None:
     assert isinstance(
         pipeline.source_searcher.search_tool,
         TavilyResearchSourceSearchTool,
+    )
+    assert pipeline.source_searcher.search_budget is not None
+    assert (
+        pipeline.source_searcher.search_budget
+        .maximum_provider_calls
+        == 2
+    )
+    assert (
+        pipeline.source_searcher.search_budget
+        .maximum_credits
+        == 2.0
     )
     assert isinstance(
         pipeline.source_reader,
@@ -86,3 +100,29 @@ def test_live_runtime_composes_live_adapters() -> None:
         pipeline.supplemental_query_planner,
         SupplementalResearchQueryPlanner,
     )
+
+
+def test_live_runtime_accepts_custom_search_budget() -> None:
+    request = ResearchRequest(
+        request_id="research-custom-budget",
+        question="How does grounded research work?",
+        objective="Explain grounded research.",
+        maximum_sources=3,
+    )
+    budget = ResearchSearchBudget(
+        maximum_provider_calls=1,
+        maximum_credits=0.5,
+        maximum_latency_ms=1_500,
+        default_credit_per_call=0.5,
+    )
+
+    pipeline = build_live_research_pipeline(
+        request=request,
+        search_config=TavilySearchConfig(
+            api_key=SecretStr("test-secret"),
+            maximum_results=10,
+        ),
+        search_budget=budget,
+    )
+
+    assert pipeline.source_searcher.search_budget == budget

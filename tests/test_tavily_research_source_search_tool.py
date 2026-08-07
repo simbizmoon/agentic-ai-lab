@@ -9,9 +9,13 @@ from pydantic import SecretStr
 from app.research.research_source_search_tool_validator import (
     ResearchSourceSearchToolValidator,
 )
+from app.research.research_source_type_classifier import (
+    ResearchSourceTypeClassifier,
+)
 from app.research.tavily_research_source_search_tool import (
     TavilyResearchSourceSearchTool,
 )
+from app.schemas.research_request import ResearchSourceType
 from app.schemas.research_search_query import ResearchSearchQuery
 from app.schemas.research_source_search import ResearchSourceSearchStatus
 from app.schemas.tavily_search_config import TavilySearchConfig
@@ -315,3 +319,42 @@ def test_source_ids_are_deterministic() -> None:
     assert [c.source_id for c in first.candidates] == [
         c.source_id for c in second.candidates
     ]
+
+
+def test_tool_classifies_injected_trusted_host() -> None:
+    payload = response_payload()
+    payload["results"] = [
+        {
+            "title": "OpenAI Agents SDK",
+            "url": (
+                "https://openai.github.io/"
+                "openai-agents-python/"
+            ),
+            "content": "Official SDK documentation.",
+            "score": 0.95,
+        }
+    ]
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json=payload,
+            request=request,
+        )
+    )
+    tool = TavilyResearchSourceSearchTool(
+        config=config(),
+        client=httpx.Client(transport=transport),
+        source_type_classifier=(
+            ResearchSourceTypeClassifier(
+                official_documentation_hosts=(
+                    frozenset({"openai.github.io"})
+                )
+            )
+        ),
+    )
+
+    result = tool.search(query())
+
+    assert result.candidates[0].source_type is (
+        ResearchSourceType.OFFICIAL_DOCUMENTATION
+    )

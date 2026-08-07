@@ -8,6 +8,10 @@ from app.research.research_source_reader import (
 from app.research.research_source_search_tool import (
     ResearchSourceSearchTool,
 )
+from app.schemas.research_search_budget import (
+    ResearchSearchBudget,
+    ResearchSearchUsage,
+)
 from app.schemas.research_search_query import (
     ResearchSearchQuerySet,
 )
@@ -30,6 +34,7 @@ class PipelineSourceSearchAdapter:
         *,
         maximum_candidates: int | None = None,
         minimum_results_per_query: int | None = None,
+        budget: ResearchSearchBudget | None = None,
     ) -> None:
         if (
             maximum_candidates is not None
@@ -52,12 +57,28 @@ class PipelineSourceSearchAdapter:
         self._minimum_results_per_query = (
             minimum_results_per_query
         )
+        self._budget = budget
+        self._usage = ResearchSearchUsage()
 
     @property
     def search_tool(self) -> ResearchSourceSearchTool:
         """Return the wrapped search tool."""
 
         return self._search_tool
+
+    @property
+    def search_budget(
+        self,
+    ) -> ResearchSearchBudget | None:
+        """Return the configured search budget."""
+
+        return self._budget
+
+    @property
+    def search_usage(self) -> ResearchSearchUsage:
+        """Return accumulated provider usage."""
+
+        return self._usage
 
     def search(
         self,
@@ -69,6 +90,17 @@ class PipelineSourceSearchAdapter:
         seen_source_ids: set[str] = set()
 
         for query in query_set.queries:
+            if not self._can_start_provider_call():
+                self._usage = self._usage.model_copy(
+                    update={
+                        "blocked_query_count": (
+                            self._usage.blocked_query_count
+                            + 1
+                        )
+                    }
+                )
+                break
+
             search_query = query
 
             if self._minimum_results_per_query is not None:
@@ -82,6 +114,7 @@ class PipelineSourceSearchAdapter:
                 )
 
             result = self._search_tool.search(search_query)
+            self._record_provider_result(result)
 
             for candidate in result.candidates:
                 source_key = (
@@ -113,6 +146,77 @@ class PipelineSourceSearchAdapter:
             query_set=query_set,
             candidates=candidates,
         )
+
+    def _can_start_provider_call(self) -> bool:
+        """Return whether one more provider call is allowed."""
+
+        if self._budget is None:
+            return True
+
+        if (
+            self._usage.provider_call_count
+            >= self._budget.maximum_provider_calls
+        ):
+            return False
+
+        if (
+            self._usage.credit_used
+            + self._budget.default_credit_per_call
+            > self._budget.maximum_credits
+        ):
+            return False
+
+        return (
+            self._usage.latency_used_ms
+            < self._budget.maximum_latency_ms
+        )
+
+    def _record_provider_result(
+        self,
+        result: object,
+    ) -> None:
+        """Accumulate one provider result into search usage."""
+
+        duration_ms = int(result.duration_ms)
+        metadata = result.metadata
+        raw_credit = metadata.get("usage_credits")
+        credit_reported = raw_credit is not None
+
+        if credit_reported:
+            try:
+                credit = float(raw_credit)
+            except (TypeError, ValueError):
+                credit_reported = False
+                credit = self._default_credit()
+        else:
+            credit = self._default_credit()
+
+        self._usage = self._usage.model_copy(
+            update={
+                "provider_call_count": (
+                    self._usage.provider_call_count + 1
+                ),
+                "credit_used": (
+                    self._usage.credit_used + credit
+                ),
+                "latency_used_ms": (
+                    self._usage.latency_used_ms
+                    + duration_ms
+                ),
+                "unreported_credit_call_count": (
+                    self._usage.unreported_credit_call_count
+                    + (0 if credit_reported else 1)
+                ),
+            }
+        )
+
+    def _default_credit(self) -> float:
+        """Return fallback credit for an unreported call."""
+
+        if self._budget is None:
+            return 0.0
+
+        return self._budget.default_credit_per_call
 
 
 class PipelineSourceReaderAdapter:

@@ -214,6 +214,7 @@ class SingleResearchAgentPipeline:
         )
 
         replanning_metadata: dict[str, str] = {}
+        supplemental_search_blocked_by_budget = False
 
         if self._supplemental_query_planner is not None:
             search_round_count = 1
@@ -240,9 +241,23 @@ class SingleResearchAgentPipeline:
                     supplemental_query_set.queries
                 )
 
+                search_usage_before = (
+                    self._search_usage_snapshot()
+                )
+
                 raw_supplemental_candidates = (
                     self._source_searcher.search(
                         supplemental_query_set
+                    )
+                )
+
+                search_usage_after = (
+                    self._search_usage_snapshot()
+                )
+                supplemental_search_blocked_by_budget = (
+                    self._supplemental_search_was_blocked(
+                        before=search_usage_before,
+                        after=search_usage_after,
                     )
                 )
 
@@ -315,6 +330,11 @@ class SingleResearchAgentPipeline:
                 "deduplicated_candidate_count": str(
                     deduplicated_candidate_count
                 ),
+                "supplemental_search_blocked_by_budget": (
+                    str(
+                        supplemental_search_blocked_by_budget
+                    ).casefold()
+                ),
             }
 
         if not document_set.successful_documents():
@@ -359,6 +379,7 @@ class SingleResearchAgentPipeline:
                     no_evidence_document_count
                 ),
                 **replanning_metadata,
+                **self._search_budget_metadata(),
             },
         )
         report = self._synthesizer.synthesize(workspace)
@@ -377,6 +398,101 @@ class SingleResearchAgentPipeline:
             report=report,
             quality=quality,
         )
+
+    def _search_usage_snapshot(
+        self,
+    ) -> tuple[int, int] | None:
+        """Return call and blocked counts when available."""
+
+        usage = getattr(
+            self._source_searcher,
+            "search_usage",
+            None,
+        )
+
+        if usage is None:
+            return None
+
+        return (
+            usage.provider_call_count,
+            usage.blocked_query_count,
+        )
+
+    @staticmethod
+    def _supplemental_search_was_blocked(
+        *,
+        before: tuple[int, int] | None,
+        after: tuple[int, int] | None,
+    ) -> bool:
+        """Return whether budget blocked the supplemental call."""
+
+        if before is None or after is None:
+            return False
+
+        before_calls, before_blocked = before
+        after_calls, after_blocked = after
+
+        return (
+            after_calls == before_calls
+            and after_blocked > before_blocked
+        )
+
+    def _search_budget_metadata(self) -> dict[str, str]:
+        """Return bounded search usage metadata when available."""
+
+        budget = getattr(
+            self._source_searcher,
+            "search_budget",
+            None,
+        )
+        usage = getattr(
+            self._source_searcher,
+            "search_usage",
+            None,
+        )
+
+        if budget is None or usage is None:
+            return {}
+
+        exhausted = (
+            usage.provider_call_count
+            >= budget.maximum_provider_calls
+            or usage.credit_used
+            >= budget.maximum_credits
+            or usage.latency_used_ms
+            >= budget.maximum_latency_ms
+            or usage.blocked_query_count > 0
+        )
+
+        return {
+            "search_provider_call_limit": str(
+                budget.maximum_provider_calls
+            ),
+            "search_provider_call_count": str(
+                usage.provider_call_count
+            ),
+            "search_credit_limit": str(
+                budget.maximum_credits
+            ),
+            "search_credit_used": str(
+                usage.credit_used
+            ),
+            "search_credit_unreported_call_count": str(
+                usage.unreported_credit_call_count
+            ),
+            "search_latency_limit_ms": str(
+                budget.maximum_latency_ms
+            ),
+            "search_latency_used_ms": str(
+                usage.latency_used_ms
+            ),
+            "search_budget_exhausted": str(
+                exhausted
+            ).casefold(),
+            "search_blocked_query_count": str(
+                usage.blocked_query_count
+            ),
+        }
 
     def _should_run_supplemental_search(
         self,

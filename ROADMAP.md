@@ -1559,3 +1559,126 @@ git diff --check: passed
 - [ ] Golden Research Dataset 구축
 - [ ] 동일 질문 반복 실행의 Live 변동성 평가
 - [ ] 실제 관심 분야 또는 선행특허 조사 검증
+
+---
+
+# 27. 2026-08-07 Provider Budget 및 Source Type 정규화 완료 기록
+
+## 작업 상태
+
+- [x] Search Budget 및 Usage Schema 구현
+- [x] Provider Call 수 제한
+- [x] Provider Credit 제한
+- [x] 미보고 Credit 기본값 적용
+- [x] 누적 Provider Latency 제한
+- [x] Budget 차단 Query 수 기록
+- [x] Supplemental Search Budget 공유
+- [x] Supplemental Search Budget 차단 상태 기록
+- [x] Live Runtime 기본 Budget 구성
+- [x] 사용자 지정 Search Budget 주입
+- [x] Tavily Candidate Source Type 고정값 원인 분석
+- [x] Provider 독립적 Source Type Classifier 구현
+- [x] 정확한 Trusted Host 정책 구현
+- [x] `openai.github.io` 공식 문서 분류
+- [x] 다른 `*.github.io` 비신뢰 테스트
+- [x] 정부·교육·공식 문서 Host Pattern 분류
+- [x] Tavily Candidate 정규화 연결
+- [x] 전체 pytest 통과
+- [x] Ruff 통과
+- [x] `git diff --check` 통과
+- [x] 실제 Tavily Live E2E 통과
+
+## 확정된 실행 흐름
+
+```text
+Query Planning
+→ Provider Budget 사전 검사
+→ Tavily Search
+→ Provider Usage 누적
+→ URL Source Type Classification
+→ Candidate 정규화
+→ HTTP/HTML Reading
+→ Source Quality Evaluation
+→ Evidence-aware Selection
+→ Evidence Sufficiency Check
+   ├─ sufficient
+   │  → Report and Quality Evaluation
+   └─ insufficient
+      → Supplemental Query Planning
+      → 동일 Provider Budget 사전 검사
+      ├─ budget available
+      │  → Supplemental Search
+      └─ budget exhausted
+         → Provider 호출 차단 및 실패 상태 기록
+```
+
+## Live 기본 Budget
+
+```text
+maximum_provider_calls = 2
+maximum_credits = 2.0
+maximum_latency_ms = timeout_seconds × 1000 × 2
+default_credit_per_call = 1.0
+```
+
+## Source Type 정책
+
+```text
+explicit trusted host
+→ OFFICIAL_DOCUMENTATION
+
+docs.* / developer.* / developers.*
+→ OFFICIAL_DOCUMENTATION
+
+.gov / .go.kr
+→ GOVERNMENT
+
+.edu / .ac.kr
+→ ACADEMIC
+
+otherwise
+→ OTHER
+```
+
+Live Trusted Host:
+
+```text
+openai.github.io
+```
+
+## Live 검증 결과
+
+- 읽은 후보: 6
+- 최종 선택 문서: 2
+- 최종 Evidence Source: 2
+- 검색 라운드: 1
+- Replanning 실행: false
+- Provider 호출: 1
+- 사용 Credit: 1.0
+- Search Budget 소진: false
+- `openai.github.io`: `official_documentation`
+- `developers.openai.com`: `official_documentation`
+- 두 Source Quality: 각각 0.9225
+- 최종 Quality Score: 0.9345
+- Quality Level: excellent
+- `passed=true`
+- `LOW_SOURCE_DIVERSITY`: 없음
+
+## 테스트 기준선
+
+```text
+전체 pytest: 4194 passed in 15.69s
+Ruff: All checks passed
+git diff --check: passed
+Live E2E exit code: 0
+```
+
+## 다음 우선 과제
+
+- [ ] Citation 검증
+- [ ] Golden Research Dataset 구축
+- [ ] 동일 질문 반복 실행의 Live 변동성 평가
+- [ ] Source Type Classifier의 설정 외부화 기준 검토
+- [ ] Provider별 Credit 단위 및 Usage 정합성 검증
+- [ ] 실제 관심 분야 또는 선행특허 조사 검증
+

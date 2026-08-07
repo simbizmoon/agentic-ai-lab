@@ -984,3 +984,283 @@ Writer 테스트: 3 passed
 Ruff: All checks passed
 git diff --check: passed
 ```
+
+---
+
+## D-031 — Live Research Provider Call·Credit·Latency Budget
+
+- 상태: 확정
+- 날짜: 2026-08-07
+- 적용 범위: Live Research Search Adapter, Supplemental Search, Workspace Metadata
+
+### 문제
+
+제한형 Supplemental Search는 최대 한 번만 실행되지만, 실제 Provider 호출 수,
+Credit 및 누적 Latency를 하나의 Budget으로 통제하지 않았다.
+
+검색 라운드 수만 제한하면 Query 수 증가, Provider Credit 소비,
+네트워크 지연 누적을 직접 제어할 수 없다.
+
+### 결정
+
+`ResearchSearchBudget`과 `ResearchSearchUsage`를 도입하고
+`PipelineSourceSearchAdapter`가 하나의 Research Run 동안 Search Provider
+사용량을 누적한다.
+
+```text
+ResearchSearchBudget
+├─ maximum_provider_calls
+├─ maximum_credits
+├─ maximum_latency_ms
+└─ default_credit_per_call
+
+ResearchSearchUsage
+├─ provider_call_count
+├─ credit_used
+├─ latency_used_ms
+├─ unreported_credit_call_count
+└─ blocked_query_count
+```
+
+### 호출 전 검사
+
+다음 중 하나라도 만족하면 다음 Provider 호출을 시작하지 않는다.
+
+- 누적 호출 수가 `maximum_provider_calls` 이상
+- 누적 Credit과 기본 예상 Credit의 합이 `maximum_credits` 초과
+- 누적 Latency가 `maximum_latency_ms` 이상
+
+`maximum_latency_ms`는 이미 누적된 Provider Latency를 기준으로 다음 호출을
+차단한다. 미래 호출의 실제 Latency는 사전에 알 수 없으므로 단일 호출 후
+누적값이 한도를 초과할 수 있다.
+
+### 호출 후 기록
+
+Provider Result에서 다음 값을 누적한다.
+
+- `duration_ms`
+- `metadata["usage_credits"]`
+
+Provider가 Credit을 보고하지 않거나 유효하지 않은 값을 보고하면
+`default_credit_per_call`을 사용하고
+`unreported_credit_call_count`를 증가시킨다.
+
+### Supplemental Search
+
+초기 검색과 Supplemental Search는 동일한 Search Adapter와 Budget을 공유한다.
+
+Evidence가 부족해 Replanning이 발동하더라도 Budget이 소진된 경우
+Supplemental Provider 호출을 실행하지 않는다.
+
+Workspace Metadata에 다음을 기록한다.
+
+- `search_provider_call_limit`
+- `search_provider_call_count`
+- `search_credit_limit`
+- `search_credit_used`
+- `search_credit_unreported_call_count`
+- `search_latency_limit_ms`
+- `search_latency_used_ms`
+- `search_budget_exhausted`
+- `search_blocked_query_count`
+- `supplemental_search_blocked_by_budget`
+
+### Live 기본값
+
+```text
+maximum_provider_calls = 2
+maximum_credits = 2.0
+maximum_latency_ms = Tavily timeout_seconds × 1000 × 2
+default_credit_per_call = 1.0
+```
+
+호출자가 필요하면 `build_live_research_pipeline()`에 별도 Budget을 주입할 수 있다.
+
+### 검증
+
+- Provider Call 수 누적
+- 보고 Credit 누적
+- 미보고 Credit 기본값 적용
+- Call Limit 사전 차단
+- Credit Limit 사전 차단
+- 누적 Latency 도달 후 차단
+- Budget이 없는 기존 동작 유지
+- Supplemental Search Budget 차단
+- Workspace Metadata 기록
+- Live Runtime 기본 및 사용자 지정 Budget
+
+최종 전체 검증:
+
+```text
+4194 passed in 15.69s
+Ruff: All checks passed
+git diff --check: passed
+```
+
+실제 Live 검증:
+
+```text
+search_provider_call_count = 1
+search_credit_used = 1.0
+search_budget_exhausted = false
+supplemental_search_blocked_by_budget = false
+```
+
+### 이유
+
+AIRA의 Search 행동은 단순한 검색 횟수가 아니라 실제 외부 자원 사용량을
+기준으로 제한되어야 한다.
+
+명시적 Budget과 Usage를 분리하면 비용 예측, 실행 중단, 관측 가능성,
+결정론적 테스트 및 향후 Provider별 과금 정책 확장이 가능하다.
+
+---
+
+## D-032 — Provider 독립적 Research Source Type 분류
+
+- 상태: 확정
+- 날짜: 2026-08-07
+- 적용 범위: Tavily Candidate 정규화, Live Source Quality Evaluation
+
+### 문제
+
+Tavily Search 결과는 모든 Candidate를 다음 값으로 저장하였다.
+
+```text
+source_type = OTHER
+```
+
+따라서 공식 OpenAI Agents SDK 문서인
+`openai.github.io/openai-agents-python`도 일반 웹사이트와 동일하게 평가되었다.
+
+```text
+authority = 0.50
+primary = 0.45
+overall = 0.6625
+```
+
+Quality-aware Document Selector는 최고 점수와의 차이가 0.12를 초과한 문서를
+제외하므로 해당 공식 문서가 탈락했다.
+
+그 결과 읽기에는 성공한 문서가 여러 개 있어도 최종 Evidence Source는
+하나만 남고 `LOW_SOURCE_DIVERSITY/error`가 발생했다.
+
+### 검토 대안
+
+- Selector의 Quality Gap 완화
+- Live Quality 점수 공식 완화
+- Tavily 구현에 OpenAI Host 직접 하드코딩
+- Provider 독립적인 URL Source Type Classifier 도입
+
+### 결정
+
+Provider와 분리된 `ResearchSourceTypeClassifier`를 도입하고,
+Tavily Candidate 생성 시 주입된 Classifier로 `source_type`을 결정한다.
+
+```text
+Search Provider Result
+→ ResearchSourceTypeClassifier
+→ ResearchSourceCandidate.source_type
+→ LiveWebSourceQualityEvaluator
+→ QualityAwareDocumentSelector
+```
+
+### 분류 정책
+
+- 명시적으로 등록한 정확한 Host: `OFFICIAL_DOCUMENTATION`
+- `docs.`, `developer.`, `developers.`로 시작하는 Host: `OFFICIAL_DOCUMENTATION`
+- `.gov`, `.go.kr` 및 중간 `.gov.`: `GOVERNMENT`
+- `.edu`, `.ac.kr` 및 중간 `.edu.`: `ACADEMIC`
+- 그 외: `OTHER`
+
+### Trusted Host 정책
+
+Live Runtime에서는 다음 정확한 Host만 추가로 신뢰한다.
+
+```text
+openai.github.io
+```
+
+모든 `*.github.io`를 신뢰하지 않는다.
+
+예:
+
+```text
+openai.github.io
+→ OFFICIAL_DOCUMENTATION
+
+example.github.io
+→ OTHER
+```
+
+### 변경하지 않은 영역
+
+- Selector의 `maximum_quality_gap=0.12`
+- Live Source Quality 가중치
+- Evidence Extractor의 Hard Filter
+- Minimum Evidence Source Gate
+- Tavily Provider 응답 Schema
+
+### 검증
+
+- 정확한 Trusted Host 분류
+- 다른 GitHub Pages Host 비신뢰
+- 기존 공식 문서 Host Pattern
+- 정부 및 교육 Domain Pattern
+- Blank Trusted Host 거부
+- Tavily Candidate 생성 시 주입 Classifier 사용
+- 전체 Regression Test
+- 실제 Tavily Live E2E
+
+최종 Live 결과:
+
+```text
+read_candidate_count = 6
+selected_document_count = 2
+evidence_source_count = 2
+search_round_count = 1
+replanning_triggered = false
+search_provider_call_count = 1
+search_credit_used = 1.0
+search_budget_exhausted = false
+```
+
+선택 Source:
+
+```text
+openai.github.io
+source_type = official_documentation
+overall quality = 0.9225
+
+developers.openai.com
+source_type = official_documentation
+overall quality = 0.9225
+```
+
+최종 품질:
+
+```text
+overall_score = 0.9345
+quality_level = excellent
+passed = true
+source_count = 2
+```
+
+최종 전체 검증:
+
+```text
+4194 passed in 15.69s
+Ruff: All checks passed
+git diff --check: passed
+Live E2E exit code: 0
+```
+
+### 이유
+
+공식 Source를 정확히 분류하지 못한 상태에서 Selector 기준을 완화하면
+품질 정책 전체가 약해진다.
+
+Source Type 정규화 계층을 추가하면 Provider가 반환한 Raw Result를
+AIRA Domain Model로 정확히 변환하면서 기존 Quality Gate와 Evidence Gate를
+그대로 유지할 수 있다.
+

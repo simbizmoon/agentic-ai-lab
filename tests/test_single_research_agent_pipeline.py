@@ -7,6 +7,9 @@ import pytest
 from app.research.pipeline_analysis_adapters import (
     DeterministicPipelineClaimBuilder,
 )
+from app.research.pipeline_source_adapters import (
+    PipelineSourceSearchAdapter,
+)
 from app.research.quality_aware_document_selector import (
     ResearchDocumentSelection,
 )
@@ -36,6 +39,9 @@ from app.schemas.research_request import (
     ResearchRequest,
     ResearchSourceType,
 )
+from app.schemas.research_search_budget import (
+    ResearchSearchBudget,
+)
 from app.schemas.research_search_query import (
     ResearchSearchQuery,
     ResearchSearchQuerySet,
@@ -53,6 +59,10 @@ from app.schemas.research_source_document import (
 from app.schemas.research_source_quality import (
     ResearchSourceQualityEvaluation,
     ResearchSourceQualityLevel,
+)
+from app.schemas.research_source_search import (
+    ResearchSourceSearchResult,
+    ResearchSourceSearchStatus,
 )
 from app.schemas.research_task import (
     ResearchTask,
@@ -712,6 +722,58 @@ def test_pipeline_backfill_is_deterministic() -> None:
     )
     assert first_extractor.calls == second_extractor.calls
 
+
+class BudgetedReplanningSearchTool:
+    """Return deterministic candidates for bounded search tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return "budgeted-replanning-search"
+
+    @property
+    def provider(self) -> str:
+        return "budgeted-test-provider"
+
+    def search(
+        self,
+        query: ResearchSearchQuery,
+    ) -> ResearchSourceSearchResult:
+        self.calls.append(query.query_id)
+
+        source_id = (
+            "source-d"
+            if "supplemental" in query.query_id
+            else "source-a"
+        )
+
+        candidate = ResearchSourceCandidate(
+            source_id=source_id,
+            request_id=query.request_id,
+            task_id=query.task_id,
+            query_id=query.query_id,
+            title=f"Agent memory {source_id}",
+            url=f"https://example.com/{source_id}",
+            source_type=ResearchSourceType.ACADEMIC,
+            rank=1,
+        )
+
+        return ResearchSourceSearchResult(
+            query=query,
+            status=ResearchSourceSearchStatus.SUCCEEDED,
+            provider=self.provider,
+            candidates=[candidate],
+            error=None,
+            duration_ms=10,
+            metadata={
+                "tool": self.name,
+                "usage_credits": "1.0",
+            },
+        )
+
+
 class ReplanningSourceSearcher:
     """Return deterministic candidates for two search rounds."""
 
@@ -1025,6 +1087,70 @@ def test_pipeline_keeps_failure_when_replanning_adds_no_evidence() -> None:
     assert result.workspace.metadata[
         "replanning_triggered"
     ] == "true"
+
+
+
+def test_pipeline_blocks_supplemental_search_when_budget_is_exhausted(
+) -> None:
+    tool = BudgetedReplanningSearchTool()
+    searcher = PipelineSourceSearchAdapter(
+        tool,
+        budget=ResearchSearchBudget(
+            maximum_provider_calls=1,
+            maximum_credits=2.0,
+            maximum_latency_ms=100,
+        ),
+    )
+    reader = ReplanningSourceReader()
+    pipeline = SingleResearchAgentPipeline(
+        request_validator=FakeRequestValidator(),
+        task_decomposer=FakeTaskDecomposer(),
+        query_planner=FakeQueryPlanner(),
+        source_searcher=searcher,
+        source_reader=reader,
+        evidence_extractor=BackfillEvidenceExtractor(
+            {"source-a", "source-d"}
+        ),
+        claim_builder=DeterministicPipelineClaimBuilder(),
+        source_quality_evaluator=(
+            FakeSourceQualityEvaluator()
+        ),
+        document_selector=OrderedBackfillSelector(),
+        supplemental_query_planner=(
+            SupplementalResearchQueryPlanner()
+        ),
+    )
+
+    result = pipeline.run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert tool.calls == ["query-001"]
+    assert reader.calls == [["source-a"]]
+    assert result.report.source_count == 1
+    assert result.quality.passed is False
+
+    assert any(
+        issue.code.value == "low_source_diversity"
+        and issue.severity.value == "error"
+        for issue in result.quality.issues
+    )
+
+    metadata = result.workspace.metadata
+
+    assert metadata["replanning_triggered"] == "true"
+    assert (
+        metadata["supplemental_search_blocked_by_budget"]
+        == "true"
+    )
+    assert metadata["search_provider_call_limit"] == "1"
+    assert metadata["search_provider_call_count"] == "1"
+    assert metadata["search_credit_limit"] == "2.0"
+    assert metadata["search_credit_used"] == "1.0"
+    assert metadata["search_latency_limit_ms"] == "100"
+    assert metadata["search_latency_used_ms"] == "10"
+    assert metadata["search_budget_exhausted"] == "true"
+    assert metadata["search_blocked_query_count"] == "1"
 
 
 def test_pipeline_skips_replanning_when_maximum_sources_is_one() -> None:

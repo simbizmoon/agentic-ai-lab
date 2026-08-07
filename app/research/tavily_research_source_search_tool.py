@@ -11,6 +11,9 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.research.research_source_search_tool import ResearchSourceSearchTool
+from app.research.research_source_type_classifier import (
+    ResearchSourceTypeClassifier,
+)
 from app.schemas.research_request import ResearchSourceType
 from app.schemas.research_search_query import ResearchSearchQuery
 from app.schemas.research_source_candidate import ResearchSourceCandidate
@@ -63,6 +66,9 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
         client: httpx.Client | None = None,
         name: str = "tavily_source_search",
         provider: str = "tavily",
+        source_type_classifier: (
+            ResearchSourceTypeClassifier | None
+        ) = None,
     ) -> None:
         if not name.strip():
             raise ValueError("name must not be blank")
@@ -73,6 +79,10 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
         self._client = client
         self._name = name
         self._provider = provider
+        self._source_type_classifier = (
+            source_type_classifier
+            or ResearchSourceTypeClassifier()
+        )
 
     @property
     def name(self) -> str:
@@ -85,6 +95,14 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
         """Return the provider name."""
 
         return self._provider
+
+    @property
+    def source_type_classifier(
+        self,
+    ) -> ResearchSourceTypeClassifier:
+        """Return the configured source type classifier."""
+
+        return self._source_type_classifier
 
     def search(self, query: ResearchSearchQuery) -> ResearchSourceSearchResult:
         """Execute one Tavily search request."""
@@ -242,7 +260,11 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
                     query_id=query.query_id,
                     title=item.title.strip(),
                     url=item.url.strip(),
-                    source_type=ResearchSourceType.OTHER,
+                    source_type=(
+                        self._source_type_classifier.classify(
+                            item.url
+                        )
+                    ),
                     snippet=item.content.strip(),
                     rank=rank,
                     metadata=metadata,

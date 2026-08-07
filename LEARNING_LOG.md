@@ -549,3 +549,105 @@ git diff --check passed
 다음 단계에서는 Live Research의 검색 호출 수, Provider Credit, Latency를
 측정하여 Supplemental Search가 실제로 사용하는 비용을 Budget 제약과
 연결한다.
+
+---
+
+## 2026-08-07 — 외부 Provider 사용량을 Budget으로 통제하기
+
+### 학습 목표
+
+검색 횟수만 제한하는 것과 실제 Provider 자원 사용량을 제한하는 것의 차이를
+이해하고, Call·Credit·Latency를 하나의 실행 Budget으로 연결한다.
+
+### 핵심 학습
+
+- 검색 라운드 수와 Provider 호출 수는 같은 개념이 아니다.
+- 비용 제한은 실행 계획이 아니라 실제 Usage와 연결되어야 한다.
+- 호출 전 예상값과 호출 후 실제값을 구분해야 한다.
+- 미보고 Usage를 0으로 처리하면 비용을 과소평가할 수 있다.
+- 초기 검색과 보완 검색이 같은 Budget을 공유해야 전체 상한이 유지된다.
+- Budget 차단도 최종 결과의 관측 가능한 상태로 남겨야 한다.
+- 네트워크 Latency Budget과 절대 실행 Deadline은 다른 정책이다.
+
+### 검증 결과
+
+```text
+4194 passed in 15.69s
+All checks passed
+git diff --check passed
+provider calls = 1
+credits used = 1.0
+budget exhausted = false
+```
+
+---
+
+## 2026-08-07 — 품질 기준을 낮추지 않고 Source 분류 오류 해결하기
+
+### 학습 목표
+
+근거 Source가 부족할 때 Selector 기준을 완화하기 전에 Search, Reader,
+Evaluator, Selector 중 어느 계층이 실제 원인인지 증거로 구분한다.
+
+### 단계별 진단
+
+```text
+READ 성공 = 9
+FAILED = 1
+```
+
+따라서 Reader가 한 문서만 읽었다는 가설은 틀렸다.
+
+```text
+developers.openai.com = 0.88
+openai.github.io = 0.6625
+기타 일반 Source = 0.6625
+```
+
+Selector는 최고 점수 0.88에서 0.12 이내인 문서만 적격으로 처리했으며,
+입력 점수에 따라 정상 동작했다.
+
+### 근본 원인
+
+Tavily Candidate 생성 코드가 모든 결과를 다음 값으로 고정했다.
+
+```text
+source_type = OTHER
+```
+
+### 선택한 해결
+
+Provider 독립적인 `ResearchSourceTypeClassifier`를 만들고 Candidate 정규화
+단계에 연결했다. Live Runtime에서는 정확한 `openai.github.io`만 Trusted Host로
+등록했다.
+
+### Live 재검증
+
+```text
+openai.github.io = official_documentation / 0.9225
+developers.openai.com = official_documentation / 0.9225
+selected_document_count = 2
+evidence_source_count = 2
+search_round_count = 1
+provider_call_count = 1
+credit_used = 1.0
+overall_quality = 0.9345
+passed = true
+```
+
+### 배운 점
+
+1. 최종 Source 부족만 보고 Reader 실패라고 추정하면 안 된다.
+2. Raw Read 결과와 Selected Document 결과를 분리해서 관찰해야 한다.
+3. Selector가 한 개를 선택해도 Selector 자체가 원인이라는 뜻은 아니다.
+4. Source Type 정규화 오류는 Quality Score와 최종 Evidence 수를 연쇄적으로 왜곡한다.
+5. 품질 기준을 낮추기 전에 입력 Domain Model이 정확한지 확인해야 한다.
+6. 광범위한 Domain Pattern보다 정확한 Trusted Host가 안전하다.
+7. 검색 정확도 개선은 품질뿐 아니라 Supplemental 호출과 Credit도 줄인다.
+8. 단위 테스트와 저장된 Live Artifact 재진단을 함께 사용해야 근본 원인을 확정할 수 있다.
+
+### 다음 학습 과제
+
+다음 단계에서는 Citation 검증을 구현하고, 동일 질문 반복 실행에서 Provider
+결과와 최종 Evidence가 얼마나 달라지는지 측정한다.
+

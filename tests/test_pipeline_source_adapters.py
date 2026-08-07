@@ -19,12 +19,19 @@ from app.schemas.in_memory_research_source import (
     InMemoryResearchSourceRecord,
 )
 from app.schemas.research_request import ResearchSourceType
+from app.schemas.research_search_budget import (
+    ResearchSearchBudget,
+)
 from app.schemas.research_search_query import (
     ResearchSearchQuery,
     ResearchSearchQuerySet,
 )
 from app.schemas.research_source_document import (
     ResearchSourceDocumentStatus,
+)
+from app.schemas.research_source_search import (
+    ResearchSourceSearchResult,
+    ResearchSourceSearchStatus,
 )
 from app.schemas.research_task import (
     ResearchTask,
@@ -135,6 +142,51 @@ def document_records() -> list[
             language="en",
         ),
     ]
+
+
+
+class RecordingSearchTool:
+    """Return deterministic results and record provider calls."""
+
+    def __init__(
+        self,
+        *,
+        durations: list[int],
+        credits: list[str | None],
+    ) -> None:
+        self._durations = durations
+        self._credits = credits
+        self.calls: list[str] = []
+
+    @property
+    def name(self) -> str:
+        return "recording-search"
+
+    @property
+    def provider(self) -> str:
+        return "recording-provider"
+
+    def search(
+        self,
+        query: ResearchSearchQuery,
+    ) -> ResearchSourceSearchResult:
+        index = len(self.calls)
+        self.calls.append(query.query_id)
+        metadata = {"tool": self.name}
+        credit = self._credits[index]
+
+        if credit is not None:
+            metadata["usage_credits"] = credit
+
+        return ResearchSourceSearchResult(
+            query=query,
+            status=ResearchSourceSearchStatus.NO_RESULTS,
+            provider=self.provider,
+            candidates=[],
+            error=None,
+            duration_ms=self._durations[index],
+            metadata=metadata,
+        )
 
 
 def test_search_adapter_combines_query_results() -> None:
@@ -308,3 +360,139 @@ def test_search_adapter_rejects_invalid_candidate_limit() -> None:
             ),
             maximum_candidates=0,
         )
+
+
+def test_search_adapter_tracks_provider_usage() -> None:
+    tool = RecordingSearchTool(
+        durations=[10, 20],
+        credits=["0.5", "1.5"],
+    )
+    adapter = PipelineSourceSearchAdapter(
+        tool,
+        budget=ResearchSearchBudget(
+            maximum_provider_calls=2,
+            maximum_credits=3.0,
+            maximum_latency_ms=100,
+        ),
+    )
+
+    adapter.search(query_set())
+
+    assert tool.calls == ["query-001", "query-002"]
+    assert adapter.search_usage.provider_call_count == 2
+    assert adapter.search_usage.credit_used == 2.0
+    assert adapter.search_usage.latency_used_ms == 30
+    assert (
+        adapter.search_usage.unreported_credit_call_count
+        == 0
+    )
+    assert adapter.search_usage.blocked_query_count == 0
+
+
+def test_search_adapter_uses_default_credit_when_unreported() -> None:
+    tool = RecordingSearchTool(
+        durations=[10],
+        credits=[None],
+    )
+    adapter = PipelineSourceSearchAdapter(
+        tool,
+        budget=ResearchSearchBudget(
+            maximum_provider_calls=1,
+            maximum_credits=2.0,
+            maximum_latency_ms=100,
+            default_credit_per_call=1.25,
+        ),
+    )
+    queries = query_set()
+    one_query = queries.model_copy(
+        update={"queries": [queries.queries[0]]}
+    )
+
+    adapter.search(one_query)
+
+    assert adapter.search_usage.credit_used == 1.25
+    assert (
+        adapter.search_usage.unreported_credit_call_count
+        == 1
+    )
+
+
+def test_search_adapter_blocks_after_call_limit() -> None:
+    tool = RecordingSearchTool(
+        durations=[10],
+        credits=["1.0"],
+    )
+    adapter = PipelineSourceSearchAdapter(
+        tool,
+        budget=ResearchSearchBudget(
+            maximum_provider_calls=1,
+            maximum_credits=10.0,
+            maximum_latency_ms=100,
+        ),
+    )
+
+    adapter.search(query_set())
+
+    assert tool.calls == ["query-001"]
+    assert adapter.search_usage.provider_call_count == 1
+    assert adapter.search_usage.blocked_query_count == 1
+
+
+def test_search_adapter_blocks_before_credit_limit_exceeded() -> None:
+    tool = RecordingSearchTool(
+        durations=[10],
+        credits=["1.0"],
+    )
+    adapter = PipelineSourceSearchAdapter(
+        tool,
+        budget=ResearchSearchBudget(
+            maximum_provider_calls=2,
+            maximum_credits=1.0,
+            maximum_latency_ms=100,
+        ),
+    )
+
+    adapter.search(query_set())
+
+    assert tool.calls == ["query-001"]
+    assert adapter.search_usage.credit_used == 1.0
+    assert adapter.search_usage.blocked_query_count == 1
+
+
+def test_search_adapter_blocks_after_latency_limit_reached() -> None:
+    tool = RecordingSearchTool(
+        durations=[50],
+        credits=["1.0"],
+    )
+    adapter = PipelineSourceSearchAdapter(
+        tool,
+        budget=ResearchSearchBudget(
+            maximum_provider_calls=2,
+            maximum_credits=10.0,
+            maximum_latency_ms=50,
+        ),
+    )
+
+    adapter.search(query_set())
+
+    assert tool.calls == ["query-001"]
+    assert adapter.search_usage.latency_used_ms == 50
+    assert adapter.search_usage.blocked_query_count == 1
+
+
+def test_search_adapter_without_budget_preserves_existing_behavior() -> None:
+    tool = RecordingSearchTool(
+        durations=[10, 20],
+        credits=[None, None],
+    )
+    adapter = PipelineSourceSearchAdapter(tool)
+
+    adapter.search(query_set())
+
+    assert tool.calls == ["query-001", "query-002"]
+    assert adapter.search_usage.provider_call_count == 2
+    assert adapter.search_usage.credit_used == 0.0
+    assert (
+        adapter.search_usage.unreported_credit_call_count
+        == 2
+    )
