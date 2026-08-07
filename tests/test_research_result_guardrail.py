@@ -134,3 +134,54 @@ def test_guardrail_rejects_missing_citations(
             invalid,
             execution_id="guardrail-001",
         )
+
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    [
+        (
+            "document_id",
+            "wrong-document",
+            "document_id must match evidence document_id",
+        ),
+        (
+            "excerpt",
+            "Wrong excerpt.",
+            "excerpt must match evidence excerpt",
+        ),
+        (
+            "url",
+            "https://example.invalid/wrong",
+            "url must match document url",
+        ),
+        (
+            "title",
+            "Wrong source title",
+            "title must match document title",
+        ),
+    ],
+)
+def test_guardrail_rejects_inconsistent_report_citation(
+    tmp_path: Path,
+    field_name: str,
+    value: str,
+    message: str,
+) -> None:
+    result = completed_result(tmp_path)
+    citation = result.report.citations[0].model_copy(
+        update={field_name: value}
+    )
+    report = result.report.model_copy(
+        update={"citations": [citation]}
+    )
+    invalid = result.model_copy(
+        update={"report": report}
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=message,
+    ):
+        ResearchResultGuardrail().validate(
+            invalid,
+            execution_id="guardrail-001",
+        )

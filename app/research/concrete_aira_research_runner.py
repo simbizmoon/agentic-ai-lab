@@ -13,6 +13,9 @@ from app.application.research_execution import (
 from app.research.application_research_request_adapter import (
     ApplicationResearchRequestAdapter,
 )
+from app.research.research_result_guardrail import (
+    ResearchResultGuardrail,
+)
 from app.research.research_result_writer import (
     ResearchResultPaths,
     ResearchResultWriter,
@@ -45,6 +48,7 @@ class ConcreteAiraResearchRunner:
         request_adapter: (
             ApplicationResearchRequestAdapter | None
         ) = None,
+        guardrail: ResearchResultGuardrail | None = None,
         writer: ResearchResultWriter | None = None,
         output_dir: Path | None = None,
         artifact_execution_id_factory: (
@@ -59,6 +63,9 @@ class ConcreteAiraResearchRunner:
         self._pipeline_factory = pipeline_factory
         self._request_adapter = (
             request_adapter or ApplicationResearchRequestAdapter()
+        )
+        self._guardrail = (
+            guardrail or ResearchResultGuardrail()
         )
         self._writer = writer
         self._output_dir = output_dir
@@ -78,6 +85,10 @@ class ConcreteAiraResearchRunner:
         result = pipeline.run(
             research_request,
             workspace_id=request.workspace_id,
+        )
+        self._guardrail.validate(
+            result,
+            execution_id=research_request.request_id,
         )
         paths = self._write_artifacts(
             request=request,

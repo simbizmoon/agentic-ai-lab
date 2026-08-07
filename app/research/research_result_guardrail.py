@@ -45,8 +45,8 @@ class ResearchResultGuardrail:
                 "research result must contain at least one citation"
             )
 
-        evidence_ids = {
-            item.evidence_id
+        evidence_by_id = {
+            item.evidence_id: item
             for item in result.workspace.evidence_set.evidence
         }
         cited_evidence_ids = {
@@ -54,10 +54,61 @@ class ResearchResultGuardrail:
             for citation in result.report.citations
         }
 
-        if not cited_evidence_ids.issubset(evidence_ids):
+        if not cited_evidence_ids.issubset(evidence_by_id):
             raise ValueError(
                 "report citations must reference existing evidence"
             )
+
+        document_by_id = {
+            item.document_id: item
+            for item
+            in result.workspace.evidence_set.document_set.documents
+        }
+
+        for citation in result.report.citations:
+            evidence = evidence_by_id[citation.evidence_id]
+
+            if citation.source_id != evidence.source_id:
+                raise ValueError(
+                    "report citation source_id must match "
+                    "evidence source_id"
+                )
+
+            if citation.document_id != evidence.document_id:
+                raise ValueError(
+                    "report citation document_id must match "
+                    "evidence document_id"
+                )
+
+            if citation.excerpt != evidence.excerpt:
+                raise ValueError(
+                    "report citation excerpt must match "
+                    "evidence excerpt"
+                )
+
+            document = document_by_id.get(citation.document_id)
+
+            if document is None:
+                raise ValueError(
+                    "report citations must reference "
+                    "existing documents"
+                )
+
+            if citation.source_id != document.candidate.source_id:
+                raise ValueError(
+                    "report citation source_id must match "
+                    "document source_id"
+                )
+
+            if citation.url != document.candidate.url:
+                raise ValueError(
+                    "report citation url must match document url"
+                )
+
+            if citation.title != document.candidate.title:
+                raise ValueError(
+                    "report citation title must match document title"
+                )
 
         source_ids = {
             candidate.source_id

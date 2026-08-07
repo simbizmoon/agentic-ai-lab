@@ -17,6 +17,9 @@ from app.research.local_document_adapter import (
 from app.research.local_runtime import (
     build_local_research_pipeline,
 )
+from app.research.research_result_guardrail import (
+    ResearchResultGuardrail,
+)
 from app.research.research_result_writer import (
     ResearchResultWriter,
 )
@@ -214,3 +217,70 @@ def test_runner_preserves_writer_collision_failure(
         match="execution directory already exists",
     ):
         runner.execute(request())
+
+class RecordingGuardrail(ResearchResultGuardrail):
+    """Record final-result validation calls."""
+
+    def __init__(self) -> None:
+        self.execution_ids: list[str] = []
+
+    def validate(
+        self,
+        result,
+        *,
+        execution_id: str,
+    ) -> None:
+        self.execution_ids.append(execution_id)
+        super().validate(
+            result,
+            execution_id=execution_id,
+        )
+
+
+class RejectingGuardrail(ResearchResultGuardrail):
+    """Reject every result before artifact persistence."""
+
+    def validate(
+        self,
+        result,
+        *,
+        execution_id: str,
+    ) -> None:
+        raise ValueError("guardrail rejected result")
+
+
+def test_runner_validates_result_with_request_id() -> None:
+    guardrail = RecordingGuardrail()
+    runner = ConcreteAiraResearchRunner(
+        pipeline_factory=pipeline_factory,
+        guardrail=guardrail,
+    )
+
+    runner.execute(request())
+
+    assert guardrail.execution_ids == ["research-001"]
+
+
+def test_runner_guardrail_rejection_prevents_artifact_write(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "reports"
+    runner = ConcreteAiraResearchRunner(
+        pipeline_factory=pipeline_factory,
+        guardrail=RejectingGuardrail(),
+        writer=ResearchResultWriter(),
+        output_dir=output_dir,
+        artifact_execution_id_factory=(
+            lambda _request: "artifact-execution-001"
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="guardrail rejected result",
+    ):
+        runner.execute(request())
+
+    assert not (
+        output_dir / "artifact-execution-001"
+    ).exists()
