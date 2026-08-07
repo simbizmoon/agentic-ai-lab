@@ -901,3 +901,86 @@ AIRA는 Evidence가 부족할 때 즉시 실패하는 데서 끝나지 않고, �
 Research 전용의 결정론적 Supplemental Search는 Evidence Sufficiency 개선,
 비용과 호출 횟수 제한, 무한 Loop 방지, 결정론적 테스트 가능성, Offline
 Baseline 호환성, 향후 확장 가능한 명확한 경계를 제공한다.
+
+---
+
+## D-030 — Research Result JSON에 계산된 품질 통과 여부 저장
+
+- 상태: 확정
+- 날짜: 2026-08-07
+- 적용 범위: `ResearchResultWriter`가 생성하는 `result.json`
+
+### 문제
+
+`ResearchQualityEvaluation.passed`는 ERROR severity의 Quality Issue 존재 여부를
+기준으로 계산되는 일반 `@property`이다.
+
+Python 코드와 Markdown Report에서는 `quality.passed`를 직접 읽으므로
+정상적으로 동작하였다. 그러나 `ResearchResultWriter`는
+`result.model_dump_json(indent=2)`를 저장하므로 일반 `@property`인
+`passed`가 JSON에 포함되지 않았다.
+
+그 결과 외부 프로그램은 최종 품질 통과 여부를 직접 읽지 못하고 `issues`를
+다시 해석해야 했다.
+
+### 검토 대안
+
+- Pydantic `computed_field`: 모든 직렬화 경로와 Schema가 변경됨
+- 실제 `passed: bool` 필드: `issues`와 불일치할 수 있는 중복 상태 생성
+- Writer에서 명시적 추가: 외부 JSON 계약만 제한적으로 확장
+
+### 결정
+
+`ResearchQualityEvaluation.passed`는 계산 속성으로 유지하고,
+`ResearchResultWriter`가 만드는 `result.json`에만 다음 값을 추가한다.
+
+```python
+payload = result.model_dump(mode="json")
+payload["quality"]["passed"] = result.quality.passed
+```
+
+### 외부 JSON 계약
+
+성공한 품질 결과:
+
+```json
+{
+  "quality": {
+    "passed": true
+  }
+}
+```
+
+ERROR Issue가 있는 품질 결과:
+
+```json
+{
+  "quality": {
+    "passed": false
+  }
+}
+```
+
+### 결정 이유
+
+- 모델 내부 계산 의미 유지
+- `passed`와 `issues`의 상태 불일치 방지
+- 일반 `model_dump()` 결과와 Schema 변경 방지
+- 기존 결정론적 비교 테스트 영향 최소화
+- 외부 CLI, 평가기, 후속 Agent가 Boolean을 직접 판독 가능
+
+### 테스트
+
+- Quality ERROR가 없으면 JSON의 `passed`가 `true`
+- Quality ERROR가 있으면 JSON의 `passed`가 `false`
+- Markdown 및 기존 JSON 필드는 그대로 유지
+- 동일 실행 디렉터리 덮어쓰기 방지 동작 유지
+
+### 검증 결과
+
+```text
+Writer 테스트: 3 passed
+전체 pytest: 4168 passed in 15.61s
+Ruff: All checks passed
+git diff --check: passed
+```

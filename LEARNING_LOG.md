@@ -470,3 +470,82 @@ git diff --check passed
 Supplemental Search의 Provider Credit과 Latency를 측정해 Budget 제약과
 연결한다. 또한 `result.json`에 Quality `passed`를 명시적으로 저장할지
 검토한다.
+
+---
+
+## 2026-08-07 — 계산 속성과 외부 JSON 계약 분리하기
+
+### 학습 목표
+
+Python 객체에서 계산되는 속성과 외부에 저장되는 JSON 필드가 서로 어떻게
+다른지 이해하고, 영향 범위를 통제하면서 외부 계약을 확장한다.
+
+### 발견한 현상
+
+Markdown Report에는 `Passed: yes`가 정상적으로 표시되었지만,
+`result.json`에서 `data["quality"].get("passed")`는 `None`을 반환했다.
+
+### 원인
+
+`ResearchQualityEvaluation.passed`는 일반 `@property`였다. 일반 속성은 Python
+객체에서는 읽을 수 있지만 Pydantic의 `model_dump()`와
+`model_dump_json()`에는 자동 포함되지 않는다.
+
+Markdown Writer는 `quality.passed`를 직접 읽었고, JSON Writer는 모델
+직렬화 결과만 저장했기 때문에 두 출력의 차이가 발생했다.
+
+### 선택한 구조
+
+```text
+내부 모델
+→ issues를 기준으로 passed 계산
+
+외부 Writer
+→ 계산된 passed를 JSON Payload에 복사
+
+result.json
+→ true 또는 false를 명시적으로 저장
+```
+
+### 회귀 테스트
+
+성공 Case:
+
+```text
+Quality ERROR 없음
+→ result.quality.passed is True
+→ payload["quality"]["passed"] is True
+```
+
+실패 Case:
+
+```text
+LOW_SOURCE_DIVERSITY/error 존재
+→ result.quality.passed is False
+→ payload["quality"]["passed"] is False
+```
+
+### 검증 결과
+
+```text
+3 writer tests passed
+4168 total tests passed in 15.61s
+All checks passed
+git diff --check passed
+```
+
+### 배운 점
+
+1. Python에서 접근 가능한 속성이 자동으로 JSON에 저장되는 것은 아니다.
+2. 계산 속성과 저장 필드는 서로 다른 설계 문제다.
+3. 계산 가능한 값을 일반 필드로 중복 저장하면 상태 불일치 위험이 생긴다.
+4. 작은 외부 계약 변경은 Writer 경계에서 처리하면 영향 범위를 줄일 수 있다.
+5. `computed_field`는 편리하지만 모든 직렬화 경로를 바꾼다는 점을 고려해야 한다.
+6. 성공 Case뿐 아니라 실패 Case도 JSON 계약 테스트로 고정해야 한다.
+7. 외부 Agent나 자동 평가기는 Boolean을 직접 읽을 수 있어야 한다.
+
+### 다음 학습 과제
+
+다음 단계에서는 Live Research의 검색 호출 수, Provider Credit, Latency를
+측정하여 Supplemental Search가 실제로 사용하는 비용을 Budget 제약과
+연결한다.

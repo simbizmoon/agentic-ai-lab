@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -60,8 +61,16 @@ class ResearchResultWriter:
             self._markdown(result),
             encoding="utf-8",
         )
+        payload = result.model_dump(mode="json")
+        payload["quality"]["passed"] = result.quality.passed
+
         result_path.write_text(
-            result.model_dump_json(indent=2) + "\n",
+            json.dumps(
+                payload,
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
             encoding="utf-8",
         )
 

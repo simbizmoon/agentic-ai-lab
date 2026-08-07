@@ -16,6 +16,11 @@ from app.research.local_runtime import (
 from app.research.research_result_writer import (
     ResearchResultWriter,
 )
+from app.schemas.research_quality import (
+    ResearchQualityIssue,
+    ResearchQualityIssueCode,
+    ResearchQualityIssueSeverity,
+)
 from app.schemas.research_request import (
     ResearchRequest,
     ResearchSourceType,
@@ -86,6 +91,48 @@ def test_writer_creates_markdown_and_json(
     assert payload["quality"]["overall_score"] == (
         result.quality.overall_score
     )
+    assert payload["quality"]["passed"] is True
+
+
+def test_writer_serializes_failed_quality_decision(
+    tmp_path: Path,
+) -> None:
+    result = completed_result(tmp_path)
+    failed_quality = result.quality.model_copy(
+        update={
+            "issues": [
+                ResearchQualityIssue(
+                    code=(
+                        ResearchQualityIssueCode
+                        .LOW_SOURCE_DIVERSITY
+                    ),
+                    severity=(
+                        ResearchQualityIssueSeverity.ERROR
+                    ),
+                    message=(
+                        "Independent evidence sources are "
+                        "below the required minimum."
+                    ),
+                )
+            ]
+        }
+    )
+    failed_result = result.model_copy(
+        update={"quality": failed_quality}
+    )
+
+    paths = ResearchResultWriter().write(
+        failed_result,
+        output_dir=tmp_path / "failed-reports",
+        execution_id="writer-failed-001",
+    )
+
+    payload = json.loads(
+        paths.result_path.read_text(encoding="utf-8")
+    )
+
+    assert failed_result.quality.passed is False
+    assert payload["quality"]["passed"] is False
 
 
 def test_writer_refuses_to_overwrite_execution(

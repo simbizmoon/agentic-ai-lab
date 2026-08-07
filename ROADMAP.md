@@ -1485,9 +1485,76 @@ Live E2E: passed
 
 ## 다음 우선 과제
 
-- [ ] `result.json`에 계산 속성인 Quality `passed` 노출 여부 검토
+- [x] `result.json`에 계산 속성인 Quality `passed` 노출 완료
 - [ ] Supplemental Query 품질 개선 기준 설계
 - [ ] Provider 호출·Credit·Latency Budget 통합
+- [ ] Citation 검증
+- [ ] Golden Research Dataset 구축
+- [ ] 동일 질문 반복 실행의 Live 변동성 평가
+- [ ] 실제 관심 분야 또는 선행특허 조사 검증
+
+---
+
+# 26. 2026-08-07 Quality Passed JSON 직렬화 완료 기록
+
+## 작업 상태
+
+- [x] `ResearchQualityEvaluation.passed` 구현 방식 확인
+- [x] Pydantic 2.13.4 직렬화 동작 확인
+- [x] `result.json` 누락 원인 확인
+- [x] `computed_field` 대안 검토
+- [x] 실제 Boolean 필드 대안 검토
+- [x] Writer 한정 직렬화 방식 결정
+- [x] 성공 품질의 `passed=true` 저장
+- [x] 실패 품질의 `passed=false` 저장
+- [x] Writer 회귀 테스트 추가
+- [x] 전체 pytest 통과
+- [x] Ruff 통과
+- [x] `git diff --check` 통과
+
+## 확정된 구조
+
+```text
+ResearchQualityEvaluation
+├─ issues
+└─ passed (@property로 계산)
+
+ResearchResultWriter
+├─ result.model_dump(mode="json")
+├─ payload["quality"]["passed"] 추가
+└─ result.json 저장
+```
+
+## 영향 범위
+
+변경 파일:
+
+```text
+app/research/research_result_writer.py
+tests/test_research_result_writer.py
+```
+
+변경하지 않은 영역:
+
+- `ResearchQualityEvaluation` Schema
+- 일반 `model_dump()` 결과
+- Pipeline 내부 품질 계산
+- Markdown의 Passed 표시
+- Offline 및 Live Pipeline 실행 의미
+
+## 테스트 기준선
+
+```text
+Writer 테스트: 3 passed
+전체 pytest: 4168 passed in 15.61s
+Ruff: All checks passed
+git diff --check: passed
+```
+
+## 다음 우선 과제
+
+- [ ] Provider 호출·Credit·Latency Budget 통합
+- [ ] Supplemental Query 품질 개선 기준 설계
 - [ ] Citation 검증
 - [ ] Golden Research Dataset 구축
 - [ ] 동일 질문 반복 실행의 Live 변동성 평가
