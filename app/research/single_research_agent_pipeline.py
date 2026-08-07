@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.research.research_citation_verifier_executor import (
+    ResearchCitationVerification,
+)
 from app.research.research_pipeline_error import ResearchPipelineError
 from app.research.research_quality_evaluator import ResearchQualityEvaluator
 from app.research.research_synthesizer import DeterministicResearchSynthesizer
@@ -93,6 +96,17 @@ class ResearchDocumentSelectionProtocol(Protocol):
     ) -> object: ...
 
 
+class SemanticCitationVerifierProtocol(Protocol):
+    """Verify semantic support for research citations."""
+
+    def verify(
+        self,
+        *,
+        claim_set: ResearchClaimSet,
+        evidence_set: ResearchEvidenceSet,
+    ) -> list[ResearchCitationVerification]: ...
+
+
 class SupplementalResearchQueryPlannerProtocol(Protocol):
     def plan(
         self,
@@ -123,6 +137,9 @@ class SingleResearchAgentPipeline:
         ) = None,
         synthesizer: DeterministicResearchSynthesizer | None = None,
         quality_evaluator: ResearchQualityEvaluator | None = None,
+        semantic_citation_verifier: (
+            SemanticCitationVerifierProtocol | None
+        ) = None,
     ) -> None:
         self._request_validator = request_validator
         self._task_decomposer = task_decomposer
@@ -138,6 +155,17 @@ class SingleResearchAgentPipeline:
         )
         self._synthesizer = synthesizer or DeterministicResearchSynthesizer()
         self._quality_evaluator = quality_evaluator or ResearchQualityEvaluator()
+        self._semantic_citation_verifier = (
+            semantic_citation_verifier
+        )
+
+    @property
+    def semantic_citation_verifier(
+        self,
+    ) -> SemanticCitationVerifierProtocol | None:
+        """Return the optional semantic citation verifier."""
+
+        return self._semantic_citation_verifier
 
     @property
     def source_searcher(self) -> ResearchSourceSearcherProtocol:
@@ -350,6 +378,18 @@ class SingleResearchAgentPipeline:
         if not claim_set.claims:
             raise ResearchPipelineError("claim building produced no claims")
 
+        citation_verifications: list[
+            ResearchCitationVerification
+        ] = []
+
+        if self._semantic_citation_verifier is not None:
+            citation_verifications = (
+                self._semantic_citation_verifier.verify(
+                    claim_set=claim_set,
+                    evidence_set=evidence_set,
+                )
+            )
+
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
             request=request,
@@ -397,6 +437,9 @@ class SingleResearchAgentPipeline:
             workspace=workspace,
             report=report,
             quality=quality,
+            citation_verifications=(
+                citation_verifications
+            ),
         )
 
     def _search_usage_snapshot(

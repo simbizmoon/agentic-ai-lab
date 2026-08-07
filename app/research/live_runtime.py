@@ -33,6 +33,7 @@ from app.research.research_source_type_classifier import (
     ResearchSourceTypeClassifier,
 )
 from app.research.single_research_agent_pipeline import (
+    SemanticCitationVerifierProtocol,
     SingleResearchAgentPipeline,
 )
 from app.research.supplemental_research_query_planner import (
@@ -55,6 +56,9 @@ def build_live_research_pipeline(
     search_config: TavilySearchConfig,
     reader_config: HttpHtmlReaderConfig | None = None,
     search_budget: ResearchSearchBudget | None = None,
+    semantic_citation_verifier: (
+        SemanticCitationVerifierProtocol | None
+    ) = None,
 ) -> SingleResearchAgentPipeline:
     """Compose deterministic planning with live search and reading."""
 
@@ -116,5 +120,8 @@ def build_live_research_pipeline(
         ),
         supplemental_query_planner=(
             SupplementalResearchQueryPlanner()
+        ),
+        semantic_citation_verifier=(
+            semantic_citation_verifier
         ),
     )

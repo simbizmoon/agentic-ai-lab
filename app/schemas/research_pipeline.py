@@ -7,9 +7,13 @@ from typing import Self
 from pydantic import (
     BaseModel,
     ConfigDict,
+    Field,
     model_validator,
 )
 
+from app.research.research_citation_verifier_executor import (
+    ResearchCitationVerification,
+)
 from app.schemas.research_quality import (
     ResearchQualityEvaluation,
 )
@@ -33,6 +37,9 @@ class SingleResearchPipelineResult(BaseModel):
     workspace: ResearchWorkspace
     report: ResearchSynthesisReport
     quality: ResearchQualityEvaluation
+    citation_verifications: list[
+        ResearchCitationVerification
+    ] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:

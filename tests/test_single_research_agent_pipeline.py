@@ -13,6 +13,10 @@ from app.research.pipeline_source_adapters import (
 from app.research.quality_aware_document_selector import (
     ResearchDocumentSelection,
 )
+from app.research.research_citation_verifier_executor import (
+    ResearchCitationDecision,
+    ResearchCitationVerification,
+)
 from app.research.research_pipeline_error import (
     ResearchPipelineError,
 )
@@ -283,6 +287,41 @@ class FakeClaimBuilder:
         )
 
 
+class FakeSemanticCitationVerifier:
+    """Return one deterministic citation verification."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def verify(
+        self,
+        *,
+        claim_set: ResearchClaimSet,
+        evidence_set: ResearchEvidenceSet,
+    ) -> list[ResearchCitationVerification]:
+        self.call_count += 1
+
+        claim = claim_set.claims[0]
+        citation = claim.citations[0]
+        evidence = evidence_set.evidence[0]
+
+        return [
+            ResearchCitationVerification(
+                verification_id="verification-001",
+                claim_id=claim.claim_id,
+                citation_id=citation.citation_id,
+                evidence_id=evidence.evidence_id,
+                source_id=evidence.source_id,
+                decision=ResearchCitationDecision.VERIFIED,
+                entailment_score=0.95,
+                traceability_score=1.0,
+                citation_accuracy_score=1.0,
+                rationale="Evidence semantically supports the claim.",
+                issues=[],
+            )
+        ]
+
+
 class FakeSourceQualityEvaluator:
     """Evaluate one document deterministically."""
 
@@ -320,6 +359,7 @@ def request() -> ResearchRequest:
 def pipeline(
     *,
     source_searcher: object | None = None,
+    semantic_citation_verifier: object | None = None,
 ) -> SingleResearchAgentPipeline:
     """Return one fully configured test pipeline."""
 
@@ -337,6 +377,9 @@ def pipeline(
         claim_builder=FakeClaimBuilder(),
         source_quality_evaluator=(
             FakeSourceQualityEvaluator()
+        ),
+        semantic_citation_verifier=(
+            semantic_citation_verifier
         ),
     )
 
@@ -1198,3 +1241,34 @@ def test_pipeline_replanning_is_deterministic() -> None:
         first.model_dump(mode="json")
         == second.model_dump(mode="json")
     )
+
+
+def test_pipeline_records_semantic_citation_verifications() -> None:
+    verifier = FakeSemanticCitationVerifier()
+
+    result = pipeline(
+        semantic_citation_verifier=verifier,
+    ).run(request())
+
+    assert verifier.call_count == 1
+    assert len(result.citation_verifications) == 1
+
+    verification = result.citation_verifications[0]
+
+    assert verification.verification_id == "verification-001"
+    assert verification.claim_id == "claim-001"
+    assert verification.citation_id == "citation-001"
+    assert verification.evidence_id == "evidence-001"
+    assert verification.source_id == "source-001"
+    assert verification.decision is (
+        ResearchCitationDecision.VERIFIED
+    )
+    assert verification.entailment_score == pytest.approx(
+        0.95
+    )
+
+
+def test_pipeline_has_no_semantic_verifications_by_default() -> None:
+    result = pipeline().run(request())
+
+    assert result.citation_verifications == []

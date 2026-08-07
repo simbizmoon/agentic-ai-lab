@@ -17,6 +17,9 @@ from pydantic import (
 from app.schemas.research_agent_assignment import (
     ResearchAgentTaskAssignment,
 )
+from app.schemas.semantic_citation_judgment import (
+    SemanticCitationSupportLevel,
+)
 
 
 class ResearchCitationVerifierExecutorError(RuntimeError):
@@ -63,6 +66,7 @@ class ResearchCitationVerification(BaseModel):
     evidence_id: str
     source_id: str
     decision: ResearchCitationDecision
+    support_level: SemanticCitationSupportLevel | None = None
     entailment_score: float = Field(ge=0, le=1)
     traceability_score: float = Field(ge=0, le=1)
     citation_accuracy_score: float = Field(ge=0, le=1)
@@ -106,6 +110,8 @@ class ResearchCitationVerification(BaseModel):
                 "issues must not contain duplicates"
             )
 
+        self._validate_support_decision()
+
         for key, value in self.metadata.items():
             if not key.strip():
                 raise ValueError(
@@ -118,6 +124,32 @@ class ResearchCitationVerification(BaseModel):
                 )
 
         return self
+
+    def _validate_support_decision(self) -> None:
+        """Require semantic category and decision to agree."""
+
+        if self.support_level is None:
+            return
+
+        expected = {
+            SemanticCitationSupportLevel.FULLY_SUPPORTED: (
+                ResearchCitationDecision.VERIFIED
+            ),
+            SemanticCitationSupportLevel.PARTIALLY_SUPPORTED: (
+                ResearchCitationDecision.NEEDS_REVISION
+            ),
+            SemanticCitationSupportLevel.UNSUPPORTED: (
+                ResearchCitationDecision.REJECTED
+            ),
+            SemanticCitationSupportLevel.CONTRADICTED: (
+                ResearchCitationDecision.REJECTED
+            ),
+        }[self.support_level]
+
+        if self.decision is not expected:
+            raise ValueError(
+                "decision must match semantic support_level"
+            )
 
 
 class ResearchCitationVerificationFailure(BaseModel):

@@ -126,3 +126,24 @@ def test_live_runtime_accepts_custom_search_budget() -> None:
     )
 
     assert pipeline.source_searcher.search_budget == budget
+
+
+def test_live_runtime_accepts_semantic_citation_verifier() -> None:
+    request = ResearchRequest(
+        request_id="research-semantic-verifier",
+        question="How does grounded research work?",
+        objective="Explain grounded research.",
+        maximum_sources=2,
+    )
+    verifier = object()
+
+    pipeline = build_live_research_pipeline(
+        request=request,
+        search_config=TavilySearchConfig(
+            api_key=SecretStr("test-secret"),
+            maximum_results=10,
+        ),
+        semantic_citation_verifier=verifier,
+    )
+
+    assert pipeline.semantic_citation_verifier is verifier

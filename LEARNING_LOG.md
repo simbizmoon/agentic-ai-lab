@@ -651,3 +651,202 @@ passed = true
 다음 단계에서는 Citation 검증을 구현하고, 동일 질문 반복 실행에서 Provider
 결과와 최종 Evidence가 얼마나 달라지는지 측정한다.
 
+---
+
+## 2026-08-07 — LLM-as-a-Judge Semantic Citation Verification 평가하기
+
+### 학습 목표
+
+Claim과 Evidence가 단순히 ID로 연결되어 있는지를 넘어,
+Evidence가 실제로 Claim의 의미를 지지하는지 LLM으로 평가하고,
+그 Judge 자체의 신뢰성을 Golden Dataset과 Blind Holdout으로 검증한다.
+
+### 처음 발견한 문제
+
+기존 Live Research의 Deterministic Claim Builder는 다음과 같이 동작하였다.
+
+```text
+Claim.text = Evidence.excerpt
+```
+
+따라서 Live Semantic Citation 결과가 모두:
+
+```text
+entailment_score = 1.0
+decision = verified
+```
+
+여도 Semantic Judge 능력이 검증된 것은 아니었다.
+
+이는 사실상 다음 질문이었다.
+
+```text
+"문장 A가 문장 A를 지지하는가?"
+```
+
+### 첫 번째 실패 — 숫자 Score를 정책으로 사용
+
+초기 구조:
+
+```text
+LLM entailment_score
+→ threshold
+→ decision
+```
+
+실제 평가 결과 rationale는 적절했지만 연속 점수는 안정적으로 calibration되지
+않았다.
+
+비슷한 Partial Support 사례에서도 점수가 크게 흔들렸고, 더 강한 과장이
+더 높은 점수를 받기도 했다.
+
+### 개선
+
+Semantic Support Level을 명시적으로 도입하였다.
+
+```text
+fully_supported
+partially_supported
+unsupported
+contradicted
+```
+
+정책 결정은 코드가 수행한다.
+
+```text
+fully_supported
+→ verified
+
+partially_supported
+→ needs_revision
+
+unsupported
+→ rejected
+
+contradicted
+→ rejected
+```
+
+`entailment_score`는 진단용으로만 유지한다.
+
+### 두 번째 학습 — Category도 Eval이 필요하다
+
+범주형 분류가 연속 점수보다 안정적이었지만 경계 사례에서는 여전히
+판정이 흔들렸다.
+
+특히 다음 요소들이 중요했다.
+
+```text
+may vs always
+조건 누락
+수량 상한
+scope 확대
+entity mismatch
+causation vs association
+missing information vs contradiction
+```
+
+### Golden Dataset과 Label Adjudication
+
+초기 16 Case Golden Dataset:
+
+```text
+13 / 16
+81.25%
+```
+
+실패를 분석하면서 Judge뿐 아니라 Golden Label 자체도 잘못될 수 있음을
+확인하였다.
+
+따라서 평가 데이터에도 사람의 논리적 Adjudication이 필요하다.
+
+### Dev Set과 Holdout 분리
+
+Golden Dataset v2를 Prompt 개선에 사용하였다.
+
+따라서 해당 Dataset은 더 이상 독립적인 최종 평가셋이 아니며,
+Development Dataset으로 취급하였다.
+
+Prompt v2 결과:
+
+```text
+18 / 20
+90%
+false_fully_supported = 0
+```
+
+그 후 Prompt를 동결하고 처음 보는 Blind Holdout 20 Case를 실행하였다.
+
+```text
+19 / 20
+95%
+false_fully_supported = 0
+false_rejected = 1
+```
+
+### 중요한 Known Failure
+
+다음 Evidence:
+
+```text
+The service is available during business hours.
+```
+
+를 다음 의미로 과도하게 읽는 오류가 발생했다.
+
+```text
+The service is available only during business hours.
+```
+
+즉 Positive Scoped Evidence를 Exclusive Evidence로 해석할 수 있다.
+
+### 전체 검증
+
+```text
+4245 passed in 16.27s
+Ruff: All checks passed
+git diff --check: passed
+```
+
+Live Research E2E:
+
+```text
+quality = 0.9345
+semantic citation verification count = 6
+support_level = fully_supported 6 / 6
+decision = verified 6 / 6
+```
+
+단, Live Claim이 Evidence excerpt와 동일하므로 이 결과는 Semantic Judge의
+판별 성능이 아니라 Runtime Wiring 검증으로 해석한다.
+
+### 배운 점
+
+1. LLM의 좋은 rationale가 좋은 score calibration을 보장하지 않는다.
+2. 정책 결정은 가능하면 명시적 category와 결정론적 코드로 통제해야 한다.
+3. 연속 score는 진단 신호와 정책 신호를 분리해야 한다.
+4. Golden Dataset의 정답도 틀릴 수 있으므로 Label Adjudication이 필요하다.
+5. 평가 결과를 보고 Prompt를 수정한 Dataset은 더 이상 Blind Test가 아니다.
+6. Development Dataset과 Holdout Dataset을 분리해야 일반화 성능을 측정할 수 있다.
+7. 정확도만 보지 말고 오류의 방향을 측정해야 한다.
+8. Citation Verification에서는 false fully supported가 특히 위험하다.
+9. Missing Information과 Contradiction은 다른 의미 관계다.
+10. Live E2E Wiring 검증과 Semantic Judge 품질 평가는 서로 다른 테스트다.
+11. 작은 Holdout의 높은 정확도를 전체 현실 성능으로 일반화해서는 안 된다.
+12. Evaluated Capability와 Production Blocking Quality Gate는 같은 상태가 아니다.
+
+### 현재 판단
+
+```text
+Semantic Citation Verification
+= Evaluated Capability
+
+Blocking Quality Gate
+= 보류
+```
+
+### 다음 학습 과제
+
+더 큰 Holdout과 반복 평가를 통해 Judge 변동성과 Class별 Precision/Recall을
+측정한 뒤, 생성형 Claim Builder를 도입했을 때 실제 Claim-to-Evidence
+Semantic Verification이 어떻게 동작하는지 평가한다.

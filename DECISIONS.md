@@ -1264,3 +1264,299 @@ Source Type 정규화 계층을 추가하면 Provider가 반환한 Raw Result를
 AIRA Domain Model로 정확히 변환하면서 기존 Quality Gate와 Evidence Gate를
 그대로 유지할 수 있다.
 
+---
+
+## D-033 — Semantic Citation 판정은 연속 점수가 아니라 범주형 Support Level을 사용
+
+- 상태: 확정
+- 날짜: 2026-08-07
+- 적용 범위: Single-Agent Live Research Semantic Citation Verification
+
+### 문제
+
+초기 Semantic Citation Verifier는 LLM이 반환한 `entailment_score`를 다음
+임계값으로 직접 판정에 사용하였다.
+
+```text
+>= 0.80 → VERIFIED
+>= 0.50 → NEEDS_REVISION
+< 0.50  → REJECTED
+```
+
+실제 OpenAI 평가에서 의미 분석 rationale는 적절했지만 연속 점수는
+일관되게 보정되지 않았다.
+
+유사한 부분 지지 사례에서도 점수가 크게 달랐으며, 더 강한 과장이 더 높은
+점수를 받는 사례도 확인되었다.
+
+### 결정
+
+정책 결정은 연속형 점수가 아니라 다음 범주형 Semantic Support Level을
+기준으로 한다.
+
+```text
+fully_supported
+partially_supported
+unsupported
+contradicted
+```
+
+결정 매핑은 코드가 결정론적으로 수행한다.
+
+```text
+fully_supported
+→ VERIFIED
+
+partially_supported
+→ NEEDS_REVISION
+
+unsupported
+→ REJECTED
+
+contradicted
+→ REJECTED
+```
+
+`entailment_score`는 제거하지 않고 진단과 Eval을 위한 보조 신호로만 유지한다.
+
+### Support Level 의미
+
+```text
+fully_supported
+Evidence가 Claim의 중요한 모든 부분을 직접 지지한다.
+
+partially_supported
+핵심 subject와 predicate는 지지되지만 qualifier, frequency,
+condition, scope, quantity 또는 secondary assertion 일부가
+지원되지 않거나 과장되어 있다.
+
+unsupported
+Evidence가 Claim을 입증하기에 충분하지 않지만 Claim과 직접
+충돌하지는 않는다.
+
+contradicted
+Evidence가 Claim의 중요한 부분과 동시에 참일 수 없는 내용을
+명시적으로 말한다.
+```
+
+특히 다음 원칙을 적용한다.
+
+```text
+missing information != contradiction
+```
+
+### 구조
+
+```text
+Claim + Evidence
+      ↓
+OpenAI Semantic Judge
+      ↓
+SemanticCitationJudgment
+├─ support_level
+├─ entailment_score
+├─ rationale
+└─ issues
+      ↓
+deterministic mapping
+      ↓
+ResearchCitationDecision
+```
+
+`ResearchCitationVerification`에는 `support_level`을 typed field로 보존한다.
+
+기존 Multi-Agent 계약과의 호환성을 위해 해당 필드는 현재 optional이며,
+Semantic Citation 경로에서는 실제 값을 기록한다.
+
+### 검증
+
+- SemanticCitationJudgment Structured Output
+- Support Level → Decision 결정론적 매핑
+- Support Level/Decision 불일치 validator
+- SemanticCitationVerificationService
+- SingleResearchAgentPipeline 연결
+- Live Runtime composition
+- result.json Support Level 저장
+- Golden Dataset 및 Blind Holdout 평가
+
+### 이유
+
+LLM은 설명형 reasoning에는 강하지만 연속형 숫자 calibration은 흔들릴 수 있다.
+
+정책 결정을 명시적인 의미 범주로 제한하면 판단 의미를 명확히 하고,
+코드가 최종 상태 전이를 결정론적으로 통제할 수 있다.
+
+---
+
+## D-034 — Semantic Citation Verification은 Evaluated Capability로 인정하되 Blocking Quality Gate는 보류
+
+- 상태: 확정
+- 날짜: 2026-08-07
+- 적용 범위: Live Research Citation Verification 및 Evaluation
+
+### 평가 과정
+
+Semantic Citation Verifier는 다음 순서로 검증하였다.
+
+```text
+Controlled examples
+→ Golden Dataset v1
+→ Human Label Adjudication
+→ Golden Dataset v2
+→ Prompt v2
+→ Blind Holdout v1
+→ Live Research E2E
+```
+
+### Golden Dataset v1
+
+초기 결과:
+
+```text
+cases = 16
+correct = 13
+accuracy = 81.25%
+```
+
+분석 과정에서 일부 Golden Label 자체가 불명확한 것을 확인하였다.
+
+### Golden Dataset v2
+
+Adjudication 후 20 Case로 확장하였다.
+
+Prompt v1 결과:
+
+```text
+correct = 17 / 20
+accuracy = 85%
+false_fully_supported = 0
+false_rejected = 2
+```
+
+Support Level 경계 규칙을 명확히 한 Prompt v2 결과:
+
+```text
+correct = 18 / 20
+accuracy = 90%
+false_fully_supported = 0
+false_rejected = 1
+```
+
+Golden Dataset v2는 Prompt 개선에 사용되었으므로 최종 일반화 평가셋으로
+사용하지 않는다.
+
+### Blind Holdout v1
+
+Prompt v2를 동결하고 새로운 20 Case Blind Holdout을 최초 실행하였다.
+
+```text
+cases = 20
+correct = 19
+accuracy = 95%
+false_fully_supported = 0
+false_rejected = 1
+```
+
+클래스별 결과:
+
+```text
+fully_supported      5 / 5
+partially_supported  4 / 5
+unsupported          5 / 5
+contradicted         5 / 5
+```
+
+유일한 실패는 다음 범위 해석 사례였다.
+
+```text
+Claim:
+The service is available at all times.
+
+Evidence:
+The service is available during business hours.
+
+expected:
+partially_supported
+
+actual:
+contradicted
+```
+
+Known Failure:
+
+```text
+Positive scoped evidence를 exclusive evidence로 과도하게
+해석할 가능성이 있다.
+
+"A에서 된다"
+→ "A에서만 된다"
+
+로 잘못 읽을 수 있다.
+```
+
+### Live Research E2E
+
+전체 Regression:
+
+```text
+4245 passed in 16.27s
+Ruff: All checks passed
+git diff --check: passed
+```
+
+실제 Live Research:
+
+```text
+quality = 0.9345
+citation_verification_count = 6
+```
+
+저장된 `result.json`:
+
+```text
+6 / 6 support_level = fully_supported
+6 / 6 decision = verified
+6 / 6 entailment_score = 1.0
+```
+
+현재 Deterministic Claim Builder는 다음 구조이므로:
+
+```text
+Claim.text = Evidence.excerpt
+```
+
+이 Live 결과는 Semantic discrimination 성능이 아니라 Runtime Wiring과
+artifact persistence 검증으로 해석한다.
+
+실제 Semantic 판별 성능의 근거는 Blind Holdout 결과이다.
+
+### Capability 상태
+
+```text
+Implemented             = yes
+Unit Tested             = yes
+Pipeline Integrated     = yes
+Live Runtime Connected  = yes
+Live Verified           = yes
+Golden Evaluated        = yes
+Blind Holdout Evaluated = yes
+Evaluated Capability    = yes
+
+Blocking Quality Gate   = no
+```
+
+### Quality Gate 보류 이유
+
+현재 Blind Holdout은 20 Case의 초기 평가이다.
+
+또한 scoped positive evidence를 exclusive evidence로 해석하는 Known Failure가
+확인되었다.
+
+따라서 현재 Semantic Citation 결과는 관측·기록·평가에는 사용하지만,
+Research 실행 전체를 차단하는 Blocking Quality Gate에는 아직 연결하지 않는다.
+
+### 이유
+
+Semantic Judge 자체의 불확실성과 Eval 데이터의 불확실성을 분리하고,
+Development Dataset과 Blind Holdout을 구분해야 LLM-as-a-Judge의 실제
+일반화 성능을 측정할 수 있다.

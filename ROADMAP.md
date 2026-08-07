@@ -1682,3 +1682,113 @@ Live E2E exit code: 0
 - [ ] Provider별 Credit 단위 및 Usage 정합성 검증
 - [ ] 실제 관심 분야 또는 선행특허 조사 검증
 
+---
+
+# 25. 2026-08-07 Semantic Citation Verification 평가 완료 기록
+
+## 25.1 완료 범위
+
+- [x] Claim과 Evidence 간 Semantic Citation Judgment Schema
+- [x] OpenAI Responses API Structured Output 기반 Semantic Judge
+- [x] 범주형 Semantic Support Level
+- [x] Support Level → Citation Decision 결정론적 매핑
+- [x] SemanticCitationVerificationService
+- [x] Single-Agent Research Pipeline 연결
+- [x] Live Runtime 연결
+- [x] ResearchCitationVerification에 support_level 보존
+- [x] result.json에 Semantic Citation 결과 저장
+- [x] Golden Dataset v1
+- [x] Golden Dataset v2 및 Label Adjudication
+- [x] Semantic Citation Evaluation Runner
+- [x] Confusion 및 오류 방향 측정
+- [x] Blind Holdout v1
+- [x] 실제 OpenAI Semantic Eval
+- [x] Live Research E2E 재검증
+- [x] 전체 Regression Test
+
+## 25.2 현재 평가 결과
+
+Golden Dataset v2 / Prompt v2:
+
+```text
+cases = 20
+correct = 18
+accuracy = 90%
+false_fully_supported = 0
+false_rejected = 1
+```
+
+Blind Holdout v1:
+
+```text
+cases = 20
+correct = 19
+accuracy = 95%
+false_fully_supported = 0
+false_rejected = 1
+```
+
+최종 전체 Regression:
+
+```text
+4245 passed in 16.27s
+Ruff: All checks passed
+git diff --check: passed
+```
+
+Live Research E2E:
+
+```text
+quality = 0.9345
+citation_verifications = 6
+
+support_level = fully_supported 6 / 6
+decision = verified 6 / 6
+```
+
+## 25.3 현재 Capability 상태
+
+```text
+Semantic Citation Verification
+→ Implemented
+→ Tested
+→ Live Verified
+→ Evaluated
+```
+
+아직 Blocking Quality Gate에는 연결하지 않는다.
+
+## 25.4 알려진 한계
+
+```text
+Positive scoped evidence:
+"The service is available during business hours."
+
+를
+
+Exclusive evidence:
+"The service is available only during business hours."
+
+처럼 과도하게 해석할 가능성이 있다.
+```
+
+또한 현재 Live Research의 Deterministic Claim Builder는:
+
+```text
+Claim.text = Evidence.excerpt
+```
+
+이므로 실제 Live Citation은 대부분 의미적으로 자명한 검증이 된다.
+
+따라서 Semantic Judge의 실질 성능 평가는 Live Claim 결과가 아니라
+Golden Dataset과 Blind Holdout을 기준으로 한다.
+
+## 25.5 다음 과제
+
+- [ ] 더 큰 Semantic Citation Holdout Dataset
+- [ ] 반복 실행을 통한 Judge 변동성 측정
+- [ ] Class별 Precision/Recall 측정
+- [ ] False Fully Supported 허용 기준 정의
+- [ ] 실제 생성형 Claim Builder 도입 전 Existing Capability Audit
+- [ ] 생성형 Claim과 Evidence 사이 Semantic Citation E2E
+- [ ] Blocking Quality Gate 적용 조건 정의
