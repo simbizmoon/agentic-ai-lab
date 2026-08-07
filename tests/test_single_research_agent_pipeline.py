@@ -16,6 +16,9 @@ from app.research.research_pipeline_error import (
 from app.research.single_research_agent_pipeline import (
     SingleResearchAgentPipeline,
 )
+from app.research.supplemental_research_query_planner import (
+    SupplementalResearchQueryPlanner,
+)
 from app.schemas.research_claim import (
     ResearchCitation,
     ResearchClaim,
@@ -708,3 +711,364 @@ def test_pipeline_backfill_is_deterministic() -> None:
         == second.model_dump(mode="json")
     )
     assert first_extractor.calls == second_extractor.calls
+
+class ReplanningSourceSearcher:
+    """Return deterministic candidates for two search rounds."""
+
+    def __init__(
+        self,
+        *,
+        supplemental_has_evidence: bool = True,
+        initial_has_two_sources: bool = False,
+    ) -> None:
+        self._supplemental_has_evidence = (
+            supplemental_has_evidence
+        )
+        self._initial_has_two_sources = (
+            initial_has_two_sources
+        )
+        self.calls: list[str] = []
+
+    def search(
+        self,
+        query_set: ResearchSearchQuerySet,
+    ) -> ResearchSourceCandidateSet:
+        query = query_set.queries[0]
+        self.calls.append(query.query_id)
+
+        if "supplemental" not in query.query_id:
+            source_ids = (
+                ["source-a", "source-d"]
+                if self._initial_has_two_sources
+                else ["source-a"]
+            )
+
+            candidates = [
+                self._candidate(
+                    source_id=source_id,
+                    query=query,
+                    rank=position,
+                    url=(
+                        f"https://example.com/"
+                        f"{source_id}"
+                    ),
+                )
+                for position, source_id in enumerate(
+                    source_ids,
+                    start=1,
+                )
+            ]
+
+        else:
+            supplemental_source_id = (
+                "source-d"
+                if self._supplemental_has_evidence
+                else "source-b"
+            )
+
+            candidates = [
+                self._candidate(
+                    source_id="source-a-duplicate",
+                    query=query,
+                    rank=1,
+                    url="https://example.com/source-a",
+                ),
+                self._candidate(
+                    source_id=supplemental_source_id,
+                    query=query,
+                    rank=2,
+                    url=(
+                        f"https://example.com/"
+                        f"{supplemental_source_id}"
+                    ),
+                ),
+            ]
+
+        return ResearchSourceCandidateSet(
+            request_id=query_set.request_id,
+            query_set=query_set,
+            candidates=candidates,
+        )
+
+    @staticmethod
+    def _candidate(
+        *,
+        source_id: str,
+        query: ResearchSearchQuery,
+        rank: int,
+        url: str,
+    ) -> ResearchSourceCandidate:
+        return ResearchSourceCandidate(
+            source_id=source_id,
+            request_id=query.request_id,
+            task_id=query.task_id,
+            query_id=query.query_id,
+            title=f"Agent memory {source_id}",
+            url=url,
+            source_type=ResearchSourceType.ACADEMIC,
+            rank=rank,
+        )
+
+
+class ReplanningSourceReader:
+    """Read only the novel candidates from each round."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def read(
+        self,
+        candidate_set: ResearchSourceCandidateSet,
+    ) -> ResearchSourceDocumentSet:
+        source_ids = [
+            candidate.source_id
+            for candidate in candidate_set.candidates
+        ]
+        self.calls.append(source_ids)
+
+        documents = []
+
+        for candidate in candidate_set.candidates:
+            content = (
+                "Agent memory evidence from "
+                f"{candidate.source_id}."
+            )
+
+            documents.append(
+                ResearchSourceDocument(
+                    document_id=(
+                        f"document-{candidate.source_id}"
+                    ),
+                    candidate=candidate,
+                    status=(
+                        ResearchSourceDocumentStatus.READ
+                    ),
+                    content_type=(
+                        ResearchSourceContentType.TEXT
+                    ),
+                    content=content,
+                    language="en",
+                    sections=[],
+                    word_count=len(content.split()),
+                    character_count=len(content),
+                    reader="replanning-reader",
+                )
+            )
+
+        return ResearchSourceDocumentSet(
+            request_id=candidate_set.request_id,
+            documents=documents,
+        )
+
+
+def replanning_pipeline(
+    *,
+    searcher: ReplanningSourceSearcher,
+    reader: ReplanningSourceReader,
+) -> SingleResearchAgentPipeline:
+    """Return a pipeline with one supplemental search round."""
+
+    return SingleResearchAgentPipeline(
+        request_validator=FakeRequestValidator(),
+        task_decomposer=FakeTaskDecomposer(),
+        query_planner=FakeQueryPlanner(),
+        source_searcher=searcher,
+        source_reader=reader,
+        evidence_extractor=BackfillEvidenceExtractor(
+            {"source-a", "source-d"}
+        ),
+        claim_builder=DeterministicPipelineClaimBuilder(),
+        source_quality_evaluator=(
+            FakeSourceQualityEvaluator()
+        ),
+        document_selector=OrderedBackfillSelector(),
+        supplemental_query_planner=(
+            SupplementalResearchQueryPlanner()
+        ),
+    )
+
+
+def test_pipeline_replans_once_and_merges_novel_source() -> None:
+    searcher = ReplanningSourceSearcher()
+    reader = ReplanningSourceReader()
+
+    result = replanning_pipeline(
+        searcher=searcher,
+        reader=reader,
+    ).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert searcher.calls == [
+        "query-001",
+        "research-001-query-supplemental-001",
+    ]
+
+    assert reader.calls == [
+        ["source-a"],
+        ["source-d"],
+    ]
+
+    assert [
+        document.candidate.source_id
+        for document in result.workspace.document_set.documents
+    ] == [
+        "source-a",
+        "source-d",
+    ]
+
+    assert result.workspace.metadata[
+        "search_round_count"
+    ] == "2"
+
+    assert result.workspace.metadata[
+        "replanning_triggered"
+    ] == "true"
+
+    assert result.workspace.metadata[
+        "supplemental_query_count"
+    ] == "1"
+
+    assert result.workspace.metadata[
+        "supplemental_candidate_count"
+    ] == "1"
+
+    assert result.workspace.metadata[
+        "deduplicated_candidate_count"
+    ] == "1"
+
+    assert result.report.source_count == 2
+    assert result.quality.passed is True
+    assert not any(
+        issue.code.value == "low_source_diversity"
+        for issue in result.quality.issues
+    )
+    assert result.quality.metadata[
+        "minimum_evidence_sources"
+    ] == "2"
+    assert result.quality.metadata[
+        "actual_evidence_sources"
+    ] == "2"
+
+
+def test_pipeline_skips_replanning_when_sources_are_sufficient() -> None:
+    searcher = ReplanningSourceSearcher(
+        initial_has_two_sources=True
+    )
+    reader = ReplanningSourceReader()
+
+    result = replanning_pipeline(
+        searcher=searcher,
+        reader=reader,
+    ).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert searcher.calls == ["query-001"]
+
+    assert reader.calls == [
+        ["source-a", "source-d"]
+    ]
+
+    assert result.workspace.metadata[
+        "search_round_count"
+    ] == "1"
+
+    assert result.workspace.metadata[
+        "replanning_triggered"
+    ] == "false"
+
+    assert result.workspace.metadata[
+        "supplemental_query_count"
+    ] == "0"
+
+    assert result.workspace.metadata[
+        "supplemental_candidate_count"
+    ] == "0"
+
+    assert result.workspace.metadata[
+        "deduplicated_candidate_count"
+    ] == "0"
+
+    assert result.quality.passed is True
+
+
+def test_pipeline_keeps_failure_when_replanning_adds_no_evidence() -> None:
+    searcher = ReplanningSourceSearcher(
+        supplemental_has_evidence=False
+    )
+    reader = ReplanningSourceReader()
+
+    result = replanning_pipeline(
+        searcher=searcher,
+        reader=reader,
+    ).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert len(searcher.calls) == 2
+
+    assert reader.calls == [
+        ["source-a"],
+        ["source-b"],
+    ]
+
+    assert result.report.source_count == 1
+    assert result.quality.passed is False
+
+    assert any(
+        issue.code.value == "low_source_diversity"
+        and issue.severity.value == "error"
+        for issue in result.quality.issues
+    )
+
+    assert result.workspace.metadata[
+        "replanning_triggered"
+    ] == "true"
+
+
+def test_pipeline_skips_replanning_when_maximum_sources_is_one() -> None:
+    searcher = ReplanningSourceSearcher()
+    reader = ReplanningSourceReader()
+
+    result = replanning_pipeline(
+        searcher=searcher,
+        reader=reader,
+    ).run(
+        backfill_request(maximum_sources=1)
+    )
+
+    assert searcher.calls == ["query-001"]
+    assert reader.calls == [["source-a"]]
+
+    assert result.workspace.metadata[
+        "search_round_count"
+    ] == "1"
+
+    assert result.workspace.metadata[
+        "replanning_triggered"
+    ] == "false"
+
+    assert result.report.source_count == 1
+    assert result.quality.passed is True
+
+
+def test_pipeline_replanning_is_deterministic() -> None:
+    first = replanning_pipeline(
+        searcher=ReplanningSourceSearcher(),
+        reader=ReplanningSourceReader(),
+    ).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    second = replanning_pipeline(
+        searcher=ReplanningSourceSearcher(),
+        reader=ReplanningSourceReader(),
+    ).run(
+        backfill_request(maximum_sources=2)
+    )
+
+    assert (
+        first.model_dump(mode="json")
+        == second.model_dump(mode="json")
+    )

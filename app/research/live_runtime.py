@@ -32,6 +32,9 @@ from app.research.research_request_validator import (
 from app.research.single_research_agent_pipeline import (
     SingleResearchAgentPipeline,
 )
+from app.research.supplemental_research_query_planner import (
+    SupplementalResearchQueryPlanner,
+)
 from app.research.tavily_research_source_search_tool import (
     TavilyResearchSourceSearchTool,
 )
@@ -83,5 +86,8 @@ def build_live_research_pipeline(
         ),
         document_selector=QualityAwareDocumentSelector(
             maximum_documents=request.maximum_sources
+        ),
+        supplemental_query_planner=(
+            SupplementalResearchQueryPlanner()
         ),
     )

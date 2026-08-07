@@ -1399,3 +1399,96 @@ Evidence로 채택하지 않았으며, Source 수를 인위적으로 채우지 �
 - [ ] 공식 API Reference 외의 독립된 공식 Guide Source 탐색 전략 검토
 - [ ] Report의 영문 단수·복수 표현 개선
 - [ ] Live Result JSON에서 계산 속성인 `passed` 노출 여부 검토
+
+---
+
+# 25. 2026-08-07 제한형 Supplemental Search Replanning 완료 기록
+
+## 작업 상태
+
+- [x] 기존 범용 Replanning Capability 감사
+- [x] 범용 `PlanningAgentLoop` 비사용 결정
+- [x] Research 전용 `SupplementalResearchQueryPlanner` 구현
+- [x] 결정론적 Supplemental Query 생성
+- [x] Evidence Source 부족 조건 연결
+- [x] 추가 검색 최대 1회 제한
+- [x] 초기 Source가 충분한 경우 조기 종료
+- [x] `maximum_sources=1`인 경우 Replanning 비활성화
+- [x] Source ID 및 정규화 URL 중복 제거
+- [x] 중복 후보 Reader 호출 방지
+- [x] 초기·추가 문서 전체 Ranking 재실행
+- [x] Evidence-aware Backfill 재실행
+- [x] Replanning metadata 기록
+- [x] 성공 후 오래된 `LOW_SOURCE_DIVERSITY` 제거
+- [x] Source 부족 시 품질 실패 유지
+- [x] 결정론적 회귀 테스트
+- [x] Live Runtime 구성 검증
+- [x] 실제 Tavily Live Research 검증
+- [x] 전체 pytest 및 Ruff 통과
+
+## 확정된 실행 흐름
+
+```text
+Initial Query Planning
+→ Initial Search
+→ Initial Read
+→ Quality Ranking
+→ Evidence-aware Backfill
+→ Evidence Sufficiency Check
+   ├─ sufficient
+   │  → Report and Quality Evaluation
+   └─ insufficient
+      → Supplemental Query Planning
+      → Supplemental Search
+      → URL and Source Deduplication
+      → Read Novel Candidates
+      → Merge All Read Documents
+      → Full Quality Ranking
+      → Evidence-aware Backfill
+      → Report and Quality Evaluation
+```
+
+## 실행 한계
+
+```text
+maximum supplemental queries = 1
+maximum supplemental search rounds = 1
+maximum total search rounds = 2
+```
+
+## Live 검증 결과
+
+- 총 검색 라운드: 2
+- Replanning 실행: true
+- Supplemental Query: 1
+- Supplemental 신규 후보: 4
+- 제거된 중복 후보: 5
+- 전체 읽은 후보: 13
+- Evidence 추출 시도 문서: 5
+- 최종 Evidence Source: 2
+- `NO_EVIDENCE` 문서: 3
+- 최종 Claim: 4
+- 최종 Citation: 4
+- 최종 Quality Score: 0.9163
+- 최소 Evidence Source: 2
+- 실제 Evidence Source: 2
+- `LOW_SOURCE_DIVERSITY`: 없음
+
+## 테스트 기준선
+
+```text
+전체 pytest: 4167 passed in 9.41s
+Ruff: All checks passed
+git diff --check: passed
+Live E2E: passed
+```
+
+## 다음 우선 과제
+
+- [ ] `result.json`에 계산 속성인 Quality `passed` 노출 여부 검토
+- [ ] Supplemental Query 품질 개선 기준 설계
+- [ ] Provider 호출·Credit·Latency Budget 통합
+- [ ] Citation 검증
+- [ ] Golden Research Dataset 구축
+- [ ] 동일 질문 반복 실행의 Live 변동성 평가
+- [ ] 실제 관심 분야 또는 선행특허 조사 검증

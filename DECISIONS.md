@@ -711,3 +711,193 @@ Evidence Source 수를 의미해야 한다.
 근거가 부족한 경우 Source 수를 인위적으로 채우거나 품질을 통과시키는 것보다
 추가 조사 필요성과 불확실성을 명시하는 것이 프로젝트의 Citation,
 Evidence Sufficiency 및 신뢰성 원칙에 부합한다.
+
+---
+
+## D-029 — Evidence 부족 시 제한형 Supplemental Search Replanning
+
+- 상태: 확정
+- 날짜: 2026-08-07
+- 적용 범위: Quality-aware Selector를 사용하는 Live Research Pipeline
+
+### 문제
+
+D-028에서 Evidence-aware Backfill과 최소 Evidence Source Gate를 도입한 뒤,
+OpenAI Responses API 공식문서 조사에서는 깨끗한 Evidence Source를 하나만
+확보하였다.
+
+Pipeline은 Source 부족을 정직하게 `LOW_SOURCE_DIVERSITY/error`로
+보고했지만, 근거가 부족할 때 검색 전략을 수정하여 한 번 더 조사하는 기능은
+없었다.
+
+기존 범용 `PlanningAgentLoop`, `ReplanningService`,
+`ReplanContextService`를 연결하는 방안도 검토하였다. 그러나 이 구성은
+실패한 실행계획 전체를 LLM으로 다시 작성하고 실행하는 범용 Planning
+시스템이므로, 단순한 Evidence Source 보완에 사용하기에는 범위와 복잡성이
+과도하였다.
+
+### 결정
+
+Live Research Pipeline에 Research 전용의 제한형 Replanning을 추가한다.
+
+```text
+최초 Query 계획
+→ 최초 검색·읽기
+→ Evidence-aware Ranking 및 Backfill
+→ 최소 Evidence Source 충족 여부 확인
+   ├─ 충족: 추가 검색 없이 종료
+   └─ 부족:
+      → Supplemental Query 1개 생성
+      → 추가 검색 1회
+      → 기존 후보와 중복 제거
+      → 신규 후보 읽기
+      → 초기·추가 문서 전체 재평가
+      → Evidence-aware Backfill 재실행
+      → 종료
+```
+
+### Supplemental Query Planner
+
+`SupplementalResearchQueryPlanner`는 다음 원칙으로 동작한다.
+
+- 결정론적으로 Query 한 개만 생성한다.
+- 기존 Query가 참조한 동일 Research Task를 사용한다.
+- Query ID는 `{request_id}-query-supplemental-001` 형식을 사용한다.
+- Query 유형은 `OFFICIAL`로 설정한다.
+- `OFFICIAL_DOCUMENTATION` Source Type을 우선 조건에 포함한다.
+- 기존 Query와 동일한 정규화 Query Text가 생성되면
+  `official guide concepts` 표현으로 중복을 피한다.
+- 최대 검색결과 수는 `min(100, maximum_sources * 3)`으로 제한한다.
+- metadata에 다음을 기록한다.
+  - `planner=deterministic-supplemental`
+  - `reason=low_source_diversity`
+  - `replanning_round=1`
+
+### Replanning Trigger
+
+다음 조건을 모두 만족할 때만 추가 검색을 실행한다.
+
+- Supplemental Query Planner가 주입되어 있음
+- Quality-aware Document Selector가 활성화되어 있음
+- `maximum_sources > 1`
+- 현재 Evidence Source 수가 `min(2, maximum_sources)`보다 작음
+
+따라서 Offline Pipeline, Selector가 없는 Pipeline, `maximum_sources=1`,
+최초 검색에서 Evidence Source를 이미 두 개 이상 확보한 경우에는
+Replanning을 실행하지 않는다.
+
+### Candidate 병합 및 중복 제거
+
+초기 후보와 Supplemental 후보는 정규화된 `source_id`와 URL을 기준으로
+중복을 제거한다. URL 정규화에는 Scheme 및 Host 소문자화, 기본 Port 제거,
+Fragment 제거, 불필요한 후행 Slash 정리가 포함된다.
+
+중복 후보는 Reader로 전달하지 않는다.
+
+### 전체 재평가
+
+Supplemental 후보만 별도로 Evidence 추출하지 않는다.
+
+```text
+초기 읽은 문서
++
+Supplemental 신규 문서
+→ 전체 Source Quality Ranking
+→ 전체 Evidence-aware Backfill 재실행
+```
+
+이 방식을 사용하면 보완 검색에서 발견된 더 직접적이고 높은 품질의 문서가
+초기 검색 문서를 대체할 수 있다.
+
+### 실행 한계
+
+- Supplemental Query: 최대 1개
+- 추가 검색 라운드: 최대 1회
+- 총 검색 라운드: 최대 2회
+- 무한 Retry 없음
+- LLM 기반 Query 생성 없음
+- 범용 Planning Loop 연결 없음
+
+### Workspace Metadata
+
+Supplemental Planner가 활성화된 Pipeline은 다음 metadata를 추가로 기록한다.
+
+- `search_round_count`
+- `replanning_triggered`
+- `supplemental_query_count`
+- `supplemental_candidate_count`
+- `deduplicated_candidate_count`
+
+기존 Evidence metadata도 계속 유지한다.
+
+- `read_candidate_count`
+- `evidence_attempted_document_count`
+- `selected_document_count`
+- `evidence_source_count`
+- `backfilled_document_count`
+- `no_evidence_document_count`
+
+### Source Gate 정합성
+
+Supplemental Search 후 최소 Evidence Source를 충족하면 기존 Quality
+Evaluator가 생성한 `LOW_SOURCE_DIVERSITY` Issue를 제거한다.
+
+동시에 Quality metadata에 다음을 기록한다.
+
+- `minimum_evidence_sources`
+- `actual_evidence_sources`
+- `maximum_sources`
+
+Source가 여전히 부족하면 `LOW_SOURCE_DIVERSITY/error`를 유지하고 최종
+품질을 실패로 판정한다.
+
+### 검증 결과
+
+- Source 부족 시 Supplemental Search 1회 실행
+- 초기 Source가 충분하면 추가 검색 없음
+- 정규화 URL 중복 제거
+- Supplemental Search 후 Source 확보 성공
+- Supplemental Search 후에도 Evidence가 부족하면 실패 유지
+- `maximum_sources=1`이면 Replanning 비활성화
+- 동일 입력에서 동일 Query, Source, Evidence 순서 보장
+- Live Runtime에 Supplemental Planner 주입
+- 성공 후 오래된 `LOW_SOURCE_DIVERSITY` 제거
+
+최종 전체 검증:
+
+```text
+4167 passed in 9.41s
+Ruff: All checks passed
+git diff --check: passed
+```
+
+### Live Research 결과
+
+```text
+search_round_count = 2
+replanning_triggered = true
+supplemental_query_count = 1
+supplemental_candidate_count = 4
+deduplicated_candidate_count = 5
+read_candidate_count = 13
+evidence_attempted_document_count = 5
+selected_document_count = 2
+evidence_source_count = 2
+no_evidence_document_count = 3
+report.source_count = 2
+claim_count = 4
+citation_count = 4
+quality_score = 0.9163
+minimum_evidence_sources = 2
+actual_evidence_sources = 2
+LOW_SOURCE_DIVERSITY = 없음
+```
+
+### 이유
+
+AIRA는 Evidence가 부족할 때 즉시 실패하는 데서 끝나지 않고, 제한된 비용과
+명확한 종료 조건 안에서 한 번 더 조사할 수 있어야 한다.
+
+Research 전용의 결정론적 Supplemental Search는 Evidence Sufficiency 개선,
+비용과 호출 횟수 제한, 무한 Loop 방지, 결정론적 테스트 가능성, Offline
+Baseline 호환성, 향후 확장 가능한 명확한 경계를 제공한다.

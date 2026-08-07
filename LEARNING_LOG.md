@@ -380,3 +380,93 @@ Live Evidence noise = 0
 Evidence Source가 부족할 때 단순히 실패하는 데서 끝나지 않고, Agent가
 Query를 수정하거나 다른 공식 Source 유형을 탐색하는 제한된 Replanning으로
 연결해야 한다.
+
+---
+
+## 2026-08-07 — Evidence 부족을 제한형 Replanning으로 복구하기
+
+### 학습 목표
+
+Research Agent가 근거 부족을 단순 실패로 보고하는 데서 끝나지 않고, 비용과
+횟수가 제한된 추가 조사를 수행하도록 설계한다.
+
+### 출발 상태
+
+Evidence-aware Backfill과 최소 Source Gate를 구현한 뒤 결과는 다음과 같았다.
+
+```text
+Evidence Source = 1
+LOW_SOURCE_DIVERSITY = error
+quality_passed = false
+```
+
+### 설계 결정
+
+범용 `PlanningAgentLoop` 대신 문제 크기에 맞는
+`SupplementalResearchQueryPlanner`를 만들었다.
+
+```text
+Evidence Source 부족
+→ Query 한 개 보완
+→ 검색 한 번 추가
+```
+
+실행 상한은 Supplemental Query 1개, 추가 검색 1회, 총 검색 2회로 고정했다.
+
+### 구현 흐름
+
+```text
+첫 번째 검색
+→ Evidence-aware Backfill
+→ Evidence Source 수 검사
+→ 부족하면 Supplemental Query 생성
+→ 두 번째 검색
+→ 기존 URL·Source ID 중복 제거
+→ 신규 후보만 읽기
+→ 초기 문서와 신규 문서 병합
+→ 전체 Ranking 재실행
+→ Evidence-aware Backfill 재실행
+```
+
+### 핵심 학습
+
+- 작은 실패 원인에는 작은 복구 Loop가 적합하다.
+- Replanning 성공 여부는 검색 실행이 아니라 Evidence Source 증가로 판단한다.
+- 서로 다른 Query가 반환한 동일 URL은 Pipeline 수준에서 제거해야 한다.
+- 추가 문서는 기존 문서와 함께 전체 재평가해야 한다.
+- 복구 후에는 오래된 품질 Issue를 현재 상태에 맞게 제거해야 한다.
+- 결정론적 테스트와 실제 Live E2E는 서로 다른 오류를 발견한다.
+
+### Live 검증
+
+```text
+search_round_count = 2
+replanning_triggered = true
+supplemental_query_count = 1
+supplemental_candidate_count = 4
+deduplicated_candidate_count = 5
+read_candidate_count = 13
+evidence_attempted_document_count = 5
+selected_document_count = 2
+evidence_source_count = 2
+no_evidence_document_count = 3
+source_count = 2
+claim_count = 4
+citation_count = 4
+quality_score = 0.9163
+LOW_SOURCE_DIVERSITY = 없음
+```
+
+### 테스트 결과
+
+```text
+4167 passed in 9.41s
+All checks passed
+git diff --check passed
+```
+
+### 다음 학습 과제
+
+Supplemental Search의 Provider Credit과 Latency를 측정해 Budget 제약과
+연결한다. 또한 `result.json`에 Quality `passed`를 명시적으로 저장할지
+검토한다.

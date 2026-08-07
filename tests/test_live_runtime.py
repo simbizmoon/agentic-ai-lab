@@ -24,6 +24,9 @@ from app.research.pipeline_source_adapters import (
 from app.research.quality_aware_document_selector import (
     QualityAwareDocumentSelector,
 )
+from app.research.supplemental_research_query_planner import (
+    SupplementalResearchQueryPlanner,
+)
 from app.research.tavily_research_source_search_tool import (
     TavilyResearchSourceSearchTool,
 )
@@ -79,3 +82,7 @@ def test_live_runtime_composes_live_adapters() -> None:
         QualityAwareDocumentSelector,
     )
     assert pipeline.document_selector.maximum_documents == 3
+    assert isinstance(
+        pipeline.supplemental_query_planner,
+        SupplementalResearchQueryPlanner,
+    )

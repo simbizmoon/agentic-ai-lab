@@ -93,6 +93,16 @@ class ResearchDocumentSelectionProtocol(Protocol):
     ) -> object: ...
 
 
+class SupplementalResearchQueryPlannerProtocol(Protocol):
+    def plan(
+        self,
+        *,
+        request: ResearchRequest,
+        task_graph: ResearchTaskGraph,
+        initial_query_set: ResearchSearchQuerySet,
+    ) -> ResearchSearchQuerySet: ...
+
+
 class SingleResearchAgentPipeline:
     """Run the complete single research-agent workflow."""
 
@@ -108,6 +118,9 @@ class SingleResearchAgentPipeline:
         claim_builder: ResearchClaimBuilderProtocol,
         source_quality_evaluator: ResearchSourceQualityEvaluatorProtocol,
         document_selector: ResearchDocumentSelectionProtocol | None = None,
+        supplemental_query_planner: (
+            SupplementalResearchQueryPlannerProtocol | None
+        ) = None,
         synthesizer: DeterministicResearchSynthesizer | None = None,
         quality_evaluator: ResearchQualityEvaluator | None = None,
     ) -> None:
@@ -120,6 +133,9 @@ class SingleResearchAgentPipeline:
         self._claim_builder = claim_builder
         self._source_quality_evaluator = source_quality_evaluator
         self._document_selector = document_selector
+        self._supplemental_query_planner = (
+            supplemental_query_planner
+        )
         self._synthesizer = synthesizer or DeterministicResearchSynthesizer()
         self._quality_evaluator = quality_evaluator or ResearchQualityEvaluator()
 
@@ -146,6 +162,12 @@ class SingleResearchAgentPipeline:
         self,
     ) -> ResearchDocumentSelectionProtocol | None:
         return self._document_selector
+
+    @property
+    def supplemental_query_planner(
+        self,
+    ) -> SupplementalResearchQueryPlannerProtocol | None:
+        return self._supplemental_query_planner
 
     def run(
         self,
@@ -190,6 +212,111 @@ class SingleResearchAgentPipeline:
             query_set=query_set,
             maximum_sources=request.maximum_sources,
         )
+
+        replanning_metadata: dict[str, str] = {}
+
+        if self._supplemental_query_planner is not None:
+            search_round_count = 1
+            replanning_triggered = False
+            supplemental_query_count = 0
+            supplemental_candidate_count = 0
+            deduplicated_candidate_count = 0
+
+            if self._should_run_supplemental_search(
+                document_set=document_set,
+                maximum_sources=request.maximum_sources,
+            ):
+                replanning_triggered = True
+                search_round_count = 2
+
+                supplemental_query_set = (
+                    self._supplemental_query_planner.plan(
+                        request=request,
+                        task_graph=task_graph,
+                        initial_query_set=query_set,
+                    )
+                )
+                supplemental_query_count = len(
+                    supplemental_query_set.queries
+                )
+
+                raw_supplemental_candidates = (
+                    self._source_searcher.search(
+                        supplemental_query_set
+                    )
+                )
+
+                (
+                    supplemental_candidate_set,
+                    deduplicated_candidate_count,
+                ) = self._novel_candidates(
+                    existing=candidate_set,
+                    supplemental=raw_supplemental_candidates,
+                )
+
+                supplemental_candidate_count = len(
+                    supplemental_candidate_set.candidates
+                )
+
+                query_set = self._merge_query_sets(
+                    initial=query_set,
+                    supplemental=supplemental_query_set,
+                )
+
+                candidate_set = self._merge_candidate_sets(
+                    initial=candidate_set,
+                    supplemental=supplemental_candidate_set,
+                    query_set=query_set,
+                )
+
+                if supplemental_candidate_set.candidates:
+                    supplemental_document_set = (
+                        self._source_reader.read(
+                            supplemental_candidate_set
+                        )
+                    )
+
+                    read_document_set = (
+                        self._merge_document_sets(
+                            initial=read_document_set,
+                            supplemental=(
+                                supplemental_document_set
+                            ),
+                        )
+                    )
+
+                    (
+                        document_set,
+                        evidence_set,
+                        source_quality_evaluations,
+                        evidence_attempted_document_count,
+                        no_evidence_document_count,
+                    ) = self._select_documents_with_evidence(
+                        read_document_set,
+                        query_set=query_set,
+                        maximum_sources=(
+                            request.maximum_sources
+                        ),
+                    )
+
+            replanning_metadata = {
+                "search_round_count": str(
+                    search_round_count
+                ),
+                "replanning_triggered": str(
+                    replanning_triggered
+                ).casefold(),
+                "supplemental_query_count": str(
+                    supplemental_query_count
+                ),
+                "supplemental_candidate_count": str(
+                    supplemental_candidate_count
+                ),
+                "deduplicated_candidate_count": str(
+                    deduplicated_candidate_count
+                ),
+            }
+
         if not document_set.successful_documents():
             raise ResearchPipelineError(
                 "source selection produced no evidence-bearing documents"
@@ -231,6 +358,7 @@ class SingleResearchAgentPipeline:
                 "no_evidence_document_count": str(
                     no_evidence_document_count
                 ),
+                **replanning_metadata,
             },
         )
         report = self._synthesizer.synthesize(workspace)
@@ -248,6 +376,154 @@ class SingleResearchAgentPipeline:
             workspace=workspace,
             report=report,
             quality=quality,
+        )
+
+    def _should_run_supplemental_search(
+        self,
+        *,
+        document_set: ResearchSourceDocumentSet,
+        maximum_sources: int,
+    ) -> bool:
+        if self._supplemental_query_planner is None:
+            return False
+
+        if self._document_selector is None:
+            return False
+
+        if maximum_sources <= 1:
+            return False
+
+        required_sources = min(2, maximum_sources)
+
+        return (
+            len(document_set.successful_documents())
+            < required_sources
+        )
+
+    @staticmethod
+    def _merge_query_sets(
+        *,
+        initial: ResearchSearchQuerySet,
+        supplemental: ResearchSearchQuerySet,
+    ) -> ResearchSearchQuerySet:
+        return ResearchSearchQuerySet(
+            request_id=initial.request_id,
+            task_graph=initial.task_graph,
+            queries=[
+                *initial.queries,
+                *supplemental.queries,
+            ],
+        )
+
+    @staticmethod
+    def _novel_candidates(
+        *,
+        existing: ResearchSourceCandidateSet,
+        supplemental: ResearchSourceCandidateSet,
+    ) -> tuple[ResearchSourceCandidateSet, int]:
+        seen_source_ids = {
+            candidate.source_id.strip().casefold()
+            for candidate in existing.candidates
+        }
+        seen_urls = {
+            candidate.normalized_url()
+            for candidate in existing.candidates
+        }
+
+        novel_candidates = []
+        duplicate_count = 0
+
+        for candidate in supplemental.ordered_candidates():
+            source_key = (
+                candidate.source_id.strip().casefold()
+            )
+            url_key = candidate.normalized_url()
+
+            if (
+                source_key in seen_source_ids
+                or url_key in seen_urls
+            ):
+                duplicate_count += 1
+                continue
+
+            seen_source_ids.add(source_key)
+            seen_urls.add(url_key)
+            novel_candidates.append(candidate)
+
+        return (
+            ResearchSourceCandidateSet(
+                request_id=supplemental.request_id,
+                query_set=supplemental.query_set,
+                candidates=novel_candidates,
+            ),
+            duplicate_count,
+        )
+
+    @staticmethod
+    def _merge_candidate_sets(
+        *,
+        initial: ResearchSourceCandidateSet,
+        supplemental: ResearchSourceCandidateSet,
+        query_set: ResearchSearchQuerySet,
+    ) -> ResearchSourceCandidateSet:
+        return ResearchSourceCandidateSet(
+            request_id=initial.request_id,
+            query_set=query_set,
+            candidates=[
+                *initial.candidates,
+                *supplemental.candidates,
+            ],
+        )
+
+    @staticmethod
+    def _merge_document_sets(
+        *,
+        initial: ResearchSourceDocumentSet,
+        supplemental: ResearchSourceDocumentSet,
+    ) -> ResearchSourceDocumentSet:
+        seen_document_ids = {
+            document.document_id.strip().casefold()
+            for document in initial.documents
+        }
+        seen_source_ids = {
+            document.candidate.source_id.strip().casefold()
+            for document in initial.documents
+        }
+        seen_urls = {
+            document.candidate.normalized_url()
+            for document in initial.documents
+        }
+
+        documents = list(initial.documents)
+
+        for document in supplemental.documents:
+            document_key = (
+                document.document_id.strip().casefold()
+            )
+            source_key = (
+                document.candidate.source_id
+                .strip()
+                .casefold()
+            )
+            url_key = (
+                document.candidate.normalized_url()
+            )
+
+            if (
+                document_key in seen_document_ids
+                or source_key in seen_source_ids
+                or url_key in seen_urls
+            ):
+                continue
+
+            seen_document_ids.add(document_key)
+            seen_source_ids.add(source_key)
+            seen_urls.add(url_key)
+            documents.append(document)
+
+        return ResearchSourceDocumentSet(
+            request_id=initial.request_id,
+            documents=documents,
         )
 
     def _select_documents_with_evidence(
@@ -383,8 +659,6 @@ class SingleResearchAgentPipeline:
         maximum_sources: int,
     ) -> ResearchQualityEvaluation:
         required_sources = min(2, maximum_sources)
-        if actual_sources >= required_sources:
-            return quality
 
         retained_issues = [
             issue
@@ -392,6 +666,25 @@ class SingleResearchAgentPipeline:
             if issue.code
             is not ResearchQualityIssueCode.LOW_SOURCE_DIVERSITY
         ]
+
+        if actual_sources >= required_sources:
+            return quality.model_copy(
+                update={
+                    "issues": retained_issues,
+                    "metadata": {
+                        **quality.metadata,
+                        "minimum_evidence_sources": str(
+                            required_sources
+                        ),
+                        "actual_evidence_sources": str(
+                            actual_sources
+                        ),
+                        "maximum_sources": str(
+                            maximum_sources
+                        ),
+                    },
+                }
+            )
         retained_issues.append(
             ResearchQualityIssue(
                 code=ResearchQualityIssueCode.LOW_SOURCE_DIVERSITY,
