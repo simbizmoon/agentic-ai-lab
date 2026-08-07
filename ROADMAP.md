@@ -1792,3 +1792,60 @@ Golden Dataset과 Blind Holdout을 기준으로 한다.
 - [ ] 실제 생성형 Claim Builder 도입 전 Existing Capability Audit
 - [ ] 생성형 Claim과 Evidence 사이 Semantic Citation E2E
 - [ ] Blocking Quality Gate 적용 조건 정의
+
+---
+
+# 28. Step 4 — Generative Claim Construction 완료
+
+상태: **완료 — 2026-08-07**
+
+## 목표
+
+결정론적 `Claim.text = Evidence.excerpt` Baseline을 실제 생성형 Claim으로 확장하고, 생성된 Claim을 기존 provenance와 Semantic Citation Verification에 연결하며, OpenAI 호출 수·Token·시간을 bounded execution으로 제한한다.
+
+## 완료 항목
+
+- [x] Existing Capability Audit
+- [x] `GeneratedClaimProposal` structured-output schema
+- [x] `OpenAIEvidenceClaimGenerator`
+- [x] `GenerativePipelineClaimBuilder`
+- [x] `1 Evidence → 1 Generated Claim`
+- [x] LLM 의미 생성과 코드 provenance 분리
+- [x] 실제 OpenAI API smoke test
+- [x] Live Research Runtime 연결
+- [x] 생성 Claim과 Evidence 원문 비동일성 확인
+- [x] Semantic Citation Verification 실제 연결
+- [x] `ExecutionBudget` 재사용
+- [x] Attempt ceiling
+- [x] Token ceiling
+- [x] Elapsed-time ceiling Unit Test
+- [x] 성공한 over-budget Claim 보존
+- [x] Graceful degradation
+- [x] 전체 pytest
+- [x] Ruff
+- [x] `git diff --check`
+- [x] 실제 Live Runtime attempt/token budget 검증
+
+## 실제 E2E 확인
+
+- Live 생성 Claim 3개 모두 `Claim.text != Evidence.excerpt`
+- Semantic Citation Verification 3/3 `fully_supported`
+- Attempt budget 실험: Evidence 6개 → Claim 3개
+- Token budget 실험: Evidence 6개 → Claim 1개
+- Budget 소진 후에도 Research Pipeline은 이미 생성한 Claim으로 정상 계속 진행
+
+## 설계 경계
+
+이번 Step에서는 다음을 의도적으로 포함하지 않는다.
+
+- Multi-evidence Claim grouping
+- Claim type 자동 분류
+- Semantic Citation Verification 자체의 별도 Budget
+- Claim relevance / Answer relevance blocking gate
+- Multi-Agent 전환
+
+## 다음 작업
+
+**Step 5 — Claim Relevance / Answer Relevance Evaluation Existing Capability Audit**
+
+Citation이 Evidence를 정확히 지지하는지와 별개로, 생성된 Claim이 사용자의 Research Question과 Objective에 실제로 답하는지를 평가하는 capability를 검토한다.

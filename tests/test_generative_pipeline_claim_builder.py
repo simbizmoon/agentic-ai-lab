@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+from app.budget import ExecutionBudget
 from app.research.generative_pipeline_claim_builder import (
     GenerativePipelineClaimBuilder,
 )
@@ -24,7 +25,13 @@ from app.schemas.research_evidence import (
     ResearchEvidenceStance,
     ResearchEvidenceType,
 )
+from app.schemas.research_request import ResearchSourceType
+from app.schemas.research_source_candidate import (
+    ResearchSourceCandidate,
+)
 from app.schemas.research_source_document import (
+    ResearchSourceContentType,
+    ResearchSourceDocument,
     ResearchSourceDocumentSet,
     ResearchSourceDocumentStatus,
 )
@@ -35,12 +42,18 @@ class FakeGenerator:
     """Return controlled generated claim proposals."""
 
     calls: list[str]
+    total_tokens: int = 0
+    elapsed_seconds: float = 0.01
 
     def generate(
         self,
         evidence: ResearchEvidence,
     ) -> GeneratedClaimProposalResult:
         self.calls.append(evidence.evidence_id)
+
+        usage = None
+        if self.total_tokens:
+            usage = SimpleNamespace(total_tokens=self.total_tokens)
 
         return GeneratedClaimProposalResult(
             proposal=GeneratedClaimProposal(
@@ -55,8 +68,8 @@ class FakeGenerator:
             ),
             response_id="resp-claim-001",
             request_id="req-provider-001",
-            usage=None,
-            elapsed_seconds=0.01,
+            usage=usage,
+            elapsed_seconds=self.elapsed_seconds,
         )
 
 
@@ -126,6 +139,72 @@ def evidence_set(
         evidence=source_evidence,
     )
 
+
+def evidence_set_with_count(count: int) -> ResearchEvidenceSet:
+    """Build a validated evidence set with distinct document ranges."""
+
+    excerpts = [
+        f"Evidence statement number {position} supports a bounded claim."
+        for position in range(1, count + 1)
+    ]
+    separator = "\n"
+    content = separator.join(excerpts)
+
+    candidate = ResearchSourceCandidate(
+        source_id="source-001",
+        request_id="request-001",
+        task_id="task-001",
+        query_id="query-001",
+        title="Example documentation",
+        url="https://example.com/docs",
+        source_type=ResearchSourceType.OFFICIAL_DOCUMENTATION,
+        snippet="Example documentation snippet.",
+        rank=1,
+        metadata={},
+    )
+
+    document = ResearchSourceDocument(
+        document_id="document-001",
+        candidate=candidate,
+        status=ResearchSourceDocumentStatus.READ,
+        content_type=ResearchSourceContentType.TEXT,
+        content=content,
+        sections=[],
+        word_count=len(content.split()),
+        character_count=len(content),
+        reader="test-reader",
+        metadata={},
+    )
+    document_set = ResearchSourceDocumentSet(
+        request_id="request-001",
+        documents=[document],
+    )
+
+    base_evidence = evidence()
+    items: list[ResearchEvidence] = []
+    cursor = 0
+
+    for position, excerpt in enumerate(excerpts, start=1):
+        start_character = cursor
+        end_character = start_character + len(excerpt)
+        items.append(
+            base_evidence.model_copy(
+                update={
+                    "evidence_id": f"evidence-{position:03d}",
+                    "excerpt": excerpt,
+                    "start_character": start_character,
+                    "end_character": end_character,
+                    "rationale": "Controlled budget test evidence.",
+                }
+            )
+        )
+        cursor = end_character + len(separator)
+
+    return ResearchEvidenceSet(
+        request_id="request-001",
+        document_set=document_set,
+        evidence=items,
+    )
 
 def test_builder_creates_generated_draft_claim() -> None:
     generator = FakeGenerator(calls=[])
@@ -213,3 +292,87 @@ def test_builder_returns_empty_claim_set_for_no_evidence() -> None:
 
     assert result.claims == []
     assert generator.calls == []
+
+def test_builder_without_budget_processes_all_evidence() -> None:
+    generator = FakeGenerator(calls=[])
+    builder = GenerativePipelineClaimBuilder(generator=generator)
+
+    result = builder.build(evidence_set_with_count(3))
+
+    assert len(result.claims) == 3
+    assert generator.calls == ["evidence-001", "evidence-002", "evidence-003"]
+    assert builder.last_usage.attempts == 0
+
+
+def test_builder_stops_before_attempt_limit() -> None:
+    generator = FakeGenerator(calls=[])
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(
+            max_attempts=2,
+            max_recorded_tokens=10_000,
+            max_elapsed_seconds=60.0,
+        ),
+    )
+
+    result = builder.build(evidence_set_with_count(3))
+
+    assert len(result.claims) == 2
+    assert generator.calls == ["evidence-001", "evidence-002"]
+    assert builder.last_usage.attempts == 2
+
+
+def test_builder_keeps_claim_that_crosses_token_budget() -> None:
+    generator = FakeGenerator(calls=[], total_tokens=600)
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(
+            max_attempts=5,
+            max_recorded_tokens=1_000,
+            max_elapsed_seconds=60.0,
+        ),
+    )
+
+    result = builder.build(evidence_set_with_count(3))
+
+    assert len(result.claims) == 2
+    assert generator.calls == ["evidence-001", "evidence-002"]
+    assert builder.last_usage.attempts == 2
+    assert builder.last_usage.recorded_tokens == 1_200
+
+
+def test_builder_keeps_claim_that_crosses_time_budget() -> None:
+    generator = FakeGenerator(calls=[], elapsed_seconds=0.6)
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(
+            max_attempts=5,
+            max_recorded_tokens=10_000,
+            max_elapsed_seconds=1.0,
+        ),
+    )
+
+    result = builder.build(evidence_set_with_count(3))
+
+    assert len(result.claims) == 2
+    assert generator.calls == ["evidence-001", "evidence-002"]
+    assert builder.last_usage.attempts == 2
+    assert builder.last_usage.elapsed_seconds == 1.2
+
+
+def test_builder_treats_missing_usage_as_zero_tokens() -> None:
+    generator = FakeGenerator(calls=[])
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(
+            max_attempts=2,
+            max_recorded_tokens=1,
+            max_elapsed_seconds=60.0,
+        ),
+    )
+
+    result = builder.build(evidence_set_with_count(2))
+
+    assert len(result.claims) == 2
+    assert builder.last_usage.attempts == 2
+    assert builder.last_usage.recorded_tokens == 0

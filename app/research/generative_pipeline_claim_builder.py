@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.budget import (
+    BudgetUsage,
+    ExecutionBudget,
+    ensure_can_start_attempt,
+    ensure_within_budget,
+    record_attempt,
+)
+from app.exceptions import ExecutionBudgetError
 from app.research.openai_evidence_claim_generator import (
     GeneratedClaimProposalResult,
 )
@@ -36,8 +44,17 @@ class GenerativePipelineClaimBuilder:
         self,
         *,
         generator: EvidenceClaimGeneratorProtocol,
+        budget: ExecutionBudget | None = None,
     ) -> None:
         self._generator = generator
+        self._budget = budget
+        self._last_usage = BudgetUsage()
+
+    @property
+    def last_usage(self) -> BudgetUsage:
+        """Return usage recorded by the most recent build."""
+
+        return self._last_usage
 
     def build(
         self,
@@ -45,16 +62,49 @@ class GenerativePipelineClaimBuilder:
     ) -> ResearchClaimSet:
         """Generate one traceable draft claim per evidence item."""
 
-        claims = [
-            self._claim(
+        claims: list[ResearchClaim] = []
+        usage = BudgetUsage()
+
+        for position, evidence in enumerate(
+            evidence_set.ordered_evidence(),
+            start=1,
+        ):
+            if self._budget is not None:
+                try:
+                    ensure_can_start_attempt(
+                        budget=self._budget,
+                        usage=usage,
+                    )
+                except ExecutionBudgetError:
+                    break
+
+            claim, result = self._claim(
                 evidence=evidence,
                 position=position,
             )
-            for position, evidence in enumerate(
-                evidence_set.ordered_evidence(),
-                start=1,
-            )
-        ]
+            claims.append(claim)
+
+            if self._budget is not None:
+                recorded_tokens = (
+                    result.usage.total_tokens
+                    if result.usage is not None
+                    else 0
+                )
+                usage = record_attempt(
+                    usage=usage,
+                    recorded_tokens=recorded_tokens,
+                    elapsed_seconds=result.elapsed_seconds,
+                )
+
+                try:
+                    ensure_within_budget(
+                        budget=self._budget,
+                        usage=usage,
+                    )
+                except ExecutionBudgetError:
+                    break
+
+        self._last_usage = usage
 
         return ResearchClaimSet(
             request_id=evidence_set.request_id,
@@ -67,7 +117,10 @@ class GenerativePipelineClaimBuilder:
         *,
         evidence: ResearchEvidence,
         position: int,
-    ) -> ResearchClaim:
+    ) -> tuple[
+        ResearchClaim,
+        GeneratedClaimProposalResult,
+    ]:
         """Generate one claim while preserving deterministic provenance."""
 
         result = self._generator.generate(evidence)
@@ -97,7 +150,7 @@ class GenerativePipelineClaimBuilder:
         if result.request_id is not None:
             metadata["generator_request_id"] = result.request_id
 
-        return ResearchClaim(
+        claim = ResearchClaim(
             claim_id=(
                 f"{evidence.request_id}-claim-"
                 f"{position:03d}"
@@ -114,3 +167,5 @@ class GenerativePipelineClaimBuilder:
             rationale=proposal.rationale,
             metadata=metadata,
         )
+
+        return claim, result

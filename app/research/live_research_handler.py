@@ -14,6 +14,7 @@ from openai import OpenAI
 from app.application.research_execution import (
     ApplicationResearchExecutionRequest,
 )
+from app.budget import ExecutionBudget
 from app.config import Settings, load_settings
 from app.research.concrete_aira_research_runner import (
     ConcreteAiraResearchRunner,
@@ -45,6 +46,12 @@ from app.schemas.tavily_search_config import (
 )
 from app.services.openai_client import (
     create_openai_client,
+)
+
+LIVE_CLAIM_GENERATION_BUDGET = ExecutionBudget(
+    max_attempts=8,
+    max_recorded_tokens=8_000,
+    max_elapsed_seconds=60.0,
 )
 
 
@@ -108,7 +115,8 @@ class LiveResearchHandler:
             generator=OpenAIEvidenceClaimGenerator(
                 client=openai_client,
                 model=settings.openai_model,
-            )
+            ),
+            budget=LIVE_CLAIM_GENERATION_BUDGET,
         )
         semantic_citation_verifier = (
             SemanticCitationVerificationService(

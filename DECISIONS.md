@@ -1560,3 +1560,33 @@ Research 실행 전체를 차단하는 Blocking Quality Gate에는 아직 연결
 Semantic Judge 자체의 불확실성과 Eval 데이터의 불확실성을 분리하고,
 Development Dataset과 Blind Holdout을 구분해야 LLM-as-a-Judge의 실제
 일반화 성능을 측정할 수 있다.
+
+---
+## D-035 — Generative Claim Construction 및 Bounded Execution
+
+- 상태: 확정
+- 날짜: 2026-08-07
+
+결정:
+
+- AIRA의 Live Research에서 `Claim.text = Evidence.excerpt`인 결정론적 Baseline을 실제 생성형 Claim 경로로 확장한다.
+- 첫 Generative Claim Vertical Slice는 `1 Evidence → 1 Generated Claim`로 제한한다.
+- LLM은 Claim의 의미 표현과 rationale만 생성하고, Claim ID, Citation ID, Evidence ID, Source ID, Document ID, 문자 범위 및 기타 provenance는 코드가 결정한다.
+- 핵심 원칙은 `Meaning by LLM; provenance by code.`로 한다.
+- 생성 Claim은 최초에는 `DRAFT` 상태로 생성하며, Semantic Citation Verification 결과와 Claim 상태 정책을 임의로 결합하지 않는다.
+- Claim 생성 후 기존 Semantic Citation Verification을 실행하여 생성 문장이 연결된 Evidence에 의해 실제로 뒷받침되는지 평가한다.
+- Live Runtime은 `GenerativePipelineClaimBuilder`를 주입하되, `build_live_research_pipeline()`은 기존 결정론적 Claim Builder를 fallback으로 유지한다.
+- Generative Claim 호출에는 기존 `ExecutionBudget`과 `BudgetUsage`를 재사용한다. 별도의 Claim 전용 Budget schema는 만들지 않는다.
+- Live Claim Generation의 초기 engineering default는 최대 생성 호출 8회, 최대 기록 Token 8,000, 최대 누적 생성시간 60초로 한다.
+- Attempt ceiling은 호출 전에 적용하는 hard limit으로 한다.
+- Token 및 elapsed-time ceiling은 성공한 호출의 usage를 기록한 뒤 적용한다. 해당 성공 Claim은 보존하고 이후 추가 Claim 생성을 중단한다.
+- Budget 소진은 전체 Research 실패가 아니라 이미 생성된 Claim으로 계속 진행하는 graceful degradation으로 처리한다.
+- Semantic Citation Verification 자체의 별도 Budget, multi-evidence Claim grouping, Claim type 자동 분류 및 blocking quality gate는 후속 Work Item으로 보류한다.
+
+실제 검증 결과:
+
+- 실제 OpenAI 모델을 사용한 Claim 생성 smoke test에서 Evidence와 다른 paraphrased Claim이 생성되었고 의미와 modality가 유지되었다.
+- Live Research에서 생성된 Claim 3개 모두 Evidence 원문과 동일하지 않았으며, Semantic Citation Verification에서 3개 모두 `fully_supported`로 판정되었다.
+- Controlled Live Runtime에서 Evidence 6개와 `max_attempts=3` 조건으로 Claim 3개만 생성되어 attempt ceiling이 실제로 작동함을 확인했다.
+- Controlled Live Runtime에서 Evidence 6개와 `max_recorded_tokens=1` 조건으로 첫 성공 Claim 1개를 보존한 뒤 추가 생성이 중단되어 token ceiling과 graceful degradation이 실제로 작동함을 확인했다.
+- 관련 Unit Test, 전체 pytest, Ruff 및 `git diff --check`를 통과했다.

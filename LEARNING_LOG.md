@@ -850,3 +850,45 @@ Blocking Quality Gate
 더 큰 Holdout과 반복 평가를 통해 Judge 변동성과 Class별 Precision/Recall을
 측정한 뒤, 생성형 Claim Builder를 도입했을 때 실제 Claim-to-Evidence
 Semantic Verification이 어떻게 동작하는지 평가한다.
+
+---
+## 2026-08-07 — Generative Claim Construction 및 Bounded Execution
+
+### 학습한 핵심 개념
+
+1. **Claim Generation과 Provenance는 분리해야 한다.**
+   - LLM은 의미를 자연스럽게 표현하는 데 강하다.
+   - ID, Source, Document, Evidence, Citation 및 문자 범위는 결정론적 코드가 관리해야 추적성과 재현성이 유지된다.
+   - 이번 구현의 핵심 원칙은 `Meaning by LLM; provenance by code.`이다.
+
+2. **Citation correctness와 Answer relevance는 다른 문제다.**
+   - 생성 Claim이 Evidence에 의해 `fully_supported`여도 사용자의 질문에 직접 답하지 않을 수 있다.
+   - `Claim ↔ Evidence` 평가는 Semantic Citation Verification의 책임이고, `Question/Objective ↔ Claim` 평가는 별도의 Relevance Evaluation 문제다.
+
+3. **Bounded execution은 Agentic System의 필수 안전장치다.**
+   - Evidence 수가 증가한다고 LLM 호출 수가 무제한 증가해서는 안 된다.
+   - 호출 횟수, Token 및 시간에 상한을 두어 비용과 latency를 제어해야 한다.
+
+4. **Budget 초과와 실행 실패는 동일하지 않다.**
+   - 호출 전 attempt budget이 소진되면 다음 호출을 시작하지 않는다.
+   - 성공한 호출이 token/time ceiling을 넘긴 경우 그 결과는 보존하고 이후 호출만 중단할 수 있다.
+   - 이것은 전체 작업을 버리지 않는 graceful degradation이다.
+
+5. **실제 Runtime 검증은 Unit Test와 별개다.**
+   - Unit Test에서 budget 로직을 검증한 뒤 실제 Live Runtime에서도 attempt와 token ceiling을 강제로 발생시켜 동작을 확인했다.
+   - Fake/Stub 성공만으로 Production Runtime 동작을 주장하면 안 된다.
+
+### 직접 확인한 결과
+
+- 실제 OpenAI Claim generation이 Evidence 복사가 아닌 paraphrase를 생성했다.
+- Live Research의 생성 Claim 3개가 모두 Evidence 원문과 달랐다.
+- 세 Claim 모두 Semantic Citation Verification에서 `fully_supported`였다.
+- Attempt limit 실험: Evidence 6개, budget 3회 → Claim 3개.
+- Token limit 실험: Evidence 6개, token budget 1 → 첫 Claim 1개 보존 후 중단.
+- 관련 테스트, 전체 pytest, Ruff 및 `git diff --check` 통과.
+
+### 다음 학습 질문
+
+- Evidence에 충실한 Claim이 실제 Research Question에도 충분히 관련 있는지를 어떻게 평가할 것인가?
+- Claim Relevance를 categorical policy로 둘 것인가, score 기반 Eval로 둘 것인가?
+- Relevance 평가를 blocking quality gate로 사용할 시점은 언제인가?
