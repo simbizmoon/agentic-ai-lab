@@ -67,14 +67,10 @@ class CoverageSequenceEvaluator:
         request: ResearchRequest,
         claim_set: ResearchClaimSet,
     ) -> ResearchAnswerCoverageEvaluation:
-        self.calls.append(
-            [claim.claim_id for claim in claim_set.claims]
-        )
+        self.calls.append([claim.claim_id for claim in claim_set.claims])
 
         if not self._levels:
-            raise AssertionError(
-                "coverage evaluator called too many times"
-            )
+            raise AssertionError("coverage evaluator called too many times")
 
         level = self._levels.popleft()
 
@@ -87,20 +83,13 @@ class CoverageSequenceEvaluator:
         return ResearchAnswerCoverageEvaluation(
             evaluation_id=f"coverage-{len(self.calls)}",
             request_id=request.request_id,
-            claim_ids=[
-                claim.claim_id for claim in claim_set.claims
-            ],
+            claim_ids=[claim.claim_id for claim in claim_set.claims],
             coverage_level=level,
-            coverage_score=(
-                1.0
-                if level is AnswerCoverageLevel.FULLY_COVERED
-                else 0.5
-            ),
+            coverage_score=(1.0 if level is AnswerCoverageLevel.FULLY_COVERED else 0.5),
             covered_aspects=["supported mechanism"],
             missing_aspects=missing,
             rationale="Deterministic test coverage judgment.",
         )
-
 
 
 class IncrementalClaimGenerator:
@@ -126,9 +115,7 @@ class CitationVerificationSpy:
         self.calls: list[list[str]] = []
 
     def verify(self, *, claim_set, evidence_set):
-        self.calls.append(
-            [claim.claim_id for claim in claim_set.claims]
-        )
+        self.calls.append([claim.claim_id for claim in claim_set.claims])
         return []
 
 
@@ -137,9 +124,7 @@ class ClaimRelevanceSpy:
         self.calls: list[list[str]] = []
 
     def evaluate(self, *, request, claim_set):
-        self.calls.append(
-            [claim.claim_id for claim in claim_set.claims]
-        )
+        self.calls.append([claim.claim_id for claim in claim_set.claims])
         return []
 
 
@@ -188,9 +173,7 @@ class CoverageSearch:
         elif self.coverage_mode == "none":
             candidates = []
         else:
-            raise AssertionError(
-                f"unsupported coverage_mode={self.coverage_mode}"
-            )
+            raise AssertionError(f"unsupported coverage_mode={self.coverage_mode}")
 
         return ResearchSourceCandidateSet(
             request_id=query_set.request_id,
@@ -232,16 +215,12 @@ class CoverageReader:
         self,
         candidate_set: ResearchSourceCandidateSet,
     ) -> ResearchSourceDocumentSet:
-        source_ids = [
-            item.source_id for item in candidate_set.candidates
-        ]
+        source_ids = [item.source_id for item in candidate_set.candidates]
         self.calls.append(source_ids)
 
         documents = []
         for candidate in candidate_set.candidates:
-            is_coverage = (
-                "coverage" in candidate.query_id
-            )
+            is_coverage = "coverage" in candidate.query_id
 
             if is_coverage and self.unreadable_coverage:
                 continue
@@ -290,12 +269,8 @@ def coverage_pipeline(
     CoverageReader,
     CoverageSequenceEvaluator,
 ]:
-    searcher = CoverageSearch(
-        coverage_mode=coverage_mode
-    )
-    reader = CoverageReader(
-        unreadable_coverage=unreadable_coverage
-    )
+    searcher = CoverageSearch(coverage_mode=coverage_mode)
+    reader = CoverageReader(unreadable_coverage=unreadable_coverage)
     evaluator = CoverageSequenceEvaluator(levels)
 
     pipeline = SingleResearchAgentPipeline(
@@ -311,13 +286,10 @@ def coverage_pipeline(
         source_quality_evaluator=FakeSourceQualityEvaluator(),
         document_selector=OrderedBackfillSelector(),
         answer_coverage_evaluator=evaluator,
-        coverage_gap_query_planner=(
-            CoverageGapResearchQueryPlanner()
-        ),
+        coverage_gap_query_planner=(CoverageGapResearchQueryPlanner()),
     )
 
     return pipeline, searcher, reader, evaluator
-
 
 
 def test_coverage_replanning_reuses_downstream_results_incrementally() -> None:
@@ -339,9 +311,7 @@ def test_coverage_replanning_reuses_downstream_results_incrementally() -> None:
         query_planner=FakeQueryPlanner(),
         source_searcher=searcher,
         source_reader=reader,
-        evidence_extractor=BackfillEvidenceExtractor(
-            {"source-a", "source-d"}
-        ),
+        evidence_extractor=BackfillEvidenceExtractor({"source-a", "source-d"}),
         claim_builder=GenerativePipelineClaimBuilder(
             generator=generator,
         ),
@@ -355,10 +325,7 @@ def test_coverage_replanning_reuses_downstream_results_incrementally() -> None:
 
     result = pipeline.run(coverage_request())
 
-    assert [
-        claim.claim_id
-        for claim in result.workspace.claim_set.claims
-    ] == [
+    assert [claim.claim_id for claim in result.workspace.claim_set.claims] == [
         "research-coverage-001-claim-001",
         "research-coverage-001-claim-002",
     ]
@@ -394,18 +361,10 @@ def test_fully_covered_does_not_trigger_coverage_replanning() -> None:
 
     assert len(evaluator.calls) == 1
     assert len(searcher.calls) == 1
-    assert result.workspace.metadata[
-        "coverage_replanning_triggered"
-    ] == "false"
-    assert result.workspace.metadata[
-        "coverage_replanning_attempt_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_initial_level"
-    ] == "fully_covered"
-    assert result.workspace.metadata[
-        "coverage_final_level"
-    ] == "fully_covered"
+    assert result.workspace.metadata["coverage_replanning_triggered"] == "false"
+    assert result.workspace.metadata["coverage_replanning_attempt_count"] == "0"
+    assert result.workspace.metadata["coverage_initial_level"] == "fully_covered"
+    assert result.workspace.metadata["coverage_final_level"] == "fully_covered"
 
 
 def test_partial_replans_once_and_can_become_fully_covered() -> None:
@@ -420,21 +379,11 @@ def test_partial_replans_once_and_can_become_fully_covered() -> None:
 
     assert len(evaluator.calls) == 2
     assert len(searcher.calls) == 2
-    assert result.workspace.metadata[
-        "coverage_replanning_triggered"
-    ] == "true"
-    assert result.workspace.metadata[
-        "coverage_replanning_attempt_count"
-    ] == "1"
-    assert result.workspace.metadata[
-        "coverage_replanning_claims_rebuilt"
-    ] == "true"
-    assert result.workspace.metadata[
-        "coverage_initial_level"
-    ] == "partially_covered"
-    assert result.workspace.metadata[
-        "coverage_final_level"
-    ] == "fully_covered"
+    assert result.workspace.metadata["coverage_replanning_triggered"] == "true"
+    assert result.workspace.metadata["coverage_replanning_attempt_count"] == "1"
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "true"
+    assert result.workspace.metadata["coverage_initial_level"] == "partially_covered"
+    assert result.workspace.metadata["coverage_final_level"] == "fully_covered"
     assert result.answer_coverage_evaluation is not None
     assert (
         result.answer_coverage_evaluation.coverage_level
@@ -454,15 +403,9 @@ def test_insufficient_replans_once_and_stops_after_partial() -> None:
 
     assert len(evaluator.calls) == 2
     assert len(searcher.calls) == 2
-    assert result.workspace.metadata[
-        "coverage_replanning_attempt_count"
-    ] == "1"
-    assert result.workspace.metadata[
-        "coverage_initial_level"
-    ] == "insufficient"
-    assert result.workspace.metadata[
-        "coverage_final_level"
-    ] == "partially_covered"
+    assert result.workspace.metadata["coverage_replanning_attempt_count"] == "1"
+    assert result.workspace.metadata["coverage_initial_level"] == "insufficient"
+    assert result.workspace.metadata["coverage_final_level"] == "partially_covered"
 
 
 def test_duplicate_only_coverage_search_preserves_initial_claims() -> None:
@@ -476,15 +419,9 @@ def test_duplicate_only_coverage_search_preserves_initial_claims() -> None:
     assert len(evaluator.calls) == 1
     assert len(searcher.calls) == 2
     assert reader.calls == [["source-a"]]
-    assert result.workspace.metadata[
-        "coverage_replanning_novel_candidate_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_replanning_claims_rebuilt"
-    ] == "false"
-    assert result.workspace.metadata[
-        "coverage_final_level"
-    ] == "partially_covered"
+    assert result.workspace.metadata["coverage_replanning_novel_candidate_count"] == "0"
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "false"
+    assert result.workspace.metadata["coverage_final_level"] == "partially_covered"
 
 
 def test_unreadable_coverage_source_preserves_initial_claims() -> None:
@@ -501,12 +438,8 @@ def test_unreadable_coverage_source_preserves_initial_claims() -> None:
         ["source-a"],
         ["source-d"],
     ]
-    assert result.workspace.metadata[
-        "coverage_replanning_new_document_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_replanning_claims_rebuilt"
-    ] == "false"
+    assert result.workspace.metadata["coverage_replanning_new_document_count"] == "0"
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "false"
 
 
 def test_coverage_source_without_new_evidence_does_not_rebuild() -> None:
@@ -519,12 +452,9 @@ def test_coverage_source_without_new_evidence_does_not_rebuild() -> None:
 
     assert len(evaluator.calls) == 1
     assert len(searcher.calls) == 2
-    assert result.workspace.metadata[
-        "coverage_replanning_new_evidence_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_replanning_claims_rebuilt"
-    ] == "false"
+    assert result.workspace.metadata["coverage_replanning_new_evidence_count"] == "0"
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "false"
+
 
 def test_coverage_replanning_reuses_evidence_extraction_results() -> None:
     extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
@@ -578,28 +508,25 @@ def test_coverage_replanning_reuses_negative_evidence_results() -> None:
     assert second[1].evidence == []
     assert extractor.calls == ["source-a"]
 
-def test_coverage_replanning_evaluates_novel_document_when_source_limit_is_full() -> None:
+
+def test_coverage_replanning_evaluates_novel_document_when_source_limit_is_full() -> (
+    None
+):
     extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
-    pipeline, _, _, _ = coverage_pipeline(
-        levels=[AnswerCoverageLevel.PARTIALLY_COVERED],
+    pipeline, _, _, evaluator = coverage_pipeline(
+        levels=[
+            AnswerCoverageLevel.PARTIALLY_COVERED,
+            AnswerCoverageLevel.FULLY_COVERED,
+        ],
     )
     pipeline._evidence_extractor = extractor
-    request = coverage_request().model_copy(
-        update={"maximum_sources": 1}
-    )
+    request = coverage_request().model_copy(update={"maximum_sources": 1})
 
     result = pipeline.run(request)
 
     assert extractor.calls == ["source-a", "source-d"]
-    assert result.workspace.metadata[
-        "coverage_replanning_novel_evidence_count"
-    ] == "1"
-    assert result.workspace.metadata[
-        "coverage_replanning_new_evidence_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_replanning_claims_rebuilt"
-    ] == "false"
+    assert result.workspace.metadata["coverage_replanning_novel_evidence_count"] == "1"
+    assert len(evaluator.calls) == 2
 
 
 def test_coverage_replanning_records_novel_document_without_evidence() -> None:
@@ -609,19 +536,93 @@ def test_coverage_replanning_records_novel_document_without_evidence() -> None:
         evidence_sources={"source-a"},
     )
     pipeline._evidence_extractor = extractor
-    request = coverage_request().model_copy(
-        update={"maximum_sources": 1}
-    )
+    request = coverage_request().model_copy(update={"maximum_sources": 1})
 
     result = pipeline.run(request)
 
     assert extractor.calls == ["source-a", "source-d"]
-    assert result.workspace.metadata[
-        "coverage_replanning_novel_evidence_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_replanning_new_evidence_count"
-    ] == "0"
-    assert result.workspace.metadata[
-        "coverage_replanning_claims_rebuilt"
-    ] == "false"
+    assert result.workspace.metadata["coverage_replanning_novel_evidence_count"] == "0"
+    assert result.workspace.metadata["coverage_replanning_new_evidence_count"] == "0"
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "false"
+
+
+def test_coverage_replanning_substitutes_novel_source_within_strict_cap() -> None:
+    searcher = CoverageSearch()
+    reader = CoverageReader()
+    coverage_evaluator = CoverageSequenceEvaluator(
+        [
+            AnswerCoverageLevel.PARTIALLY_COVERED,
+            AnswerCoverageLevel.FULLY_COVERED,
+        ]
+    )
+    generator = IncrementalClaimGenerator()
+    citation_spy = CitationVerificationSpy()
+    relevance_spy = ClaimRelevanceSpy()
+    extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
+
+    pipeline = SingleResearchAgentPipeline(
+        request_validator=FakeRequestValidator(),
+        task_decomposer=FakeTaskDecomposer(),
+        query_planner=FakeQueryPlanner(),
+        source_searcher=searcher,
+        source_reader=reader,
+        evidence_extractor=extractor,
+        claim_builder=GenerativePipelineClaimBuilder(generator=generator),
+        source_quality_evaluator=FakeSourceQualityEvaluator(),
+        document_selector=OrderedBackfillSelector(),
+        semantic_citation_verifier=citation_spy,
+        claim_relevance_evaluator=relevance_spy,
+        answer_coverage_evaluator=coverage_evaluator,
+        coverage_gap_query_planner=CoverageGapResearchQueryPlanner(),
+    )
+    request = coverage_request().model_copy(update={"maximum_sources": 1})
+
+    result = pipeline.run(request)
+
+    assert extractor.calls == ["source-a", "source-d"]
+    assert len(result.workspace.document_set.documents) == 1
+    assert result.workspace.document_set.documents[0].candidate.source_id == "source-d"
+
+    assert {item.source_id for item in result.workspace.evidence_set.evidence} == {
+        "source-d"
+    }
+    assert {item.document_id for item in result.workspace.evidence_set.evidence} == {
+        "document-source-d"
+    }
+    assert (
+        result.workspace.metadata["coverage_replanning_adopted_novel_source_count"]
+        == "1"
+    )
+    assert (
+        result.workspace.metadata["coverage_replanning_substituted_source_count"] == "1"
+    )
+    assert result.workspace.metadata["coverage_replanning_new_evidence_count"] == "1"
+    assert result.workspace.metadata["coverage_replanning_incremental_reuse"] == "false"
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "true"
+    assert len(generator.calls) == 2
+    assert len(coverage_evaluator.calls) == 2
+
+
+def test_coverage_replanning_does_not_substitute_without_novel_evidence() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a"})
+    pipeline, _, _, evaluator = coverage_pipeline(
+        levels=[AnswerCoverageLevel.PARTIALLY_COVERED],
+        evidence_sources={"source-a"},
+    )
+    pipeline._evidence_extractor = extractor
+    request = coverage_request().model_copy(update={"maximum_sources": 1})
+
+    result = pipeline.run(request)
+
+    assert extractor.calls == ["source-a", "source-d"]
+    assert len(result.workspace.document_set.documents) == 1
+    assert result.workspace.document_set.documents[0].candidate.source_id == "source-a"
+    assert (
+        result.workspace.metadata["coverage_replanning_adopted_novel_source_count"]
+        == "0"
+    )
+    assert (
+        result.workspace.metadata["coverage_replanning_substituted_source_count"] == "0"
+    )
+    assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "false"
+    assert len(evaluator.calls) == 1

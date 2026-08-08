@@ -554,6 +554,9 @@ class SingleResearchAgentPipeline:
                 "coverage_replanning_novel_candidate_count": "0",
                 "coverage_replanning_new_document_count": "0",
                 "coverage_replanning_novel_evidence_count": "0",
+                "coverage_replanning_adopted_novel_source_count": "0",
+                "coverage_replanning_adopted_novel_evidence_count": "0",
+                "coverage_replanning_substituted_source_count": "0",
                 "coverage_replanning_new_evidence_count": "0",
                 "coverage_replanning_claims_rebuilt": "false",
                 "coverage_replanning_blocked_by_budget": "false",
@@ -647,9 +650,9 @@ class SingleResearchAgentPipeline:
                     )
                     coverage_evidence_started_at = time.perf_counter()
                     (
-                        _,
+                        novel_coverage_document_set,
                         novel_coverage_evidence_set,
-                        _,
+                        novel_coverage_quality_evaluations,
                         _,
                         _,
                     ) = self._select_documents_with_evidence(
@@ -683,6 +686,99 @@ class SingleResearchAgentPipeline:
                         item.evidence_id.strip().casefold()
                         for item in candidate_evidence_set.evidence
                     } - previous_evidence_ids
+
+                    if (
+                        not new_evidence_ids
+                        and novel_coverage_evidence_set.evidence
+                        and novel_coverage_document_set.documents
+                        and document_set.documents
+                    ):
+                        adopted_novel_document = (
+                            novel_coverage_document_set.documents[0]
+                        )
+                        adopted_source_id = (
+                            adopted_novel_document.candidate.source_id
+                            .strip()
+                            .casefold()
+                        )
+                        adopted_novel_evidence = [
+                            item
+                            for item in novel_coverage_evidence_set.evidence
+                            if item.source_id.strip().casefold()
+                            == adopted_source_id
+                        ]
+                        if adopted_novel_evidence:
+                            retained_documents = list(
+                                document_set.documents
+                            )
+                            substituted_existing_document_ids: set[str] = set()
+                            if (
+                                len(retained_documents)
+                                >= request.maximum_sources
+                            ):
+                                removed_document = retained_documents.pop()
+                                substituted_existing_document_ids.add(
+                                    removed_document.document_id
+                                    .strip()
+                                    .casefold()
+                                )
+                                coverage_replanning_metadata[
+                                    "coverage_replanning_substituted_source_count"
+                                ] = "1"
+                            retained_documents.append(
+                                adopted_novel_document
+                            )
+                            candidate_document_set = ResearchSourceDocumentSet(
+                                request_id=document_set.request_id,
+                                documents=retained_documents,
+                            )
+                            candidate_evidence_set = ResearchEvidenceSet(
+                                request_id=evidence_set.request_id,
+                                document_set=candidate_document_set,
+                                evidence=[
+                                    item
+                                    for item in evidence_set.evidence
+                                    if (
+                                        item.document_id.strip().casefold()
+                                        not in substituted_existing_document_ids
+                                    )
+                                ]
+                                + adopted_novel_evidence,
+                            )
+                            retained_document_ids = {
+                                item.document_id.strip().casefold()
+                                for item in retained_documents
+                            }
+                            adopted_quality = [
+                                evaluation
+                                for evaluation in novel_coverage_quality_evaluations
+                                if (
+                                    evaluation.document.document_id
+                                    .strip()
+                                    .casefold()
+                                    in retained_document_ids
+                                )
+                            ]
+                            candidate_quality_evaluations = [
+                                evaluation
+                                for evaluation in source_quality_evaluations
+                                if (
+                                    evaluation.document.document_id
+                                    .strip()
+                                    .casefold()
+                                    in retained_document_ids
+                                )
+                            ] + adopted_quality
+                            new_evidence_ids = {
+                                item.evidence_id.strip().casefold()
+                                for item in adopted_novel_evidence
+                            }
+                            coverage_replanning_metadata[
+                                "coverage_replanning_adopted_novel_source_count"
+                            ] = "1"
+                            coverage_replanning_metadata[
+                                "coverage_replanning_adopted_novel_evidence_count"
+                            ] = str(len(adopted_novel_evidence))
                     coverage_replanning_metadata[
                         "coverage_replanning_new_evidence_count"
                     ] = str(len(new_evidence_ids))
