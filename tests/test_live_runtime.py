@@ -64,12 +64,12 @@ def test_live_runtime_composes_live_adapters() -> None:
     assert (
         pipeline.source_searcher.search_budget
         .maximum_provider_calls
-        == 2
+        == 3
     )
     assert (
         pipeline.source_searcher.search_budget
         .maximum_credits
-        == 2.0
+        == 3.0
     )
     assert isinstance(
         pipeline.source_reader,

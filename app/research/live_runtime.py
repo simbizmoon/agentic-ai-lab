@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from app.research.coverage_gap_research_query_planner import (
+    CoverageGapResearchQueryPlanner,
+)
 from app.research.http_html_research_source_reader import (
     HttpHtmlResearchSourceReader,
 )
@@ -82,11 +85,11 @@ def build_live_research_pipeline(
     resolved_search_budget = (
         search_budget
         or ResearchSearchBudget(
-            maximum_provider_calls=2,
-            maximum_credits=2.0,
+            maximum_provider_calls=3,
+            maximum_credits=3.0,
             maximum_latency_ms=(
                 int(search_config.timeout_seconds * 1000)
-                * 2
+                * 3
             ),
         )
     )
@@ -147,5 +150,8 @@ def build_live_research_pipeline(
         ),
         answer_coverage_evaluator=(
             answer_coverage_evaluator
+        ),
+        coverage_gap_query_planner=(
+            CoverageGapResearchQueryPlanner()
         ),
     )

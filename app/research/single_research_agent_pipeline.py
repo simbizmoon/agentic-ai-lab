@@ -10,6 +10,9 @@ from app.research.research_citation_verifier_executor import (
 from app.research.research_pipeline_error import ResearchPipelineError
 from app.research.research_quality_evaluator import ResearchQualityEvaluator
 from app.research.research_synthesizer import DeterministicResearchSynthesizer
+from app.schemas.answer_coverage_judgment import (
+    AnswerCoverageLevel,
+)
 from app.schemas.research_answer_coverage_evaluation import (
     ResearchAnswerCoverageEvaluation,
 )
@@ -135,6 +138,17 @@ class AnswerCoverageEvaluationServiceProtocol(Protocol):
     ) -> ResearchAnswerCoverageEvaluation: ...
 
 
+class CoverageGapResearchQueryPlannerProtocol(Protocol):
+    def plan(
+        self,
+        *,
+        request: ResearchRequest,
+        task_graph: ResearchTaskGraph,
+        existing_query_set: ResearchSearchQuerySet,
+        coverage_evaluation: ResearchAnswerCoverageEvaluation,
+    ) -> ResearchSearchQuerySet: ...
+
+
 class SupplementalResearchQueryPlannerProtocol(Protocol):
     def plan(
         self,
@@ -174,6 +188,9 @@ class SingleResearchAgentPipeline:
         answer_coverage_evaluator: (
             AnswerCoverageEvaluationServiceProtocol | None
         ) = None,
+        coverage_gap_query_planner: (
+            CoverageGapResearchQueryPlannerProtocol | None
+        ) = None,
     ) -> None:
         self._request_validator = request_validator
         self._task_decomposer = task_decomposer
@@ -198,6 +215,9 @@ class SingleResearchAgentPipeline:
         self._answer_coverage_evaluator = (
             answer_coverage_evaluator
         )
+        self._coverage_gap_query_planner = (
+            coverage_gap_query_planner
+        )
 
     @property
     def semantic_citation_verifier(
@@ -220,6 +240,12 @@ class SingleResearchAgentPipeline:
         """Return the optional answer coverage evaluator."""
 
         return self._answer_coverage_evaluator
+
+    @property
+    def coverage_gap_query_planner(
+        self,
+    ) -> CoverageGapResearchQueryPlannerProtocol | None:
+        return self._coverage_gap_query_planner
 
     @property
     def source_searcher(self) -> ResearchSourceSearcherProtocol:
@@ -468,6 +494,165 @@ class SingleResearchAgentPipeline:
                 )
             )
 
+        coverage_replanning_metadata: dict[str, str] = {}
+
+        if answer_coverage_evaluation is not None:
+            coverage_replanning_metadata = {
+                "coverage_replanning_triggered": "false",
+                "coverage_replanning_attempt_count": "0",
+                "coverage_replanning_query_count": "0",
+                "coverage_replanning_candidate_count": "0",
+                "coverage_replanning_novel_candidate_count": "0",
+                "coverage_replanning_new_document_count": "0",
+                "coverage_replanning_new_evidence_count": "0",
+                "coverage_replanning_claims_rebuilt": "false",
+                "coverage_replanning_blocked_by_budget": "false",
+                "coverage_initial_level": (
+                    answer_coverage_evaluation.coverage_level.value
+                ),
+                "coverage_final_level": (
+                    answer_coverage_evaluation.coverage_level.value
+                ),
+            }
+
+        should_replan_coverage = (
+            answer_coverage_evaluation is not None
+            and self._coverage_gap_query_planner is not None
+            and answer_coverage_evaluation.coverage_level
+            in {
+                AnswerCoverageLevel.PARTIALLY_COVERED,
+                AnswerCoverageLevel.INSUFFICIENT,
+            }
+            and bool(answer_coverage_evaluation.missing_aspects)
+        )
+
+        if should_replan_coverage:
+            coverage_replanning_metadata["coverage_replanning_triggered"] = "true"
+            coverage_replanning_metadata["coverage_replanning_attempt_count"] = "1"
+
+            coverage_query_set = self._coverage_gap_query_planner.plan(
+                request=request,
+                task_graph=task_graph,
+                existing_query_set=query_set,
+                coverage_evaluation=answer_coverage_evaluation,
+            )
+            coverage_replanning_metadata["coverage_replanning_query_count"] = str(
+                len(coverage_query_set.queries)
+            )
+
+            search_usage_before = self._search_usage_snapshot()
+            raw_coverage_candidates = self._source_searcher.search(coverage_query_set)
+            search_usage_after = self._search_usage_snapshot()
+            coverage_blocked = self._supplemental_search_was_blocked(
+                before=search_usage_before,
+                after=search_usage_after,
+            )
+            coverage_replanning_metadata["coverage_replanning_blocked_by_budget"] = (
+                str(coverage_blocked).casefold()
+            )
+            coverage_replanning_metadata["coverage_replanning_candidate_count"] = str(
+                len(raw_coverage_candidates.candidates)
+            )
+
+            novel_coverage_candidates, _ = self._novel_candidates(
+                existing=candidate_set,
+                supplemental=raw_coverage_candidates,
+            )
+            coverage_replanning_metadata[
+                "coverage_replanning_novel_candidate_count"
+            ] = str(len(novel_coverage_candidates.candidates))
+
+            query_set = self._merge_query_sets(
+                initial=query_set,
+                supplemental=coverage_query_set,
+            )
+            candidate_set = self._merge_candidate_sets(
+                initial=candidate_set,
+                supplemental=novel_coverage_candidates,
+                query_set=query_set,
+            )
+
+            if novel_coverage_candidates.candidates:
+                coverage_document_set = self._source_reader.read(
+                    novel_coverage_candidates
+                )
+                new_documents = coverage_document_set.successful_documents()
+                coverage_replanning_metadata[
+                    "coverage_replanning_new_document_count"
+                ] = str(len(new_documents))
+
+                if new_documents:
+                    previous_evidence_ids = {
+                        item.evidence_id.strip().casefold()
+                        for item in evidence_set.evidence
+                    }
+                    merged_read_document_set = self._merge_document_sets(
+                        initial=read_document_set,
+                        supplemental=coverage_document_set,
+                    )
+                    (
+                        candidate_document_set,
+                        candidate_evidence_set,
+                        candidate_quality_evaluations,
+                        candidate_attempted_count,
+                        candidate_no_evidence_count,
+                    ) = self._select_documents_with_evidence(
+                        merged_read_document_set,
+                        query_set=query_set,
+                        maximum_sources=request.maximum_sources,
+                    )
+                    new_evidence_ids = {
+                        item.evidence_id.strip().casefold()
+                        for item in candidate_evidence_set.evidence
+                    } - previous_evidence_ids
+                    coverage_replanning_metadata[
+                        "coverage_replanning_new_evidence_count"
+                    ] = str(len(new_evidence_ids))
+
+                    if new_evidence_ids:
+                        read_document_set = merged_read_document_set
+                        document_set = candidate_document_set
+                        evidence_set = candidate_evidence_set
+                        source_quality_evaluations = candidate_quality_evaluations
+                        evidence_attempted_document_count = candidate_attempted_count
+                        no_evidence_document_count = candidate_no_evidence_count
+
+                        claim_set = self._claim_builder.build(evidence_set)
+                        if not claim_set.claims:
+                            raise ResearchPipelineError(
+                                "coverage replanning produced no claims"
+                            )
+                        coverage_replanning_metadata[
+                            "coverage_replanning_claims_rebuilt"
+                        ] = "true"
+
+                        citation_verifications = []
+                        if self._semantic_citation_verifier is not None:
+                            citation_verifications = self._semantic_citation_verifier.verify(
+                                claim_set=claim_set,
+                                evidence_set=evidence_set,
+                            )
+
+                        claim_relevance_evaluations = []
+                        if self._claim_relevance_evaluator is not None:
+                            claim_relevance_evaluations = (
+                                self._claim_relevance_evaluator.evaluate(
+                                    request=request,
+                                    claim_set=claim_set,
+                                )
+                            )
+
+                        if self._answer_coverage_evaluator is not None:
+                            answer_coverage_evaluation = (
+                                self._answer_coverage_evaluator.evaluate(
+                                    request=request,
+                                    claim_set=claim_set,
+                                )
+                            )
+                            coverage_replanning_metadata[
+                                "coverage_final_level"
+                            ] = answer_coverage_evaluation.coverage_level.value
+
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
             request=request,
@@ -497,6 +682,7 @@ class SingleResearchAgentPipeline:
                     no_evidence_document_count
                 ),
                 **replanning_metadata,
+                **coverage_replanning_metadata,
                 **self._search_budget_metadata(),
             },
         )
