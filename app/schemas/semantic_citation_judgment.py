@@ -9,6 +9,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
     model_validator,
 )
 
@@ -68,4 +69,51 @@ class SemanticCitationJudgment(BaseModel):
                 "issues must not contain duplicates"
             )
 
+        return self
+
+class SemanticCitationBatchItemJudgment(BaseModel):
+    """One identified semantic citation judgment in a batch."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        frozen=True,
+    )
+
+    item_id: str
+    judgment: SemanticCitationJudgment
+
+    @field_validator("item_id")
+    @classmethod
+    def validate_item_id(cls, value: str) -> str:
+        """Reject blank local batch identity."""
+
+        if not value.strip():
+            raise ValueError("item_id must not be blank")
+        return value
+
+
+class SemanticCitationBatchJudgment(BaseModel):
+    """Structured citation judgments for one local batch."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        frozen=True,
+    )
+
+    items: list[SemanticCitationBatchItemJudgment] = Field(
+        min_length=1
+    )
+
+    @model_validator(mode="after")
+    def validate_batch(self) -> Self:
+        """Require unique stable item identities."""
+
+        normalized_ids = [
+            item.item_id.strip().casefold()
+            for item in self.items
+        ]
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("batch item IDs must be unique")
         return self

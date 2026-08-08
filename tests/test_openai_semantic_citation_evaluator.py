@@ -6,13 +6,17 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from app.exceptions import StructuredResponseParseError
 from app.research.openai_semantic_citation_evaluator import (
+    SEMANTIC_CITATION_BATCH_INSTRUCTIONS,
     OpenAISemanticCitationEvaluator,
 )
 from app.research.research_citation_verifier_executor import (
     ResearchCitationDecision,
 )
 from app.schemas.semantic_citation_judgment import (
+    SemanticCitationBatchItemJudgment,
+    SemanticCitationBatchJudgment,
     SemanticCitationJudgment,
     SemanticCitationSupportLevel,
 )
@@ -229,3 +233,118 @@ def test_blank_input_is_rejected_before_api_call(
         )
 
     assert client.responses.calls == []
+
+def batch_judgment(
+    *item_ids: str,
+) -> SemanticCitationBatchJudgment:
+    return SemanticCitationBatchJudgment(
+        items=[
+            SemanticCitationBatchItemJudgment(
+                item_id=item_id,
+                judgment=judgment(0.9),
+            )
+            for item_id in item_ids
+        ]
+    )
+
+
+def test_batch_evaluator_uses_one_structured_request() -> None:
+    client = FakeClient(
+        FakeResponse(
+            output_parsed=batch_judgment(
+                "item-001",
+                "item-002",
+                "item-003",
+            )
+        )
+    )
+    value = OpenAISemanticCitationEvaluator(
+        client=client,
+        model="test-model",
+    )
+
+    result = value.evaluate_batch(
+        citation_items=[
+            ("item-001", "Claim one.", "Evidence one."),
+            ("item-002", "Claim two.", "Evidence two."),
+            ("item-003", "Claim three.", "Evidence three."),
+        ]
+    )
+
+    assert len(client.responses.calls) == 1
+    assert set(result.judgments) == {
+        "item-001",
+        "item-002",
+        "item-003",
+    }
+    assert all(
+        decision is ResearchCitationDecision.VERIFIED
+        for decision in result.decisions.values()
+    )
+
+    call = client.responses.calls[0]
+    assert (
+        call["instructions"]
+        == SEMANTIC_CITATION_BATCH_INSTRUCTIONS
+    )
+    assert call["text_format"] is SemanticCitationBatchJudgment
+    model_input = str(call["input"])
+    assert '"item_id": "item-001"' in model_input
+    assert '"claim": "Claim one."' in model_input
+    assert '"evidence": "Evidence one."' in model_input
+
+
+def test_batch_evaluator_maps_reordered_output_by_item_id() -> None:
+    client = FakeClient(
+        FakeResponse(
+            output_parsed=batch_judgment(
+                "item-003",
+                "item-001",
+                "item-002",
+            )
+        )
+    )
+    value = OpenAISemanticCitationEvaluator(
+        client=client,
+        model="test-model",
+    )
+
+    result = value.evaluate_batch(
+        citation_items=[
+            ("item-001", "Claim one.", "Evidence one."),
+            ("item-002", "Claim two.", "Evidence two."),
+            ("item-003", "Claim three.", "Evidence three."),
+        ]
+    )
+
+    assert set(result.judgments) == {
+        "item-001",
+        "item-002",
+        "item-003",
+    }
+
+
+def test_batch_evaluator_rejects_mismatched_item_ids() -> None:
+    client = FakeClient(
+        FakeResponse(
+            output_parsed=batch_judgment(
+                "item-001",
+                "item-003",
+            )
+        )
+    )
+    value = OpenAISemanticCitationEvaluator(
+        client=client,
+        model="test-model",
+    )
+
+    with pytest.raises(
+        StructuredResponseParseError,
+        match="item IDs did not match",
+    ):
+        value.evaluate_batch(
+            citation_items=[
+                ("item-001", "Claim one.", "Evidence one."),
+                ("item-002", "Claim two.", "Evidence two."),
+            ]
+        )

@@ -20,6 +20,7 @@ from app.research.research_citation_verifier_executor import (
     ResearchCitationDecision,
 )
 from app.schemas.semantic_citation_judgment import (
+    SemanticCitationBatchJudgment,
     SemanticCitationJudgment,
     SemanticCitationSupportLevel,
 )
@@ -113,6 +114,18 @@ Explain the judgment briefly in rationale.
 List specific support problems in issues.
 """.strip()
 
+SEMANTIC_CITATION_BATCH_INSTRUCTIONS = (
+    SEMANTIC_CITATION_INSTRUCTIONS
+    + """
+
+Batch evaluation rules:
+- Evaluate every supplied claim/evidence item independently under the same policy.
+- Return exactly one result for every supplied item_id.
+- Copy each supplied item_id exactly; do not invent, omit, or duplicate IDs.
+- Do not let one item change the judgment of another item.
+""".rstrip()
+)
+
 
 class ResponsesParseResource(Protocol):
     """Subset of Responses API required by this evaluator."""
@@ -136,6 +149,18 @@ class SemanticCitationEvaluationResult:
 
     judgment: SemanticCitationJudgment
     decision: ResearchCitationDecision
+    response_id: str
+    request_id: str | None
+    usage: TokenUsage | None
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True)
+class SemanticCitationBatchEvaluationResult:
+    """Batched citation judgments with shared execution metadata."""
+
+    judgments: dict[str, SemanticCitationJudgment]
+    decisions: dict[str, ResearchCitationDecision]
     response_id: str
     request_id: str | None
     usage: TokenUsage | None
@@ -258,6 +283,155 @@ class OpenAISemanticCitationEvaluator:
             decision=self.decision_for_judgment(
                 judgment
             ),
+            response_id=str(response.id),
+            request_id=getattr(
+                response,
+                "_request_id",
+                None,
+            ),
+            usage=extract_token_usage(response),
+            elapsed_seconds=elapsed_seconds,
+        )
+
+    def evaluate_batch(
+        self,
+        *,
+        citation_items: list[tuple[str, str, str]],
+    ) -> SemanticCitationBatchEvaluationResult:
+        """Evaluate multiple claim/evidence pairs in one API request."""
+
+        if not citation_items:
+            raise ValueError("citation_items must not be empty")
+
+        normalized_ids: list[str] = []
+        cleaned_items: list[dict[str, str]] = []
+
+        for item_id, claim_text, evidence_excerpt in citation_items:
+            cleaned_id = item_id.strip()
+            cleaned_claim = claim_text.strip()
+            cleaned_evidence = evidence_excerpt.strip()
+
+            if not cleaned_id:
+                raise ValueError("batch item_id must not be blank")
+            if not cleaned_claim:
+                raise ValueError("claim_text must not be blank")
+            if not cleaned_evidence:
+                raise ValueError("evidence_excerpt must not be blank")
+
+            normalized_ids.append(cleaned_id.casefold())
+            cleaned_items.append(
+                {
+                    "item_id": cleaned_id,
+                    "claim": cleaned_claim,
+                    "evidence": cleaned_evidence,
+                }
+            )
+
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("batch item IDs must be unique")
+
+        model_input = json.dumps(
+            {
+                "citation_items": cleaned_items,
+            },
+            ensure_ascii=False,
+        )
+
+        start_time = time.perf_counter()
+
+        try:
+            response = self._client.responses.parse(
+                model=self._model,
+                instructions=SEMANTIC_CITATION_BATCH_INSTRUCTIONS,
+                input=model_input,
+                text_format=SemanticCitationBatchJudgment,
+                store=False,
+            )
+        except ValidationError as error:
+            elapsed_seconds = max(
+                0.0,
+                time.perf_counter() - start_time,
+            )
+            raise StructuredResponseValidationError(
+                "batched semantic citation response failed schema validation",
+                elapsed_seconds=elapsed_seconds,
+                attempts=1,
+            ) from error
+
+        elapsed_seconds = max(
+            0.0,
+            time.perf_counter() - start_time,
+        )
+
+        status = getattr(response, "status", None)
+
+        if status == "incomplete":
+            raise StructuredResponseIncompleteError(
+                "batched semantic citation response was incomplete"
+            )
+
+        if status != "completed":
+            raise StructuredResponseStatusError(
+                "batched semantic citation response was not completed"
+            )
+
+        if has_refusal(response):
+            raise StructuredResponseRefusalError(
+                "OpenAI refused batched semantic citation evaluation"
+            )
+
+        parsed = getattr(response, "output_parsed", None)
+
+        if parsed is None:
+            raise StructuredResponseParseError(
+                "batched semantic citation response was empty"
+            )
+
+        if not isinstance(parsed, SemanticCitationBatchJudgment):
+            raise StructuredResponseParseError(
+                "batched semantic citation response has invalid type"
+            )
+
+        expected_ids = [
+            item["item_id"]
+            for item in cleaned_items
+        ]
+        expected_by_folded = {
+            item_id.casefold(): item_id
+            for item_id in expected_ids
+        }
+        returned_ids = [
+            item.item_id
+            for item in parsed.items
+        ]
+        returned_folded = [
+            item_id.casefold()
+            for item_id in returned_ids
+        ]
+
+        if (
+            len(returned_ids) != len(expected_ids)
+            or len(set(returned_folded)) != len(returned_folded)
+            or set(returned_folded) != set(expected_by_folded)
+        ):
+            raise StructuredResponseParseError(
+                "batched semantic citation item IDs did not match the request"
+            )
+
+        judgments = {
+            expected_by_folded[
+                item.item_id.casefold()
+            ]: item.judgment
+            for item in parsed.items
+        }
+        decisions = {
+            item_id: self.decision_for_judgment(judgment)
+            for item_id, judgment in judgments.items()
+        }
+
+        return SemanticCitationBatchEvaluationResult(
+            judgments=judgments,
+            decisions=decisions,
             response_id=str(response.id),
             request_id=getattr(
                 response,
