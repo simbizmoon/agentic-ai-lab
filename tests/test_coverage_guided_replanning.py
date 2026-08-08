@@ -525,3 +525,55 @@ def test_coverage_source_without_new_evidence_does_not_rebuild() -> None:
     assert result.workspace.metadata[
         "coverage_replanning_claims_rebuilt"
     ] == "false"
+
+def test_coverage_replanning_reuses_evidence_extraction_results() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
+    pipeline, _, _, _ = coverage_pipeline(
+        levels=[
+            AnswerCoverageLevel.PARTIALLY_COVERED,
+            AnswerCoverageLevel.FULLY_COVERED,
+        ],
+    )
+    pipeline._evidence_extractor = extractor
+    pipeline.run(coverage_request())
+    assert extractor.calls.count("source-a") == 1
+    assert extractor.calls.count("source-d") == 1
+
+
+def test_coverage_replanning_reuses_negative_evidence_results() -> None:
+    extractor = BackfillEvidenceExtractor(set())
+    pipeline, searcher, reader, _ = coverage_pipeline(
+        levels=[AnswerCoverageLevel.FULLY_COVERED],
+    )
+    pipeline._evidence_extractor = extractor
+
+    request = coverage_request()
+    task_graph = FakeTaskDecomposer().decompose(request)
+    query_set = FakeQueryPlanner().plan(
+        request=request,
+        task_graph=task_graph,
+    )
+    candidate_set = searcher.search(query_set)
+    document_set = reader.read(candidate_set)
+
+    evidence_cache: dict[
+        tuple[str, str, str],
+        list,
+    ] = {}
+
+    first = pipeline._select_documents_with_evidence(
+        document_set,
+        query_set=query_set,
+        maximum_sources=request.maximum_sources,
+        evidence_cache=evidence_cache,
+    )
+    second = pipeline._select_documents_with_evidence(
+        document_set,
+        query_set=query_set,
+        maximum_sources=request.maximum_sources,
+        evidence_cache=evidence_cache,
+    )
+
+    assert first[1].evidence == []
+    assert second[1].evidence == []
+    assert extractor.calls == ["source-a"]

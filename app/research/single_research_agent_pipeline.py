@@ -292,6 +292,11 @@ class SingleResearchAgentPipeline:
         if not resolved_workspace_id.strip():
             raise ResearchPipelineError("workspace_id must not be blank")
 
+        evidence_cache: dict[
+            tuple[str, str, str],
+            list[ResearchEvidence],
+        ] = {}
+
         self._request_validator.validate(request)
         task_graph = self._task_decomposer.decompose(request)
         if not task_graph.tasks:
@@ -330,6 +335,7 @@ class SingleResearchAgentPipeline:
             read_document_set,
             query_set=query_set,
             maximum_sources=request.maximum_sources,
+            evidence_cache=evidence_cache,
         )
 
         round_1_evidence_extraction_elapsed_seconds = max(0.0, time.perf_counter() - evidence_started_at)
@@ -436,6 +442,7 @@ class SingleResearchAgentPipeline:
                         maximum_sources=(
                             request.maximum_sources
                         ),
+                        evidence_cache=evidence_cache,
                     )
 
                     round_1_evidence_extraction_elapsed_seconds += (
@@ -648,6 +655,7 @@ class SingleResearchAgentPipeline:
                         merged_read_document_set,
                         query_set=query_set,
                         maximum_sources=request.maximum_sources,
+                        evidence_cache=evidence_cache,
                     )
                     coverage_evidence_extraction_elapsed_seconds = max(0.0, time.perf_counter() - coverage_evidence_started_at)
                     coverage_evidence_semantic = self._component_usage_metrics(
@@ -1180,6 +1188,10 @@ class SingleResearchAgentPipeline:
         *,
         query_set: ResearchSearchQuerySet,
         maximum_sources: int,
+        evidence_cache: dict[
+            tuple[str, str, str],
+            list[ResearchEvidence],
+        ] | None = None,
     ) -> tuple[
         ResearchSourceDocumentSet,
         ResearchEvidenceSet,
@@ -1266,17 +1278,38 @@ class SingleResearchAgentPipeline:
             seen_urls.add(normalized_url)
             attempted_count += 1
 
-            single_document_set = ResearchSourceDocumentSet(
-                request_id=document_set.request_id,
-                documents=[document],
+            cache_key = (
+                document.document_id.strip().casefold(),
+                normalized_url,
+                document.content,
             )
-            extracted = self._evidence_extractor.extract(single_document_set)
-            if not extracted.evidence:
+            cache_hit = (
+                evidence_cache is not None
+                and cache_key in evidence_cache
+            )
+
+            if cache_hit:
+                document_evidence = list(
+                    evidence_cache[cache_key]
+                )
+            else:
+                single_document_set = ResearchSourceDocumentSet(
+                    request_id=document_set.request_id,
+                    documents=[document],
+                )
+                extracted = self._evidence_extractor.extract(
+                    single_document_set
+                )
+                document_evidence = extracted.ordered_evidence()
+                if evidence_cache is not None:
+                    evidence_cache[cache_key] = list(document_evidence)
+
+            if not document_evidence:
                 no_evidence_count += 1
                 continue
 
             selected_documents.append(document)
-            selected_evidence.extend(extracted.ordered_evidence())
+            selected_evidence.extend(document_evidence)
             evaluation = evaluation_by_document_id.get(
                 document.document_id.strip().casefold()
             )
