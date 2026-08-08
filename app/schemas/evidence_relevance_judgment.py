@@ -65,3 +65,48 @@ class EvidenceRelevanceJudgment(BaseModel):
             )
 
         return self
+
+
+class EvidenceRelevanceBatchItemJudgment(BaseModel):
+    """One identified evidence relevance judgment in a batch."""
+
+    model_config = ConfigDict(
+        strict=True,
+        frozen=True,
+        extra="forbid",
+    )
+
+    item_id: str
+    judgment: EvidenceRelevanceJudgment
+
+    @model_validator(mode="after")
+    def validate_item(self) -> Self:
+        """Validate the stable local batch item identity."""
+
+        if not self.item_id.strip():
+            raise ValueError("item_id must not be blank")
+        return self
+
+
+class EvidenceRelevanceBatchJudgment(BaseModel):
+    """Structured relevance judgments for one local evidence batch."""
+
+    model_config = ConfigDict(
+        strict=True,
+        frozen=True,
+        extra="forbid",
+    )
+
+    items: list[EvidenceRelevanceBatchItemJudgment] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_batch(self) -> Self:
+        """Require unique stable item identities."""
+
+        normalized_ids = [
+            item.item_id.strip().casefold()
+            for item in self.items
+        ]
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("batch item IDs must be unique")
+        return self

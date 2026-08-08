@@ -7,10 +7,12 @@ from dataclasses import dataclass
 import pytest
 
 from app.budget import ExecutionBudget
+from app.exceptions import StructuredResponseParseError
 from app.research.embedding_semantic_evidence_shortlister import (
     SemanticEvidenceShortlistItem,
 )
 from app.research.openai_evidence_relevance_evaluator import (
+    EvidenceRelevanceBatchEvaluationResult,
     EvidenceRelevanceEvaluationResult,
 )
 from app.research.paragraph_evidence_extractor import (
@@ -67,6 +69,67 @@ class ControlledEvaluator:
                 total_tokens=tokens,
             ),
             elapsed_seconds=elapsed,
+        )
+
+
+@dataclass
+class ControlledBatchEvaluator(ControlledEvaluator):
+    """Support batch evaluation while tracking both execution paths."""
+
+    batch_tokens: int = 25
+    batch_elapsed: float = 0.2
+    batch_error: Exception | None = None
+    batch_calls: int = 0
+    single_calls: int = 0
+    reverse_output: bool = False
+
+    def evaluate(
+        self,
+        *,
+        question: str,
+        objective: str,
+        evidence_excerpt: str,
+    ) -> EvidenceRelevanceEvaluationResult:
+        self.single_calls += 1
+        return super().evaluate(
+            question=question,
+            objective=objective,
+            evidence_excerpt=evidence_excerpt,
+        )
+
+    def evaluate_batch(
+        self,
+        *,
+        question: str,
+        objective: str,
+        evidence_items: list[tuple[str, str]],
+    ) -> EvidenceRelevanceBatchEvaluationResult:
+        self.batch_calls += 1
+        if self.batch_error is not None:
+            raise self.batch_error
+
+        ordered = list(evidence_items)
+        if self.reverse_output:
+            ordered.reverse()
+        judgments = {
+            item_id: judgment(
+                self.judgments[text][0],
+                self.judgments[text][1],
+            )
+            for item_id, text in ordered
+        }
+        return EvidenceRelevanceBatchEvaluationResult(
+            judgments=judgments,
+            response_id="resp-batch",
+            request_id="req-batch",
+            usage=TokenUsage(
+                input_tokens=max(self.batch_tokens - 1, 0),
+                cached_input_tokens=0,
+                output_tokens=1 if self.batch_tokens else 0,
+                reasoning_tokens=0,
+                total_tokens=self.batch_tokens,
+            ),
+            elapsed_seconds=self.batch_elapsed,
         )
 
 
@@ -387,3 +450,252 @@ def test_rerank_rejects_blank_request_text(
             objective=objective,
             shortlist=[],
         )
+
+
+def test_batch_fast_path_evaluates_multiple_items_in_one_attempt() -> None:
+    shortlist = [
+        item(
+            text=f"candidate-{index}",
+            semantic_score=0.9 - index * 0.05,
+            lexical_score=0.5,
+            rank=index,
+            start=index * 100,
+        )
+        for index in range(1, 6)
+    ]
+    evaluator = ControlledBatchEvaluator(
+        {
+            value.candidate.text: (
+                EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+                0.9,
+                10,
+                0.1,
+            )
+            for value in shortlist
+        }
+    )
+
+    result = SemanticEvidenceReranker(
+        evaluator=evaluator,
+        budget=generous_budget(),
+    ).rerank(
+        question="Question",
+        objective="Objective",
+        shortlist=shortlist,
+    )
+
+    assert evaluator.batch_calls == 1
+    assert evaluator.single_calls == 0
+    assert result.usage.attempts == 1
+    assert result.usage.recorded_tokens == 25
+    assert all(value.judgment is not None for value in result.items)
+
+
+def test_batch_mapping_does_not_depend_on_return_order() -> None:
+    first = item(
+        text="first",
+        semantic_score=0.8,
+        lexical_score=0.5,
+        rank=1,
+        start=0,
+    )
+    second = item(
+        text="second",
+        semantic_score=0.7,
+        lexical_score=0.4,
+        rank=2,
+        start=100,
+    )
+    evaluator = ControlledBatchEvaluator(
+        {
+            "first": (
+                EvidenceRelevanceLevel.IRRELEVANT,
+                0.1,
+                1,
+                0.1,
+            ),
+            "second": (
+                EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+                0.9,
+                1,
+                0.1,
+            ),
+        },
+        reverse_output=True,
+    )
+
+    result = SemanticEvidenceReranker(
+        evaluator=evaluator,
+        budget=generous_budget(),
+    ).rerank(
+        question="Question",
+        objective="Objective",
+        shortlist=[first, second],
+    )
+
+    assert [
+        value.shortlist_item.candidate.text
+        for value in result.items
+    ] == ["second", "first"]
+
+
+def test_batch_structured_failure_falls_back_and_charges_attempt() -> None:
+    first = item(
+        text="first",
+        semantic_score=0.8,
+        lexical_score=0.5,
+        rank=1,
+        start=0,
+    )
+    second = item(
+        text="second",
+        semantic_score=0.7,
+        lexical_score=0.4,
+        rank=2,
+        start=100,
+    )
+    evaluator = ControlledBatchEvaluator(
+        {
+            "first": (
+                EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+                0.9,
+                3,
+                0.1,
+            ),
+            "second": (
+                EvidenceRelevanceLevel.PARTIALLY_RELEVANT,
+                0.6,
+                4,
+                0.1,
+            ),
+        },
+        batch_error=StructuredResponseParseError("bad batch"),
+    )
+
+    result = SemanticEvidenceReranker(
+        evaluator=evaluator,
+        budget=generous_budget(),
+    ).rerank(
+        question="Question",
+        objective="Objective",
+        shortlist=[first, second],
+    )
+
+    assert evaluator.batch_calls == 1
+    assert evaluator.single_calls == 2
+    assert result.usage.attempts == 3
+    assert result.usage.recorded_tokens == 7
+
+
+def test_failed_batch_respects_remaining_attempt_budget() -> None:
+    candidate = item(
+        text="candidate",
+        semantic_score=0.8,
+        lexical_score=0.5,
+        rank=1,
+        start=0,
+    )
+    evaluator = ControlledBatchEvaluator(
+        {
+            "candidate": (
+                EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+                0.9,
+                3,
+                0.1,
+            )
+        },
+        batch_error=StructuredResponseParseError("bad batch"),
+    )
+
+    result = SemanticEvidenceReranker(
+        evaluator=evaluator,
+        budget=ExecutionBudget(
+            max_attempts=1,
+            max_recorded_tokens=100,
+            max_elapsed_seconds=10.0,
+        ),
+    ).rerank(
+        question="Question",
+        objective="Objective",
+        shortlist=[candidate],
+    )
+
+    assert evaluator.batch_calls == 1
+    assert evaluator.single_calls == 0
+    assert result.usage.attempts == 1
+    assert result.budget_exhausted is True
+    assert result.items[0].judgment is None
+
+
+def test_successful_batch_crossing_budget_is_retained_and_marked_exhausted() -> None:
+    candidate = item(
+        text="candidate",
+        semantic_score=0.8,
+        lexical_score=0.5,
+        rank=1,
+        start=0,
+    )
+    evaluator = ControlledBatchEvaluator(
+        {
+            "candidate": (
+                EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+                0.9,
+                1,
+                0.1,
+            )
+        },
+        batch_tokens=11,
+    )
+
+    result = SemanticEvidenceReranker(
+        evaluator=evaluator,
+        budget=ExecutionBudget(
+            max_attempts=8,
+            max_recorded_tokens=10,
+            max_elapsed_seconds=10.0,
+        ),
+    ).rerank(
+        question="Question",
+        objective="Objective",
+        shortlist=[candidate],
+    )
+
+    assert evaluator.batch_calls == 1
+    assert evaluator.single_calls == 0
+    assert result.usage.recorded_tokens == 11
+    assert result.budget_exhausted is True
+    assert result.items[0].judgment is not None
+
+
+def test_batch_programming_error_is_not_hidden_by_fallback() -> None:
+    candidate = item(
+        text="candidate",
+        semantic_score=0.8,
+        lexical_score=0.5,
+        rank=1,
+        start=0,
+    )
+    evaluator = ControlledBatchEvaluator(
+        {
+            "candidate": (
+                EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+                0.9,
+                1,
+                0.1,
+            )
+        },
+        batch_error=RuntimeError("programming failure"),
+    )
+
+    with pytest.raises(RuntimeError, match="programming failure"):
+        SemanticEvidenceReranker(
+            evaluator=evaluator,
+            budget=generous_budget(),
+        ).rerank(
+            question="Question",
+            objective="Objective",
+            shortlist=[candidate],
+        )
+
+    assert evaluator.batch_calls == 1
+    assert evaluator.single_calls == 0

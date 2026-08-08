@@ -6,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.evidence_relevance_judgment import (
+    EvidenceRelevanceBatchItemJudgment,
+    EvidenceRelevanceBatchJudgment,
     EvidenceRelevanceJudgment,
     EvidenceRelevanceLevel,
 )
@@ -154,3 +156,38 @@ def test_model_is_frozen() -> None:
 
     with pytest.raises(ValidationError):
         value.relevance_score = 0.9
+
+
+
+def test_batch_judgment_rejects_blank_item_id() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="item_id must not be blank",
+    ):
+        EvidenceRelevanceBatchJudgment(
+            items=[
+                EvidenceRelevanceBatchItemJudgment(
+                    item_id=" ",
+                    judgment=judgment(),
+                )
+            ]
+        )
+
+
+def test_batch_judgment_rejects_duplicate_ids_case_insensitively() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="batch item IDs must be unique",
+    ):
+        EvidenceRelevanceBatchJudgment(
+            items=[
+                EvidenceRelevanceBatchItemJudgment(
+                    item_id="item-001",
+                    judgment=judgment(),
+                ),
+                EvidenceRelevanceBatchItemJudgment(
+                    item_id="ITEM-001",
+                    judgment=judgment(),
+                ),
+            ]
+        )

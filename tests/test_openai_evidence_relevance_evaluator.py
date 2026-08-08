@@ -14,10 +14,13 @@ from app.exceptions import (
     StructuredResponseStatusError,
 )
 from app.research.openai_evidence_relevance_evaluator import (
+    EVIDENCE_RELEVANCE_BATCH_INSTRUCTIONS,
     EVIDENCE_RELEVANCE_INSTRUCTIONS,
     OpenAIEvidenceRelevanceEvaluator,
 )
 from app.schemas.evidence_relevance_judgment import (
+    EvidenceRelevanceBatchItemJudgment,
+    EvidenceRelevanceBatchJudgment,
     EvidenceRelevanceJudgment,
     EvidenceRelevanceLevel,
 )
@@ -301,3 +304,126 @@ def test_prompt_v1_1_separates_control_inputs_from_enforcement() -> None:
     assert "directly_relevant control" in instructions
     assert "allow, deny, block, stop, restrict" in instructions
     assert "necessary mechanism step is not automatically" in instructions
+
+
+def batch_judgment(
+    *item_ids: str,
+) -> EvidenceRelevanceBatchJudgment:
+    return EvidenceRelevanceBatchJudgment(
+        items=[
+            EvidenceRelevanceBatchItemJudgment(
+                item_id=item_id,
+                judgment=direct_judgment(),
+            )
+            for item_id in item_ids
+        ]
+    )
+
+
+def test_batch_evaluator_uses_one_structured_request() -> None:
+    evaluator, client = evaluator_for(
+        FakeResponse(
+            output_parsed=batch_judgment(
+                "item-001",
+                "item-002",
+            )
+        )
+    )
+
+    result = evaluator.evaluate_batch(
+        question="How does tool calling work?",
+        objective="Explain the mechanism.",
+        evidence_items=[
+            ("item-001", "First passage."),
+            ("item-002", "Second passage."),
+        ],
+    )
+
+    assert list(result.judgments) == ["item-001", "item-002"]
+    assert len(client.responses.calls) == 1
+    call = client.responses.calls[0]
+    assert (
+        call["instructions"]
+        == EVIDENCE_RELEVANCE_BATCH_INSTRUCTIONS
+    )
+    assert call["text_format"] is EvidenceRelevanceBatchJudgment
+    model_input = str(call["input"])
+    assert '"item_id": "item-001"' in model_input
+    assert '"item_id": "item-002"' in model_input
+    assert "document_id" not in model_input
+    assert "source_id" not in model_input
+
+
+def test_batch_evaluator_maps_reordered_output_by_item_id() -> None:
+    evaluator, _ = evaluator_for(
+        FakeResponse(
+            output_parsed=batch_judgment(
+                "item-002",
+                "item-001",
+            )
+        )
+    )
+
+    result = evaluator.evaluate_batch(
+        question="Question?",
+        objective="Objective.",
+        evidence_items=[
+            ("item-001", "First."),
+            ("item-002", "Second."),
+        ],
+    )
+
+    assert set(result.judgments) == {"item-001", "item-002"}
+
+
+@pytest.mark.parametrize(
+    "returned_ids",
+    [
+        ("item-001",),
+        ("item-001", "item-003"),
+    ],
+)
+def test_batch_evaluator_rejects_mismatched_item_ids(
+    returned_ids: tuple[str, ...],
+) -> None:
+    evaluator, _ = evaluator_for(
+        FakeResponse(
+            output_parsed=batch_judgment(*returned_ids)
+        )
+    )
+
+    with pytest.raises(
+        StructuredResponseParseError,
+        match="item IDs did not match",
+    ):
+        evaluator.evaluate_batch(
+            question="Question?",
+            objective="Objective.",
+            evidence_items=[
+                ("item-001", "First."),
+                ("item-002", "Second."),
+            ],
+        )
+
+
+def test_batch_evaluator_rejects_duplicate_input_ids() -> None:
+    evaluator, client = evaluator_for(
+        FakeResponse(
+            output_parsed=batch_judgment("item-001")
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="batch item IDs must be unique",
+    ):
+        evaluator.evaluate_batch(
+            question="Question?",
+            objective="Objective.",
+            evidence_items=[
+                ("item-001", "First."),
+                ("ITEM-001", "Second."),
+            ],
+        )
+
+    assert client.responses.calls == []
