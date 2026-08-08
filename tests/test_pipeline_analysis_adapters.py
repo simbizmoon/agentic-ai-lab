@@ -184,6 +184,45 @@ def test_evidence_adapter_skips_failed_documents() -> None:
     assert evidence_set.evidence[0].source_id == "source-001"
 
 
+
+class UsageStubEvidenceExtractor(StubEvidenceExtractor):
+    def extract(self, source_document):
+        result = super().extract(source_document)
+        return result.model_copy(
+            update={
+                'metadata': {
+                    **result.metadata,
+                    'semantic_budget_attempts': '2',
+                    'semantic_budget_recorded_tokens': '100',
+                    'semantic_budget_elapsed_seconds': '1.5',
+                }
+            }
+        )
+
+
+def test_evidence_adapter_accumulates_usage_until_reset() -> None:
+    adapter = PipelineEvidenceExtractorAdapter(
+        UsageStubEvidenceExtractor()
+    )
+    first = ResearchSourceDocumentSet(
+        request_id='request-001',
+        documents=[document()],
+    )
+    second = ResearchSourceDocumentSet(
+        request_id='request-001',
+        documents=[document(source_id='source-002', query_id='query-002')],
+    )
+    adapter.extract(first)
+    adapter.extract(second)
+    assert adapter.last_usage.attempts == 4
+    assert adapter.last_usage.recorded_tokens == 200
+    assert adapter.last_usage.elapsed_seconds == 3.0
+    adapter.reset_usage()
+    assert adapter.last_usage.attempts == 0
+    assert adapter.last_usage.recorded_tokens == 0
+    assert adapter.last_usage.elapsed_seconds == 0.0
+
+
 def test_claim_builder_creates_traceable_supported_claim() -> None:
     document_set = ResearchSourceDocumentSet(
         request_id="request-001",

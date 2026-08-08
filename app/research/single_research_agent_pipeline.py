@@ -316,6 +316,9 @@ class SingleResearchAgentPipeline:
                 "source reading produced no readable documents"
             )
 
+        self._reset_component_usage(
+            self._evidence_extractor
+        )
         evidence_started_at = time.perf_counter()
         (
             document_set,
@@ -330,10 +333,6 @@ class SingleResearchAgentPipeline:
         )
 
         round_1_evidence_extraction_elapsed_seconds = max(0.0, time.perf_counter() - evidence_started_at)
-        round_1_evidence_semantic = self._component_usage_metrics(
-            self._evidence_extractor
-        )
-
         replanning_metadata: dict[str, str] = {}
         supplemental_search_blocked_by_budget = False
 
@@ -421,6 +420,10 @@ class SingleResearchAgentPipeline:
                         )
                     )
 
+                    supplemental_evidence_started_at = (
+                        time.perf_counter()
+                    )
+
                     (
                         document_set,
                         evidence_set,
@@ -433,6 +436,14 @@ class SingleResearchAgentPipeline:
                         maximum_sources=(
                             request.maximum_sources
                         ),
+                    )
+
+                    round_1_evidence_extraction_elapsed_seconds += (
+                        max(
+                            0.0,
+                            time.perf_counter()
+                            - supplemental_evidence_started_at,
+                        )
                     )
 
             replanning_metadata = {
@@ -457,6 +468,10 @@ class SingleResearchAgentPipeline:
                     ).casefold()
                 ),
             }
+
+        round_1_evidence_semantic = self._component_usage_metrics(
+            self._evidence_extractor
+        )
 
         if not document_set.successful_documents():
             raise ResearchPipelineError(
@@ -619,6 +634,9 @@ class SingleResearchAgentPipeline:
                         initial=read_document_set,
                         supplemental=coverage_document_set,
                     )
+                    self._reset_component_usage(
+                        self._evidence_extractor
+                    )
                     coverage_evidence_started_at = time.perf_counter()
                     (
                         candidate_document_set,
@@ -644,6 +662,11 @@ class SingleResearchAgentPipeline:
                     ] = str(len(new_evidence_ids))
 
                     if new_evidence_ids:
+                        previous_evidence_set = evidence_set
+                        previous_claim_set = claim_set
+                        previous_citation_verifications = citation_verifications
+                        previous_claim_relevance_evaluations = claim_relevance_evaluations
+
                         read_document_set = merged_read_document_set
                         document_set = candidate_document_set
                         evidence_set = candidate_evidence_set
@@ -651,7 +674,116 @@ class SingleResearchAgentPipeline:
                         evidence_attempted_document_count = candidate_attempted_count
                         no_evidence_document_count = candidate_no_evidence_count
 
-                        claim_set = self._claim_builder.build(evidence_set)
+                        candidate_evidence_by_id = {
+                            item.evidence_id.strip().casefold(): item
+                            for item in evidence_set.evidence
+                        }
+                        previous_evidence_reusable = all(
+                            candidate_evidence_by_id.get(
+                                item.evidence_id.strip().casefold()
+                            ) == item
+                            for item in previous_evidence_set.evidence
+                        )
+                        incremental_build = getattr(
+                            self._claim_builder,
+                            "build_incremental",
+                            None,
+                        )
+                        use_incremental = (
+                            previous_evidence_reusable
+                            and incremental_build is not None
+                        )
+                        coverage_replanning_metadata[
+                            "coverage_replanning_incremental_reuse"
+                        ] = str(use_incremental).casefold()
+
+                        if use_incremental:
+                            new_evidence = [
+                                item
+                                for item in evidence_set.ordered_evidence()
+                                if item.evidence_id.strip().casefold() in new_evidence_ids
+                            ]
+                            incremental_evidence_set = ResearchEvidenceSet(
+                                request_id=evidence_set.request_id,
+                                document_set=document_set,
+                                evidence=new_evidence,
+                            )
+                            incremental_claim_set = incremental_build(
+                                incremental_evidence_set,
+                                start_position=len(previous_claim_set.claims) + 1,
+                            )
+                            coverage_claim_generation = self._component_usage_metrics(
+                                self._claim_builder
+                            )
+                            claim_set = ResearchClaimSet(
+                                request_id=evidence_set.request_id,
+                                evidence_set=evidence_set,
+                                claims=[
+                                    *previous_claim_set.claims,
+                                    *incremental_claim_set.claims,
+                                ],
+                            )
+                            coverage_replanning_metadata[
+                                "coverage_replanning_incremental_claim_count"
+                            ] = str(len(incremental_claim_set.claims))
+
+                            citation_verifications = list(
+                                previous_citation_verifications
+                            )
+                            if (
+                                self._semantic_citation_verifier is not None
+                                and incremental_claim_set.claims
+                            ):
+                                citation_verifications.extend(
+                                    self._semantic_citation_verifier.verify(
+                                        claim_set=incremental_claim_set,
+                                        evidence_set=evidence_set,
+                                    )
+                                )
+                            coverage_citation_verification = self._component_usage_metrics(
+                                self._semantic_citation_verifier
+                            )
+
+                            claim_relevance_evaluations = list(
+                                previous_claim_relevance_evaluations
+                            )
+                            if (
+                                self._claim_relevance_evaluator is not None
+                                and incremental_claim_set.claims
+                            ):
+                                claim_relevance_evaluations.extend(
+                                    self._claim_relevance_evaluator.evaluate(
+                                        request=request,
+                                        claim_set=incremental_claim_set,
+                                    )
+                                )
+                            coverage_claim_relevance = self._component_usage_metrics(
+                                self._claim_relevance_evaluator
+                            )
+                        else:
+                            claim_set = self._claim_builder.build(evidence_set)
+                            coverage_claim_generation = self._component_usage_metrics(
+                                self._claim_builder
+                            )
+                            citation_verifications = []
+                            if self._semantic_citation_verifier is not None:
+                                citation_verifications = self._semantic_citation_verifier.verify(
+                                    claim_set=claim_set,
+                                    evidence_set=evidence_set,
+                                )
+                            coverage_citation_verification = self._component_usage_metrics(
+                                self._semantic_citation_verifier
+                            )
+                            claim_relevance_evaluations = []
+                            if self._claim_relevance_evaluator is not None:
+                                claim_relevance_evaluations = self._claim_relevance_evaluator.evaluate(
+                                    request=request,
+                                    claim_set=claim_set,
+                                )
+                            coverage_claim_relevance = self._component_usage_metrics(
+                                self._claim_relevance_evaluator
+                            )
+
                         if not claim_set.claims:
                             raise ResearchPipelineError(
                                 "coverage replanning produced no claims"
@@ -659,30 +791,6 @@ class SingleResearchAgentPipeline:
                         coverage_replanning_metadata[
                             "coverage_replanning_claims_rebuilt"
                         ] = "true"
-
-                        citation_verifications = []
-                        if self._semantic_citation_verifier is not None:
-                            citation_verifications = self._semantic_citation_verifier.verify(
-                                claim_set=claim_set,
-                                evidence_set=evidence_set,
-                            )
-
-                        coverage_citation_verification = self._component_usage_metrics(self._semantic_citation_verifier)
-
-                        coverage_citation_verification = self._component_usage_metrics(self._semantic_citation_verifier)
-
-                        claim_relevance_evaluations = []
-                        if self._claim_relevance_evaluator is not None:
-                            claim_relevance_evaluations = (
-                                self._claim_relevance_evaluator.evaluate(
-                                    request=request,
-                                    claim_set=claim_set,
-                                )
-                            )
-
-                        coverage_claim_relevance = self._component_usage_metrics(self._claim_relevance_evaluator)
-
-                        coverage_claim_relevance = self._component_usage_metrics(self._claim_relevance_evaluator)
 
                         if self._answer_coverage_evaluator is not None:
                             answer_coverage_evaluation = (
@@ -791,6 +899,14 @@ class SingleResearchAgentPipeline:
             ),
             run_metrics=run_metrics,
         )
+
+    @staticmethod
+    def _reset_component_usage(component: object | None) -> None:
+        if component is None:
+            return
+        reset_usage = getattr(component, "reset_usage", None)
+        if reset_usage is not None:
+            reset_usage()
 
     @staticmethod
     def _component_usage_metrics(component: object | None) -> ResearchStageMetrics:

@@ -62,12 +62,41 @@ class GenerativePipelineClaimBuilder:
     ) -> ResearchClaimSet:
         """Generate one traceable draft claim per evidence item."""
 
+        return self._build(
+            evidence_set,
+            start_position=1,
+        )
+
+    def build_incremental(
+        self,
+        evidence_set: ResearchEvidenceSet,
+        *,
+        start_position: int,
+    ) -> ResearchClaimSet:
+        """Generate claims with IDs continuing after existing claims."""
+
+        if start_position < 1:
+            raise ValueError(
+                "start_position must be greater than zero"
+            )
+
+        return self._build(
+            evidence_set,
+            start_position=start_position,
+        )
+
+    def _build(
+        self,
+        evidence_set: ResearchEvidenceSet,
+        *,
+        start_position: int,
+    ) -> ResearchClaimSet:
         claims: list[ResearchClaim] = []
         usage = BudgetUsage()
 
         for position, evidence in enumerate(
             evidence_set.ordered_evidence(),
-            start=1,
+            start=start_position,
         ):
             if self._budget is not None:
                 try:

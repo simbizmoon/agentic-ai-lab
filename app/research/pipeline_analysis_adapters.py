@@ -50,8 +50,12 @@ class PipelineEvidenceExtractorAdapter:
 
     @property
     def last_usage(self) -> BudgetUsage:
-        """Return semantic LLM usage from the most recent extract call."""
+        """Return accumulated semantic LLM usage since the last reset."""
         return self._last_usage
+
+    def reset_usage(self) -> None:
+        """Reset accumulated semantic LLM usage."""
+        self._last_usage = BudgetUsage()
 
     def extract(
         self,
@@ -79,9 +83,15 @@ class PipelineEvidenceExtractorAdapter:
             elapsed_seconds += float(metadata.get("semantic_budget_elapsed_seconds", "0"))
 
         self._last_usage = BudgetUsage(
-            attempts=attempts,
-            recorded_tokens=recorded_tokens,
-            elapsed_seconds=elapsed_seconds,
+            attempts=self._last_usage.attempts + attempts,
+            recorded_tokens=(
+                self._last_usage.recorded_tokens
+                + recorded_tokens
+            ),
+            elapsed_seconds=(
+                self._last_usage.elapsed_seconds
+                + elapsed_seconds
+            ),
         )
 
         return ResearchEvidenceSet(

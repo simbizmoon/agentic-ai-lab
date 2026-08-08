@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from collections import deque
+from types import SimpleNamespace
 
 from app.research.coverage_gap_research_query_planner import (
     CoverageGapResearchQueryPlanner,
+)
+from app.research.generative_pipeline_claim_builder import (
+    GenerativePipelineClaimBuilder,
 )
 from app.research.pipeline_analysis_adapters import (
     DeterministicPipelineClaimBuilder,
@@ -96,6 +100,47 @@ class CoverageSequenceEvaluator:
             missing_aspects=missing,
             rationale="Deterministic test coverage judgment.",
         )
+
+
+
+class IncrementalClaimGenerator:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def generate(self, evidence):
+        self.calls.append(evidence.evidence_id)
+        return SimpleNamespace(
+            proposal=SimpleNamespace(
+                text=f"Generated claim for {evidence.evidence_id}.",
+                rationale="Deterministic incremental coverage test.",
+            ),
+            response_id=f"response-{evidence.evidence_id}",
+            request_id=None,
+            usage=None,
+            elapsed_seconds=0.0,
+        )
+
+
+class CitationVerificationSpy:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def verify(self, *, claim_set, evidence_set):
+        self.calls.append(
+            [claim.claim_id for claim in claim_set.claims]
+        )
+        return []
+
+
+class ClaimRelevanceSpy:
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def evaluate(self, *, request, claim_set):
+        self.calls.append(
+            [claim.claim_id for claim in claim_set.claims]
+        )
+        return []
 
 
 class CoverageSearch:
@@ -272,6 +317,72 @@ def coverage_pipeline(
     )
 
     return pipeline, searcher, reader, evaluator
+
+
+
+def test_coverage_replanning_reuses_downstream_results_incrementally() -> None:
+    searcher = CoverageSearch()
+    reader = CoverageReader()
+    coverage_evaluator = CoverageSequenceEvaluator(
+        [
+            AnswerCoverageLevel.PARTIALLY_COVERED,
+            AnswerCoverageLevel.FULLY_COVERED,
+        ]
+    )
+    generator = IncrementalClaimGenerator()
+    citation_spy = CitationVerificationSpy()
+    relevance_spy = ClaimRelevanceSpy()
+
+    pipeline = SingleResearchAgentPipeline(
+        request_validator=FakeRequestValidator(),
+        task_decomposer=FakeTaskDecomposer(),
+        query_planner=FakeQueryPlanner(),
+        source_searcher=searcher,
+        source_reader=reader,
+        evidence_extractor=BackfillEvidenceExtractor(
+            {"source-a", "source-d"}
+        ),
+        claim_builder=GenerativePipelineClaimBuilder(
+            generator=generator,
+        ),
+        source_quality_evaluator=FakeSourceQualityEvaluator(),
+        document_selector=OrderedBackfillSelector(),
+        semantic_citation_verifier=citation_spy,
+        claim_relevance_evaluator=relevance_spy,
+        answer_coverage_evaluator=coverage_evaluator,
+        coverage_gap_query_planner=CoverageGapResearchQueryPlanner(),
+    )
+
+    result = pipeline.run(coverage_request())
+
+    assert [
+        claim.claim_id
+        for claim in result.workspace.claim_set.claims
+    ] == [
+        "research-coverage-001-claim-001",
+        "research-coverage-001-claim-002",
+    ]
+    assert len(generator.calls) == 2
+    assert citation_spy.calls == [
+        ["research-coverage-001-claim-001"],
+        ["research-coverage-001-claim-002"],
+    ]
+    assert relevance_spy.calls == [
+        ["research-coverage-001-claim-001"],
+        ["research-coverage-001-claim-002"],
+    ]
+    assert coverage_evaluator.calls == [
+        ["research-coverage-001-claim-001"],
+        [
+            "research-coverage-001-claim-001",
+            "research-coverage-001-claim-002",
+        ],
+    ]
+
+    metadata = result.workspace.metadata
+    assert metadata["coverage_replanning_incremental_reuse"] == "true"
+    assert metadata["coverage_replanning_incremental_claim_count"] == "1"
+    assert metadata["coverage_replanning_claims_rebuilt"] == "true"
 
 
 def test_fully_covered_does_not_trigger_coverage_replanning() -> None:
