@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Protocol
 from uuid import uuid4
 
+from app.budget import BudgetUsage, record_attempt
 from app.research.openai_semantic_citation_evaluator import (
     SemanticCitationEvaluationResult,
 )
@@ -39,6 +40,7 @@ class SemanticCitationVerificationService:
         ) = None,
     ) -> None:
         self._evaluator = evaluator
+        self._last_usage = BudgetUsage()
         self._verification_id_factory = (
             verification_id_factory
             or (
@@ -48,6 +50,10 @@ class SemanticCitationVerificationService:
                 )
             )
         )
+
+    @property
+    def last_usage(self) -> BudgetUsage:
+        return self._last_usage
 
     def verify(
         self,
@@ -71,6 +77,7 @@ class SemanticCitationVerificationService:
         verifications: list[
             ResearchCitationVerification
         ] = []
+        usage = BudgetUsage()
 
         for claim in claim_set.claims:
             for citation in claim.ordered_citations():
@@ -99,6 +106,15 @@ class SemanticCitationVerificationService:
                         "returned blank value"
                     )
 
+                usage = record_attempt(
+                    usage=usage,
+                    recorded_tokens=(
+                        result.usage.total_tokens
+                        if result.usage is not None
+                        else 0
+                    ),
+                    elapsed_seconds=result.elapsed_seconds,
+                )
                 verifications.append(
                     ResearchCitationVerification(
                         verification_id=verification_id,
@@ -125,4 +141,5 @@ class SemanticCitationVerificationService:
                     )
                 )
 
+        self._last_usage = usage
         return verifications

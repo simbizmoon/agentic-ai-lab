@@ -46,6 +46,7 @@ class ClaimRelevanceEvaluationService:
         evaluation_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._evaluator = evaluator
+        self._last_usage = BudgetUsage()
         self._budget = budget
         self._evaluation_id_factory = (
             evaluation_id_factory
@@ -56,6 +57,10 @@ class ClaimRelevanceEvaluationService:
                 )
             )
         )
+
+    @property
+    def last_usage(self) -> BudgetUsage:
+        return self._last_usage
 
     @property
     def budget(self) -> ExecutionBudget | None:
@@ -149,4 +154,5 @@ class ClaimRelevanceEvaluationService:
                     elapsed_seconds=result.elapsed_seconds,
                 )
 
+        self._last_usage = usage
         return evaluations

@@ -23,6 +23,7 @@ from app.schemas.research_claim_relevance_evaluation import (
 from app.schemas.research_quality import (
     ResearchQualityEvaluation,
 )
+from app.schemas.research_run_metrics import ResearchRunMetrics
 from app.schemas.research_synthesis import (
     ResearchSynthesisReport,
 )
@@ -52,6 +53,7 @@ class SingleResearchPipelineResult(BaseModel):
     answer_coverage_evaluation: (
         ResearchAnswerCoverageEvaluation | None
     ) = None
+    run_metrics: ResearchRunMetrics | None = None
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:

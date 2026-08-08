@@ -154,4 +154,5 @@ def build_live_research_pipeline(
         coverage_gap_query_planner=(
             CoverageGapResearchQueryPlanner()
         ),
+        collect_run_metrics=True,
     )

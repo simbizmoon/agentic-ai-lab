@@ -105,3 +105,73 @@ def test_evaluator_validates_inputs(
             objective=objective,
             claims=claims,
         )
+
+
+class SequencedResponses:
+    def __init__(self, outcomes: list[object]) -> None:
+        self._outcomes = list(outcomes)
+        self.calls: list[dict] = []
+
+    def parse(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        outcome = self._outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class SequencedClient:
+    def __init__(self, outcomes: list[object]) -> None:
+        self.responses = SequencedResponses(outcomes)
+
+
+def invalid_fully_covered_error() -> Exception:
+    with pytest.raises(Exception) as captured:
+        AnswerCoverageJudgment.model_validate(
+            {
+                "coverage_level": "fully_covered",
+                "coverage_score": 0.9,
+                "covered_aspects": ["tool exposure"],
+                "missing_aspects": ["runtime detail"],
+                "rationale": "Contradictory structured output.",
+            }
+        )
+    return captured.value
+
+
+def test_evaluator_retries_once_after_schema_validation_failure() -> None:
+    client = SequencedClient(
+        [invalid_fully_covered_error(), completed_response()]
+    )
+    evaluator = OpenAIAnswerCoverageEvaluator(
+        client=client, model="test-model"
+    )
+    result = evaluator.evaluate(
+        question="How are tools used?",
+        objective="Explain exposure and runtime execution.",
+        claims=["Tools are exposed to the agent."],
+    )
+    assert result.attempts == 2
+    assert len(client.responses.calls) == 2
+    assert "previous structured answer failed" in (
+        client.responses.calls[1]["instructions"].casefold()
+    )
+
+
+def test_evaluator_stops_after_one_corrective_retry() -> None:
+    from app.exceptions import StructuredResponseValidationError
+
+    client = SequencedClient(
+        [invalid_fully_covered_error(), invalid_fully_covered_error()]
+    )
+    evaluator = OpenAIAnswerCoverageEvaluator(
+        client=client, model="test-model"
+    )
+    with pytest.raises(StructuredResponseValidationError) as captured:
+        evaluator.evaluate(
+            question="How are tools used?",
+            objective="Explain exposure and runtime execution.",
+            claims=["Tools are exposed to the agent."],
+        )
+    assert captured.value.attempts == 2
+    assert len(client.responses.calls) == 2

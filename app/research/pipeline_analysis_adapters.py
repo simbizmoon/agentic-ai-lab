@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.budget import BudgetUsage
 from app.research.research_evidence_extractor import (
     ResearchEvidenceExtractor,
 )
@@ -39,12 +40,18 @@ class PipelineEvidenceExtractorAdapter:
             validator or ResearchEvidenceExtractorValidator()
         )
         self._validator.validate_extractor(extractor)
+        self._last_usage = BudgetUsage()
 
     @property
     def extractor(self) -> ResearchEvidenceExtractor:
         """Return the wrapped evidence extractor."""
 
         return self._extractor
+
+    @property
+    def last_usage(self) -> BudgetUsage:
+        """Return semantic LLM usage from the most recent extract call."""
+        return self._last_usage
 
     def extract(
         self,
@@ -53,6 +60,9 @@ class PipelineEvidenceExtractorAdapter:
         """Extract and combine evidence from readable documents."""
 
         evidence: list[ResearchEvidence] = []
+        attempts = 0
+        recorded_tokens = 0
+        elapsed_seconds = 0.0
 
         for document in document_set.successful_documents():
             result = self._extractor.extract(document)
@@ -62,6 +72,17 @@ class PipelineEvidenceExtractorAdapter:
                 result=result,
             )
             evidence.extend(result.ordered_evidence())
+
+            metadata = result.metadata
+            attempts += int(metadata.get("semantic_budget_attempts", "0"))
+            recorded_tokens += int(metadata.get("semantic_budget_recorded_tokens", "0"))
+            elapsed_seconds += float(metadata.get("semantic_budget_elapsed_seconds", "0"))
+
+        self._last_usage = BudgetUsage(
+            attempts=attempts,
+            recorded_tokens=recorded_tokens,
+            elapsed_seconds=elapsed_seconds,
+        )
 
         return ResearchEvidenceSet(
             request_id=document_set.request_id,

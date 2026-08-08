@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Protocol
 from uuid import uuid4
 
+from app.budget import BudgetUsage
 from app.research.openai_answer_coverage_evaluator import (
     AnswerCoverageEvaluationResult,
 )
@@ -38,6 +39,7 @@ class AnswerCoverageEvaluationService:
         evaluation_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._evaluator = evaluator
+        self._last_usage = BudgetUsage()
         self._evaluation_id_factory = (
             evaluation_id_factory
             or (
@@ -47,6 +49,11 @@ class AnswerCoverageEvaluationService:
                 )
             )
         )
+
+    @property
+    def last_usage(self) -> BudgetUsage:
+        """Return usage recorded by the most recent evaluation."""
+        return self._last_usage
 
     def evaluate(
         self,
@@ -77,6 +84,12 @@ class AnswerCoverageEvaluationService:
             result.usage.total_tokens
             if result.usage is not None
             else 0
+        )
+
+        self._last_usage = BudgetUsage(
+            attempts=result.attempts,
+            recorded_tokens=recorded_tokens,
+            elapsed_seconds=result.elapsed_seconds,
         )
 
         return ResearchAnswerCoverageEvaluation(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Protocol
 
 from app.research.research_citation_verifier_executor import (
@@ -32,6 +33,7 @@ from app.schemas.research_quality import (
     ResearchQualityIssueSeverity,
 )
 from app.schemas.research_request import ResearchRequest
+from app.schemas.research_run_metrics import ResearchRunMetrics, ResearchStageMetrics
 from app.schemas.research_search_query import ResearchSearchQuerySet
 from app.schemas.research_source_candidate import ResearchSourceCandidateSet
 from app.schemas.research_source_document import (
@@ -191,6 +193,7 @@ class SingleResearchAgentPipeline:
         coverage_gap_query_planner: (
             CoverageGapResearchQueryPlannerProtocol | None
         ) = None,
+        collect_run_metrics: bool = False,
     ) -> None:
         self._request_validator = request_validator
         self._task_decomposer = task_decomposer
@@ -218,6 +221,7 @@ class SingleResearchAgentPipeline:
         self._coverage_gap_query_planner = (
             coverage_gap_query_planner
         )
+        self._collect_run_metrics = collect_run_metrics
 
     @property
     def semantic_citation_verifier(
@@ -283,6 +287,7 @@ class SingleResearchAgentPipeline:
         *,
         workspace_id: str | None = None,
     ) -> SingleResearchPipelineResult:
+        run_started_at = time.perf_counter()
         resolved_workspace_id = workspace_id or f"{request.request_id}-workspace"
         if not resolved_workspace_id.strip():
             raise ResearchPipelineError("workspace_id must not be blank")
@@ -303,12 +308,15 @@ class SingleResearchAgentPipeline:
         if not candidate_set.candidates:
             raise ResearchPipelineError("source search produced no candidates")
 
+        read_started_at = time.perf_counter()
         read_document_set = self._source_reader.read(candidate_set)
+        round_1_source_read_elapsed_seconds = max(0.0, time.perf_counter() - read_started_at)
         if not read_document_set.successful_documents():
             raise ResearchPipelineError(
                 "source reading produced no readable documents"
             )
 
+        evidence_started_at = time.perf_counter()
         (
             document_set,
             evidence_set,
@@ -319,6 +327,11 @@ class SingleResearchAgentPipeline:
             read_document_set,
             query_set=query_set,
             maximum_sources=request.maximum_sources,
+        )
+
+        round_1_evidence_extraction_elapsed_seconds = max(0.0, time.perf_counter() - evidence_started_at)
+        round_1_evidence_semantic = self._component_usage_metrics(
+            self._evidence_extractor
         )
 
         replanning_metadata: dict[str, str] = {}
@@ -455,6 +468,7 @@ class SingleResearchAgentPipeline:
             )
 
         claim_set = self._claim_builder.build(evidence_set)
+        round_1_claim_generation = self._component_usage_metrics(self._claim_builder)
         if not claim_set.claims:
             raise ResearchPipelineError("claim building produced no claims")
 
@@ -470,6 +484,8 @@ class SingleResearchAgentPipeline:
                 )
             )
 
+        round_1_citation_verification = self._component_usage_metrics(self._semantic_citation_verifier)
+
         claim_relevance_evaluations: list[
             ResearchClaimRelevanceEvaluation
         ] = []
@@ -482,6 +498,8 @@ class SingleResearchAgentPipeline:
                 )
             )
 
+        round_1_claim_relevance = self._component_usage_metrics(self._claim_relevance_evaluator)
+
         answer_coverage_evaluation: (
             ResearchAnswerCoverageEvaluation | None
         ) = None
@@ -493,6 +511,15 @@ class SingleResearchAgentPipeline:
                     claim_set=claim_set,
                 )
             )
+
+        round_1_answer_coverage = self._component_usage_metrics(self._answer_coverage_evaluator)
+        coverage_source_read_elapsed_seconds = 0.0
+        coverage_evidence_extraction_elapsed_seconds = 0.0
+        coverage_evidence_semantic = ResearchStageMetrics()
+        coverage_claim_generation = ResearchStageMetrics()
+        coverage_citation_verification = ResearchStageMetrics()
+        coverage_claim_relevance = ResearchStageMetrics()
+        coverage_answer_coverage = ResearchStageMetrics()
 
         coverage_replanning_metadata: dict[str, str] = {}
 
@@ -573,9 +600,11 @@ class SingleResearchAgentPipeline:
             )
 
             if novel_coverage_candidates.candidates:
+                coverage_read_started_at = time.perf_counter()
                 coverage_document_set = self._source_reader.read(
                     novel_coverage_candidates
                 )
+                coverage_source_read_elapsed_seconds = max(0.0, time.perf_counter() - coverage_read_started_at)
                 new_documents = coverage_document_set.successful_documents()
                 coverage_replanning_metadata[
                     "coverage_replanning_new_document_count"
@@ -590,6 +619,7 @@ class SingleResearchAgentPipeline:
                         initial=read_document_set,
                         supplemental=coverage_document_set,
                     )
+                    coverage_evidence_started_at = time.perf_counter()
                     (
                         candidate_document_set,
                         candidate_evidence_set,
@@ -600,6 +630,10 @@ class SingleResearchAgentPipeline:
                         merged_read_document_set,
                         query_set=query_set,
                         maximum_sources=request.maximum_sources,
+                    )
+                    coverage_evidence_extraction_elapsed_seconds = max(0.0, time.perf_counter() - coverage_evidence_started_at)
+                    coverage_evidence_semantic = self._component_usage_metrics(
+                        self._evidence_extractor
                     )
                     new_evidence_ids = {
                         item.evidence_id.strip().casefold()
@@ -633,6 +667,10 @@ class SingleResearchAgentPipeline:
                                 evidence_set=evidence_set,
                             )
 
+                        coverage_citation_verification = self._component_usage_metrics(self._semantic_citation_verifier)
+
+                        coverage_citation_verification = self._component_usage_metrics(self._semantic_citation_verifier)
+
                         claim_relevance_evaluations = []
                         if self._claim_relevance_evaluator is not None:
                             claim_relevance_evaluations = (
@@ -641,6 +679,10 @@ class SingleResearchAgentPipeline:
                                     claim_set=claim_set,
                                 )
                             )
+
+                        coverage_claim_relevance = self._component_usage_metrics(self._claim_relevance_evaluator)
+
+                        coverage_claim_relevance = self._component_usage_metrics(self._claim_relevance_evaluator)
 
                         if self._answer_coverage_evaluator is not None:
                             answer_coverage_evaluation = (
@@ -652,6 +694,7 @@ class SingleResearchAgentPipeline:
                             coverage_replanning_metadata[
                                 "coverage_final_level"
                             ] = answer_coverage_evaluation.coverage_level.value
+                            coverage_answer_coverage = self._component_usage_metrics(self._answer_coverage_evaluator)
 
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
@@ -697,6 +740,42 @@ class SingleResearchAgentPipeline:
                 actual_sources=report.source_count,
                 maximum_sources=request.maximum_sources,
             )
+        run_metrics = None
+        if self._collect_run_metrics:
+            run_metrics = ResearchRunMetrics(
+                total_elapsed_seconds=max(
+                    0.0,
+                    time.perf_counter() - run_started_at,
+                ),
+                **self._search_run_metric_values(),
+                round_1_source_read_elapsed_seconds=(
+                    round_1_source_read_elapsed_seconds
+                ),
+                round_1_evidence_extraction_elapsed_seconds=(
+                    round_1_evidence_extraction_elapsed_seconds
+                ),
+                round_1_evidence_semantic=round_1_evidence_semantic,
+                round_1_claim_generation=round_1_claim_generation,
+                round_1_citation_verification=(
+                    round_1_citation_verification
+                ),
+                round_1_claim_relevance=round_1_claim_relevance,
+                round_1_answer_coverage=round_1_answer_coverage,
+                coverage_source_read_elapsed_seconds=(
+                    coverage_source_read_elapsed_seconds
+                ),
+                coverage_evidence_extraction_elapsed_seconds=(
+                    coverage_evidence_extraction_elapsed_seconds
+                ),
+                coverage_evidence_semantic=coverage_evidence_semantic,
+                coverage_claim_generation=coverage_claim_generation,
+                coverage_citation_verification=(
+                    coverage_citation_verification
+                ),
+                coverage_claim_relevance=coverage_claim_relevance,
+                coverage_answer_coverage=coverage_answer_coverage,
+            )
+
         return SingleResearchPipelineResult(
             workspace=workspace,
             report=report,
@@ -710,7 +789,31 @@ class SingleResearchAgentPipeline:
             answer_coverage_evaluation=(
                 answer_coverage_evaluation
             ),
+            run_metrics=run_metrics,
         )
+
+    @staticmethod
+    def _component_usage_metrics(component: object | None) -> ResearchStageMetrics:
+        if component is None:
+            return ResearchStageMetrics()
+        usage = getattr(component, "last_usage", None)
+        if usage is None:
+            return ResearchStageMetrics()
+        return ResearchStageMetrics(
+            call_count=int(getattr(usage, "attempts", 0)),
+            recorded_tokens=int(getattr(usage, "recorded_tokens", 0)),
+            elapsed_seconds=float(getattr(usage, "elapsed_seconds", 0.0)),
+        )
+
+    def _search_run_metric_values(self) -> dict[str, object]:
+        usage = getattr(self._source_searcher, "search_usage", None)
+        if usage is None:
+            return {}
+        return {
+            "search_provider_calls": usage.provider_call_count,
+            "search_credits_used": usage.credit_used,
+            "search_elapsed_seconds": usage.latency_used_ms / 1000.0,
+        }
 
     def _search_usage_snapshot(
         self,

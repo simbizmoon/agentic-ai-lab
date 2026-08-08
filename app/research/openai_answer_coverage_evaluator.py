@@ -20,6 +20,19 @@ from app.schemas.answer_coverage_judgment import AnswerCoverageJudgment
 from app.services.structured_analysis import has_refusal
 from app.services.text_generation import TokenUsage, extract_token_usage
 
+ANSWER_COVERAGE_REPAIR_INSTRUCTIONS = """
+Your previous structured answer failed schema validation.
+
+Return a new answer using the same research question, objective, and claims.
+Do not add outside knowledge.
+
+Ensure the fields are internally consistent with the output schema.
+If coverage_level is fully_covered, missing_aspects MUST be [].
+Rationale must not be blank. Lists must not contain blank or duplicate values.
+Insufficient must not use coverage_score 1.0.
+Return only a valid structured answer.
+""".strip()
+
 ANSWER_COVERAGE_INSTRUCTIONS = """
 Evaluate only whether the supplied claim set, taken together, sufficiently
 covers the supplied research question and objective.
@@ -116,6 +129,7 @@ class AnswerCoverageEvaluationResult:
     request_id: str | None
     usage: TokenUsage | None
     elapsed_seconds: float
+    attempts: int = 1
 
 
 class OpenAIAnswerCoverageEvaluator:
@@ -171,30 +185,50 @@ class OpenAIAnswerCoverageEvaluator:
         )
 
         start_time = time.perf_counter()
+        attempts = 0
+        response = None
 
-        try:
-            response = self._client.responses.parse(
-                model=self._model,
-                instructions=ANSWER_COVERAGE_INSTRUCTIONS,
-                input=model_input,
-                text_format=AnswerCoverageJudgment,
-                store=False,
-            )
-        except ValidationError as error:
-            elapsed_seconds = max(
-                0.0,
-                time.perf_counter() - start_time,
-            )
-            raise StructuredResponseValidationError(
-                "answer coverage response failed schema validation",
-                elapsed_seconds=elapsed_seconds,
-                attempts=1,
-            ) from error
+        for instructions in (
+            ANSWER_COVERAGE_INSTRUCTIONS,
+            (
+                ANSWER_COVERAGE_INSTRUCTIONS
+                + "\n\n"
+                + ANSWER_COVERAGE_REPAIR_INSTRUCTIONS
+            ),
+        ):
+            attempts += 1
+            try:
+                response = self._client.responses.parse(
+                    model=self._model,
+                    instructions=instructions,
+                    input=model_input,
+                    text_format=AnswerCoverageJudgment,
+                    store=False,
+                )
+                break
+            except ValidationError as error:
+                if attempts >= 2:
+                    elapsed_seconds = max(
+                        0.0,
+                        time.perf_counter() - start_time,
+                    )
+                    raise StructuredResponseValidationError(
+                        "answer coverage response failed schema validation after corrective retry",
+                        elapsed_seconds=elapsed_seconds,
+                        attempts=attempts,
+                    ) from error
 
         elapsed_seconds = max(
             0.0,
             time.perf_counter() - start_time,
         )
+
+        if response is None:
+            raise StructuredResponseValidationError(
+                "answer coverage response was not produced",
+                elapsed_seconds=elapsed_seconds,
+                attempts=attempts,
+            )
 
         status = getattr(response, "status", None)
 
@@ -231,4 +265,5 @@ class OpenAIAnswerCoverageEvaluator:
             request_id=getattr(response, "_request_id", None),
             usage=extract_token_usage(response),
             elapsed_seconds=elapsed_seconds,
+            attempts=attempts,
         )
