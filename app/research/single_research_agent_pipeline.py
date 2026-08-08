@@ -1107,7 +1107,11 @@ class SingleResearchAgentPipeline:
     def _component_usage_metrics(component: object | None) -> ResearchStageMetrics:
         if component is None:
             return ResearchStageMetrics()
-        usage = getattr(component, "last_usage", None)
+        usage = getattr(
+            component,
+            "last_api_usage",
+            getattr(component, "last_usage", None),
+        )
         if usage is None:
             return ResearchStageMetrics()
         return ResearchStageMetrics(

@@ -7,10 +7,12 @@ from collections.abc import Iterable
 import pytest
 
 from app.budget import ExecutionBudget
+from app.exceptions import StructuredResponseParseError
 from app.research.claim_relevance_evaluation_service import (
     ClaimRelevanceEvaluationService,
 )
 from app.research.openai_claim_relevance_evaluator import (
+    ClaimRelevanceBatchEvaluationResult,
     ClaimRelevanceEvaluationResult,
 )
 from app.schemas.claim_relevance_judgment import (
@@ -373,3 +375,234 @@ def test_empty_claim_set_returns_empty_evaluations(
 
     assert values == []
     assert evaluator.calls == []
+
+class BatchEvaluator(FakeEvaluator):
+    def __init__(
+        self,
+        *,
+        judgments: dict[str, ClaimRelevanceJudgment],
+        batch_tokens: int = 30,
+        batch_elapsed: float = 0.5,
+        batch_error: Exception | None = None,
+    ) -> None:
+        super().__init__([])
+        self.judgments = judgments
+        self.batch_tokens = batch_tokens
+        self.batch_elapsed = batch_elapsed
+        self.batch_error = batch_error
+        self.batch_calls: list[list[tuple[str, str]]] = []
+
+    def evaluate_batch(
+        self,
+        *,
+        question: str,
+        objective: str,
+        claim_items: list[tuple[str, str]],
+    ) -> ClaimRelevanceBatchEvaluationResult:
+        del question, objective
+        self.batch_calls.append(list(claim_items))
+        if self.batch_error is not None:
+            raise self.batch_error
+        return ClaimRelevanceBatchEvaluationResult(
+            judgments={
+                item_id: self.judgments[claim_text]
+                for item_id, claim_text in reversed(claim_items)
+            },
+            response_id="resp-batch",
+            request_id="req-batch",
+            usage=TokenUsage(
+                input_tokens=self.batch_tokens,
+                cached_input_tokens=0,
+                output_tokens=0,
+                reasoning_tokens=0,
+                total_tokens=self.batch_tokens,
+            ),
+            elapsed_seconds=self.batch_elapsed,
+        )
+
+    def evaluate(
+        self,
+        *,
+        question: str,
+        objective: str,
+        claim_text: str,
+    ) -> ClaimRelevanceEvaluationResult:
+        self.calls.append(
+            (question, objective, claim_text)
+        )
+        return ClaimRelevanceEvaluationResult(
+            judgment=self.judgments[claim_text],
+            response_id=f"resp-{claim_text}",
+            request_id=None,
+            usage=TokenUsage(
+                input_tokens=1,
+                cached_input_tokens=0,
+                output_tokens=0,
+                reasoning_tokens=0,
+                total_tokens=1,
+            ),
+            elapsed_seconds=0.1,
+        )
+
+
+def claim_judgment() -> ClaimRelevanceJudgment:
+    return ClaimRelevanceJudgment(
+        relevance_level=ClaimRelevanceLevel.DIRECTLY_RELEVANT,
+        relevance_score=0.9,
+        rationale="Controlled batch judgment.",
+        issues=[],
+    )
+
+
+def test_batch_service_tracks_logical_items_and_physical_calls(
+) -> None:
+    evaluator = BatchEvaluator(
+        judgments={
+            "Claim text 1.": claim_judgment(),
+            "Claim text 2.": claim_judgment(),
+            "Claim text 3.": claim_judgment(),
+        }
+    )
+    service = ClaimRelevanceEvaluationService(
+        evaluator=evaluator,
+        budget=ExecutionBudget(
+            max_attempts=8,
+            max_recorded_tokens=8_000,
+            max_elapsed_seconds=60.0,
+        ),
+        evaluation_id_factory=id_factory(
+            ["eval-1", "eval-2", "eval-3"]
+        ),
+    )
+
+    values = service.evaluate(
+        request=request(),
+        claim_set=claim_set(claim_count=3),
+    )
+
+    assert len(values) == 3
+    assert len(evaluator.batch_calls) == 1
+    assert evaluator.calls == []
+    assert service.last_usage.attempts == 3
+    assert service.last_api_usage.attempts == 1
+    assert service.last_api_usage.recorded_tokens == 30
+
+
+def test_batch_service_max_attempts_caps_items_not_api_calls(
+) -> None:
+    evaluator = BatchEvaluator(
+        judgments={
+            "Claim text 1.": claim_judgment(),
+            "Claim text 2.": claim_judgment(),
+            "Claim text 3.": claim_judgment(),
+        }
+    )
+    service = ClaimRelevanceEvaluationService(
+        evaluator=evaluator,
+        budget=ExecutionBudget(
+            max_attempts=2,
+            max_recorded_tokens=8_000,
+            max_elapsed_seconds=60.0,
+        ),
+        evaluation_id_factory=id_factory(
+            ["eval-1", "eval-2"]
+        ),
+    )
+
+    values = service.evaluate(
+        request=request(),
+        claim_set=claim_set(claim_count=3),
+    )
+
+    assert [value.claim_id for value in values] == [
+        "claim-1",
+        "claim-2",
+    ]
+    assert len(evaluator.batch_calls[0]) == 2
+    assert service.last_usage.attempts == 2
+    assert service.last_api_usage.attempts == 1
+
+
+def test_batch_structured_failure_falls_back_and_counts_calls(
+) -> None:
+    evaluator = BatchEvaluator(
+        judgments={
+            "Claim text 1.": claim_judgment(),
+            "Claim text 2.": claim_judgment(),
+        },
+        batch_error=StructuredResponseParseError("bad batch"),
+    )
+    service = ClaimRelevanceEvaluationService(
+        evaluator=evaluator,
+        budget=ExecutionBudget(
+            max_attempts=2,
+            max_recorded_tokens=8_000,
+            max_elapsed_seconds=60.0,
+        ),
+        evaluation_id_factory=id_factory(
+            ["eval-1", "eval-2"]
+        ),
+    )
+
+    values = service.evaluate(
+        request=request(),
+        claim_set=claim_set(claim_count=2),
+    )
+
+    assert len(values) == 2
+    assert len(evaluator.batch_calls) == 1
+    assert len(evaluator.calls) == 2
+    assert service.last_usage.attempts == 2
+    assert service.last_api_usage.attempts == 3
+
+
+def test_batch_programming_error_propagates() -> None:
+    evaluator = BatchEvaluator(
+        judgments={"Claim text 1.": claim_judgment()},
+        batch_error=RuntimeError("programming failure"),
+    )
+    service = ClaimRelevanceEvaluationService(
+        evaluator=evaluator,
+        evaluation_id_factory=lambda: "eval-1",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="programming failure",
+    ):
+        service.evaluate(
+            request=request(),
+            claim_set=claim_set(claim_count=1),
+        )
+
+
+def test_batch_success_keeps_crossing_resource_usage() -> None:
+    evaluator = BatchEvaluator(
+        judgments={
+            "Claim text 1.": claim_judgment(),
+            "Claim text 2.": claim_judgment(),
+        },
+        batch_tokens=11,
+        batch_elapsed=1.1,
+    )
+    service = ClaimRelevanceEvaluationService(
+        evaluator=evaluator,
+        budget=ExecutionBudget(
+            max_attempts=8,
+            max_recorded_tokens=10,
+            max_elapsed_seconds=1.0,
+        ),
+        evaluation_id_factory=id_factory(
+            ["eval-1", "eval-2"]
+        ),
+    )
+
+    values = service.evaluate(
+        request=request(),
+        claim_set=claim_set(claim_count=2),
+    )
+
+    assert len(values) == 2
+    assert service.last_usage.attempts == 2
+    assert service.last_usage.recorded_tokens == 11
+    assert service.last_api_usage.attempts == 1

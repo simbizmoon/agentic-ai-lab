@@ -6,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.claim_relevance_judgment import (
+    ClaimRelevanceBatchItemJudgment,
+    ClaimRelevanceBatchJudgment,
     ClaimRelevanceJudgment,
     ClaimRelevanceLevel,
 )
@@ -128,4 +130,50 @@ def test_judgment_rejects_impossible_score_extremes(
             relevance_score=score,
             rationale="Extreme score contradicts the category.",
             issues=[],
+        )
+
+def test_batch_judgment_rejects_blank_item_id() -> None:
+    judgment = ClaimRelevanceJudgment(
+        relevance_level=ClaimRelevanceLevel.PARTIALLY_RELEVANT,
+        relevance_score=0.5,
+        rationale="Useful context.",
+        issues=[],
+    )
+    with pytest.raises(
+        ValidationError,
+        match="item_id must not be blank",
+    ):
+        ClaimRelevanceBatchJudgment(
+            items=[
+                ClaimRelevanceBatchItemJudgment(
+                    item_id=" ",
+                    judgment=judgment,
+                )
+            ]
+        )
+
+
+def test_batch_judgment_rejects_duplicate_ids_case_insensitively(
+) -> None:
+    judgment = ClaimRelevanceJudgment(
+        relevance_level=ClaimRelevanceLevel.PARTIALLY_RELEVANT,
+        relevance_score=0.5,
+        rationale="Useful context.",
+        issues=[],
+    )
+    with pytest.raises(
+        ValidationError,
+        match="batch item IDs must be unique",
+    ):
+        ClaimRelevanceBatchJudgment(
+            items=[
+                ClaimRelevanceBatchItemJudgment(
+                    item_id="item-001",
+                    judgment=judgment,
+                ),
+                ClaimRelevanceBatchItemJudgment(
+                    item_id="ITEM-001",
+                    judgment=judgment,
+                ),
+            ]
         )

@@ -13,10 +13,13 @@ from app.exceptions import (
     StructuredResponseStatusError,
 )
 from app.research.openai_claim_relevance_evaluator import (
+    CLAIM_RELEVANCE_BATCH_INSTRUCTIONS,
     CLAIM_RELEVANCE_INSTRUCTIONS,
     OpenAIClaimRelevanceEvaluator,
 )
 from app.schemas.claim_relevance_judgment import (
+    ClaimRelevanceBatchItemJudgment,
+    ClaimRelevanceBatchJudgment,
     ClaimRelevanceJudgment,
     ClaimRelevanceLevel,
 )
@@ -264,3 +267,107 @@ def test_prompt_v2_1_refines_partial_boundary() -> None:
     assert "meaningful comparison baseline" in instructions
     assert "observability alone is not the control" in instructions
     assert "materially required to implement or evaluate" in instructions
+
+def batch_judgment(
+    *item_ids: str,
+) -> ClaimRelevanceBatchJudgment:
+    return ClaimRelevanceBatchJudgment(
+        items=[
+            ClaimRelevanceBatchItemJudgment(
+                item_id=item_id,
+                judgment=direct_judgment(),
+            )
+            for item_id in item_ids
+        ]
+    )
+
+
+def test_batch_evaluator_uses_one_structured_request() -> None:
+    evaluator, client = evaluator_for(
+        completed_response(
+            batch_judgment(
+                "item-001",
+                "item-002",
+                "item-003",
+            )
+        )
+    )
+
+    result = evaluator.evaluate_batch(
+        question="Question?",
+        objective="Objective.",
+        claim_items=[
+            ("item-001", "Claim one."),
+            ("item-002", "Claim two."),
+            ("item-003", "Claim three."),
+        ],
+    )
+
+    assert len(client.responses.calls) == 1
+    assert set(result.judgments) == {
+        "item-001",
+        "item-002",
+        "item-003",
+    }
+    call = client.responses.calls[0]
+    assert (
+        call["instructions"]
+        == CLAIM_RELEVANCE_BATCH_INSTRUCTIONS
+    )
+    assert call["text_format"] is ClaimRelevanceBatchJudgment
+    model_input = str(call["input"])
+    assert '"item_id": "item-001"' in model_input
+    assert '"claim": "Claim one."' in model_input
+    assert "evidence" not in model_input.casefold()
+
+
+def test_batch_evaluator_maps_reordered_output_by_item_id() -> None:
+    evaluator, _ = evaluator_for(
+        completed_response(
+            batch_judgment(
+                "item-003",
+                "item-001",
+                "item-002",
+            )
+        )
+    )
+
+    result = evaluator.evaluate_batch(
+        question="Question?",
+        objective="Objective.",
+        claim_items=[
+            ("item-001", "Claim one."),
+            ("item-002", "Claim two."),
+            ("item-003", "Claim three."),
+        ],
+    )
+
+    assert set(result.judgments) == {
+        "item-001",
+        "item-002",
+        "item-003",
+    }
+
+
+def test_batch_evaluator_rejects_mismatched_item_ids() -> None:
+    evaluator, _ = evaluator_for(
+        completed_response(
+            batch_judgment(
+                "item-001",
+                "item-003",
+            )
+        )
+    )
+
+    with pytest.raises(
+        StructuredResponseParseError,
+        match="item IDs did not match",
+    ):
+        evaluator.evaluate_batch(
+            question="Question?",
+            objective="Objective.",
+            claim_items=[
+                ("item-001", "Claim one."),
+                ("item-002", "Claim two."),
+            ],
+        )

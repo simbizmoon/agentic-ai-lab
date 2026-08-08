@@ -17,6 +17,7 @@ from app.exceptions import (
     StructuredResponseValidationError,
 )
 from app.schemas.claim_relevance_judgment import (
+    ClaimRelevanceBatchJudgment,
     ClaimRelevanceJudgment,
 )
 from app.services.structured_analysis import has_refusal
@@ -125,6 +126,18 @@ Explain the judgment briefly in rationale.
 List specific relevance problems in issues.
 """.strip()
 
+CLAIM_RELEVANCE_BATCH_INSTRUCTIONS = (
+    CLAIM_RELEVANCE_INSTRUCTIONS
+    + """
+
+Batch evaluation rules:
+- Evaluate every supplied claim item independently under the same policy.
+- Return exactly one result for every supplied item_id.
+- Copy each supplied item_id exactly; do not invent, omit, or duplicate IDs.
+- Do not let one claim item change the judgment of another item.
+""".rstrip()
+)
+
 
 class ResponsesParseResource(Protocol):
     """Subset of Responses API required by this evaluator."""
@@ -147,6 +160,17 @@ class ClaimRelevanceEvaluationResult:
     """One claim relevance evaluation with execution metadata."""
 
     judgment: ClaimRelevanceJudgment
+    response_id: str
+    request_id: str | None
+    usage: TokenUsage | None
+    elapsed_seconds: float
+
+
+@dataclass(frozen=True)
+class ClaimRelevanceBatchEvaluationResult:
+    """One batched claim relevance evaluation with shared metadata."""
+
+    judgments: dict[str, ClaimRelevanceJudgment]
     response_id: str
     request_id: str | None
     usage: TokenUsage | None
@@ -267,6 +291,134 @@ class OpenAIClaimRelevanceEvaluator:
 
         return ClaimRelevanceEvaluationResult(
             judgment=judgment,
+            response_id=str(response.id),
+            request_id=getattr(
+                response,
+                "_request_id",
+                None,
+            ),
+            usage=extract_token_usage(response),
+            elapsed_seconds=elapsed_seconds,
+        )
+    def evaluate_batch(
+        self,
+        *,
+        question: str,
+        objective: str,
+        claim_items: list[tuple[str, str]],
+    ) -> ClaimRelevanceBatchEvaluationResult:
+        """Evaluate multiple claims in one structured API request."""
+
+        cleaned_question = question.strip()
+        cleaned_objective = objective.strip()
+
+        if not cleaned_question:
+            raise ValueError("question must not be blank")
+        if not cleaned_objective:
+            raise ValueError("objective must not be blank")
+        if not claim_items:
+            raise ValueError("claim_items must not be empty")
+
+        normalized_ids: list[str] = []
+        cleaned_items: list[dict[str, str]] = []
+        for item_id, claim_text in claim_items:
+            cleaned_id = item_id.strip()
+            cleaned_claim = claim_text.strip()
+            if not cleaned_id:
+                raise ValueError("batch item_id must not be blank")
+            if not cleaned_claim:
+                raise ValueError("batch claim text must not be blank")
+            normalized_ids.append(cleaned_id.casefold())
+            cleaned_items.append(
+                {"item_id": cleaned_id, "claim": cleaned_claim}
+            )
+
+        if len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("batch item IDs must be unique")
+
+        model_input = json.dumps(
+            {
+                "question": cleaned_question,
+                "objective": cleaned_objective,
+                "claim_items": cleaned_items,
+            },
+            ensure_ascii=False,
+        )
+
+        start_time = time.perf_counter()
+        try:
+            response = self._client.responses.parse(
+                model=self._model,
+                instructions=CLAIM_RELEVANCE_BATCH_INSTRUCTIONS,
+                input=model_input,
+                text_format=ClaimRelevanceBatchJudgment,
+                store=False,
+            )
+        except ValidationError as error:
+            elapsed_seconds = max(
+                0.0,
+                time.perf_counter() - start_time,
+            )
+            raise StructuredResponseValidationError(
+                "batched claim relevance response failed schema validation",
+                elapsed_seconds=elapsed_seconds,
+                attempts=1,
+            ) from error
+
+        elapsed_seconds = max(
+            0.0,
+            time.perf_counter() - start_time,
+        )
+        status = getattr(response, "status", None)
+
+        if status == "incomplete":
+            raise StructuredResponseIncompleteError(
+                "batched claim relevance response was incomplete"
+            )
+        if status != "completed":
+            raise StructuredResponseStatusError(
+                "batched claim relevance response was not completed"
+            )
+        if has_refusal(response):
+            raise StructuredResponseRefusalError(
+                "OpenAI refused batched claim relevance evaluation"
+            )
+
+        parsed = getattr(response, "output_parsed", None)
+        if parsed is None:
+            raise StructuredResponseParseError(
+                "batched claim relevance response was empty"
+            )
+        if not isinstance(parsed, ClaimRelevanceBatchJudgment):
+            raise StructuredResponseParseError(
+                "batched claim relevance response has invalid type"
+            )
+
+        expected_ids = [item["item_id"] for item in cleaned_items]
+        expected_by_folded = {
+            item_id.casefold(): item_id
+            for item_id in expected_ids
+        }
+        returned_ids = [item.item_id for item in parsed.items]
+        returned_folded = [
+            item_id.casefold()
+            for item_id in returned_ids
+        ]
+        if (
+            len(returned_ids) != len(expected_ids)
+            or len(set(returned_folded)) != len(returned_folded)
+            or set(returned_folded) != set(expected_by_folded)
+        ):
+            raise StructuredResponseParseError(
+                "batched claim relevance item IDs did not match the request"
+            )
+
+        judgments = {
+            expected_by_folded[item.item_id.casefold()]: item.judgment
+            for item in parsed.items
+        }
+        return ClaimRelevanceBatchEvaluationResult(
+            judgments=judgments,
             response_id=str(response.id),
             request_id=getattr(
                 response,
