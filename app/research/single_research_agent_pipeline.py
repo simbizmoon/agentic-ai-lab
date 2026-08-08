@@ -557,6 +557,7 @@ class SingleResearchAgentPipeline:
                 "coverage_replanning_adopted_novel_source_count": "0",
                 "coverage_replanning_adopted_novel_evidence_count": "0",
                 "coverage_replanning_substituted_source_count": "0",
+                "coverage_replanning_substitution_decision": "not_attempted",
                 "coverage_replanning_new_evidence_count": "0",
                 "coverage_replanning_claims_rebuilt": "false",
                 "coverage_replanning_blocked_by_budget": "false",
@@ -784,10 +785,27 @@ class SingleResearchAgentPipeline:
                     ] = str(len(new_evidence_ids))
 
                     if new_evidence_ids:
+                        previous_document_set = document_set
                         previous_evidence_set = evidence_set
+                        previous_source_quality_evaluations = list(
+                            source_quality_evaluations
+                        )
                         previous_claim_set = claim_set
-                        previous_citation_verifications = citation_verifications
-                        previous_claim_relevance_evaluations = claim_relevance_evaluations
+                        previous_citation_verifications = list(
+                            citation_verifications
+                        )
+                        previous_claim_relevance_evaluations = list(
+                            claim_relevance_evaluations
+                        )
+                        previous_answer_coverage_evaluation = (
+                            answer_coverage_evaluation
+                        )
+                        previous_evidence_attempted_document_count = (
+                            evidence_attempted_document_count
+                        )
+                        previous_no_evidence_document_count = (
+                            no_evidence_document_count
+                        )
 
                         read_document_set = merged_read_document_set
                         document_set = candidate_document_set
@@ -915,16 +933,71 @@ class SingleResearchAgentPipeline:
                         ] = "true"
 
                         if self._answer_coverage_evaluator is not None:
-                            answer_coverage_evaluation = (
+                            candidate_answer_coverage_evaluation = (
                                 self._answer_coverage_evaluator.evaluate(
                                     request=request,
                                     claim_set=claim_set,
                                 )
                             )
+                            coverage_answer_coverage = self._component_usage_metrics(
+                                self._answer_coverage_evaluator
+                            )
+
+                            previous_level = (
+                                previous_answer_coverage_evaluation.coverage_level
+                                if previous_answer_coverage_evaluation is not None
+                                else None
+                            )
+                            candidate_level = (
+                                candidate_answer_coverage_evaluation.coverage_level
+                            )
+                            level_rank = {
+                                AnswerCoverageLevel.INSUFFICIENT: 0,
+                                AnswerCoverageLevel.PARTIALLY_COVERED: 1,
+                                AnswerCoverageLevel.FULLY_COVERED: 2,
+                            }
+                            substitution_improved = (
+                                previous_level is None
+                                or level_rank[candidate_level]
+                                > level_rank[previous_level]
+                            )
+
+                            if substitution_improved:
+                                answer_coverage_evaluation = (
+                                    candidate_answer_coverage_evaluation
+                                )
+                                coverage_replanning_metadata[
+                                    "coverage_replanning_substitution_decision"
+                                ] = "accepted_level_improvement"
+                            else:
+                                document_set = previous_document_set
+                                evidence_set = previous_evidence_set
+                                source_quality_evaluations = (
+                                    previous_source_quality_evaluations
+                                )
+                                claim_set = previous_claim_set
+                                citation_verifications = (
+                                    previous_citation_verifications
+                                )
+                                claim_relevance_evaluations = (
+                                    previous_claim_relevance_evaluations
+                                )
+                                answer_coverage_evaluation = (
+                                    previous_answer_coverage_evaluation
+                                )
+                                evidence_attempted_document_count = (
+                                    previous_evidence_attempted_document_count
+                                )
+                                no_evidence_document_count = (
+                                    previous_no_evidence_document_count
+                                )
+                                coverage_replanning_metadata[
+                                    "coverage_replanning_substitution_decision"
+                                ] = "rejected_no_level_improvement"
+
                             coverage_replanning_metadata[
                                 "coverage_final_level"
                             ] = answer_coverage_evaluation.coverage_level.value
-                            coverage_answer_coverage = self._component_usage_metrics(self._answer_coverage_evaluator)
 
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,

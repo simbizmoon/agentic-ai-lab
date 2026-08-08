@@ -596,6 +596,10 @@ def test_coverage_replanning_substitutes_novel_source_within_strict_cap() -> Non
     assert (
         result.workspace.metadata["coverage_replanning_substituted_source_count"] == "1"
     )
+    assert (
+        result.workspace.metadata["coverage_replanning_substitution_decision"]
+        == "accepted_level_improvement"
+    )
     assert result.workspace.metadata["coverage_replanning_new_evidence_count"] == "1"
     assert result.workspace.metadata["coverage_replanning_incremental_reuse"] == "false"
     assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "true"
@@ -626,3 +630,58 @@ def test_coverage_replanning_does_not_substitute_without_novel_evidence() -> Non
     )
     assert result.workspace.metadata["coverage_replanning_claims_rebuilt"] == "false"
     assert len(evaluator.calls) == 1
+
+
+def test_coverage_replanning_rejects_substitution_without_level_improvement() -> None:
+    searcher = CoverageSearch()
+    reader = CoverageReader()
+    coverage_evaluator = CoverageSequenceEvaluator(
+        [
+            AnswerCoverageLevel.PARTIALLY_COVERED,
+            AnswerCoverageLevel.PARTIALLY_COVERED,
+        ]
+    )
+    generator = IncrementalClaimGenerator()
+    citation_spy = CitationVerificationSpy()
+    relevance_spy = ClaimRelevanceSpy()
+    extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
+
+    pipeline = SingleResearchAgentPipeline(
+        request_validator=FakeRequestValidator(),
+        task_decomposer=FakeTaskDecomposer(),
+        query_planner=FakeQueryPlanner(),
+        source_searcher=searcher,
+        source_reader=reader,
+        evidence_extractor=extractor,
+        claim_builder=GenerativePipelineClaimBuilder(generator=generator),
+        source_quality_evaluator=FakeSourceQualityEvaluator(),
+        document_selector=OrderedBackfillSelector(),
+        semantic_citation_verifier=citation_spy,
+        claim_relevance_evaluator=relevance_spy,
+        answer_coverage_evaluator=coverage_evaluator,
+        coverage_gap_query_planner=CoverageGapResearchQueryPlanner(),
+    )
+    request = coverage_request().model_copy(update={"maximum_sources": 1})
+
+    result = pipeline.run(request)
+
+    assert len(result.workspace.document_set.documents) == 1
+    assert result.workspace.document_set.documents[0].candidate.source_id == "source-a"
+    assert {item.source_id for item in result.workspace.evidence_set.evidence} == {
+        "source-a"
+    }
+    assert (
+        result.workspace.metadata["coverage_replanning_substituted_source_count"] == "1"
+    )
+    assert (
+        result.workspace.metadata["coverage_replanning_substitution_decision"]
+        == "rejected_no_level_improvement"
+    )
+    assert result.workspace.metadata["coverage_final_level"] == "partially_covered"
+    assert (
+        result.answer_coverage_evaluation is not None
+        and result.answer_coverage_evaluation.coverage_level
+        is AnswerCoverageLevel.PARTIALLY_COVERED
+    )
+    assert len(generator.calls) == 2
+    assert len(coverage_evaluator.calls) == 2
