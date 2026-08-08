@@ -33,6 +33,7 @@ from app.research.research_source_type_classifier import (
     ResearchSourceTypeClassifier,
 )
 from app.research.single_research_agent_pipeline import (
+    AnswerCoverageEvaluationServiceProtocol,
     ClaimRelevanceEvaluationServiceProtocol,
     ResearchClaimBuilderProtocol,
     ResearchEvidenceExtractorProtocol,
@@ -64,6 +65,9 @@ def build_live_research_pipeline(
     ) = None,
     claim_relevance_evaluator: (
         ClaimRelevanceEvaluationServiceProtocol | None
+    ) = None,
+    answer_coverage_evaluator: (
+        AnswerCoverageEvaluationServiceProtocol | None
     ) = None,
     claim_builder: ResearchClaimBuilderProtocol | None = None,
     evidence_extractor: ResearchEvidenceExtractorProtocol | None = None,
@@ -140,5 +144,8 @@ def build_live_research_pipeline(
         ),
         claim_relevance_evaluator=(
             claim_relevance_evaluator
+        ),
+        answer_coverage_evaluator=(
+            answer_coverage_evaluator
         ),
     )

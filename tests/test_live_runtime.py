@@ -219,3 +219,26 @@ def test_live_runtime_keeps_default_paragraph_evidence_extractor() -> None:
         pipeline.evidence_extractor.extractor,
         ParagraphEvidenceExtractor,
     )
+
+def test_live_runtime_accepts_answer_coverage_evaluator() -> None:
+    from app.schemas.research_request import ResearchRequest
+    from app.schemas.tavily_search_config import TavilySearchConfig
+
+    research_request = ResearchRequest(
+        request_id="request-answer-coverage-runtime",
+        question="How does the mechanism work?",
+        objective="Explain the complete mechanism.",
+        maximum_sources=1,
+    )
+    evaluator = object()
+
+    pipeline = build_live_research_pipeline(
+        request=research_request,
+        search_config=TavilySearchConfig(
+            api_key="test-key",
+            maximum_results=3,
+        ),
+        answer_coverage_evaluator=evaluator,
+    )
+
+    assert pipeline.answer_coverage_evaluator is evaluator

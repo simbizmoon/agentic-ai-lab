@@ -19,6 +19,9 @@ from app.config import Settings, load_settings
 from app.rag.openai_embedding_provider import (
     OpenAIEmbeddingProvider,
 )
+from app.research.answer_coverage_evaluation_service import (
+    AnswerCoverageEvaluationService,
+)
 from app.research.claim_relevance_evaluation_service import (
     ClaimRelevanceEvaluationService,
 )
@@ -33,6 +36,9 @@ from app.research.generative_pipeline_claim_builder import (
 )
 from app.research.live_runtime import (
     build_live_research_pipeline,
+)
+from app.research.openai_answer_coverage_evaluator import (
+    OpenAIAnswerCoverageEvaluator,
 )
 from app.research.openai_claim_relevance_evaluator import (
     OpenAIClaimRelevanceEvaluator,
@@ -174,6 +180,14 @@ class LiveResearchHandler:
                 budget=LIVE_CLAIM_RELEVANCE_BUDGET,
             )
         )
+        answer_coverage_evaluator = (
+            AnswerCoverageEvaluationService(
+                evaluator=OpenAIAnswerCoverageEvaluator(
+                    client=openai_client,
+                    model=settings.openai_model,
+                )
+            )
+        )
         evidence_extractor = PipelineEvidenceExtractorAdapter(
             SemanticResearchEvidenceExtractor(
                 question=question,
@@ -224,6 +238,9 @@ class LiveResearchHandler:
                     ),
                     claim_relevance_evaluator=(
                         claim_relevance_evaluator
+                    ),
+                    answer_coverage_evaluator=(
+                        answer_coverage_evaluator
                     ),
                     claim_builder=claim_builder,
                     evidence_extractor=evidence_extractor,

@@ -289,3 +289,8 @@ def test_pipeline_result_defaults_to_empty_claim_relevance_evaluations() -> None
     value = result()
 
     assert value.claim_relevance_evaluations == []
+
+def test_pipeline_result_defaults_to_no_answer_coverage_evaluation() -> None:
+    value = result()
+
+    assert value.answer_coverage_evaluation is None

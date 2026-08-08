@@ -10,6 +10,9 @@ from app.research.research_citation_verifier_executor import (
 from app.research.research_pipeline_error import ResearchPipelineError
 from app.research.research_quality_evaluator import ResearchQualityEvaluator
 from app.research.research_synthesizer import DeterministicResearchSynthesizer
+from app.schemas.research_answer_coverage_evaluation import (
+    ResearchAnswerCoverageEvaluation,
+)
 from app.schemas.research_claim import ResearchClaimSet
 from app.schemas.research_claim_relevance_evaluation import (
     ResearchClaimRelevanceEvaluation,
@@ -121,6 +124,17 @@ class ClaimRelevanceEvaluationServiceProtocol(Protocol):
     ) -> list[ResearchClaimRelevanceEvaluation]: ...
 
 
+class AnswerCoverageEvaluationServiceProtocol(Protocol):
+    """Evaluate final claim-set coverage against the request."""
+
+    def evaluate(
+        self,
+        *,
+        request: ResearchRequest,
+        claim_set: ResearchClaimSet,
+    ) -> ResearchAnswerCoverageEvaluation: ...
+
+
 class SupplementalResearchQueryPlannerProtocol(Protocol):
     def plan(
         self,
@@ -157,6 +171,9 @@ class SingleResearchAgentPipeline:
         claim_relevance_evaluator: (
             ClaimRelevanceEvaluationServiceProtocol | None
         ) = None,
+        answer_coverage_evaluator: (
+            AnswerCoverageEvaluationServiceProtocol | None
+        ) = None,
     ) -> None:
         self._request_validator = request_validator
         self._task_decomposer = task_decomposer
@@ -178,6 +195,9 @@ class SingleResearchAgentPipeline:
         self._claim_relevance_evaluator = (
             claim_relevance_evaluator
         )
+        self._answer_coverage_evaluator = (
+            answer_coverage_evaluator
+        )
 
     @property
     def semantic_citation_verifier(
@@ -192,6 +212,14 @@ class SingleResearchAgentPipeline:
         self,
     ) -> ClaimRelevanceEvaluationServiceProtocol | None:
         return self._claim_relevance_evaluator
+
+    @property
+    def answer_coverage_evaluator(
+        self,
+    ) -> AnswerCoverageEvaluationServiceProtocol | None:
+        """Return the optional answer coverage evaluator."""
+
+        return self._answer_coverage_evaluator
 
     @property
     def source_searcher(self) -> ResearchSourceSearcherProtocol:
@@ -428,6 +456,18 @@ class SingleResearchAgentPipeline:
                 )
             )
 
+        answer_coverage_evaluation: (
+            ResearchAnswerCoverageEvaluation | None
+        ) = None
+
+        if self._answer_coverage_evaluator is not None:
+            answer_coverage_evaluation = (
+                self._answer_coverage_evaluator.evaluate(
+                    request=request,
+                    claim_set=claim_set,
+                )
+            )
+
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
             request=request,
@@ -480,6 +520,9 @@ class SingleResearchAgentPipeline:
             ),
             claim_relevance_evaluations=(
                 claim_relevance_evaluations
+            ),
+            answer_coverage_evaluation=(
+                answer_coverage_evaluation
             ),
         )
 

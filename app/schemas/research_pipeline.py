@@ -14,6 +14,9 @@ from pydantic import (
 from app.research.research_citation_verifier_executor import (
     ResearchCitationVerification,
 )
+from app.schemas.research_answer_coverage_evaluation import (
+    ResearchAnswerCoverageEvaluation,
+)
 from app.schemas.research_claim_relevance_evaluation import (
     ResearchClaimRelevanceEvaluation,
 )
@@ -46,6 +49,9 @@ class SingleResearchPipelineResult(BaseModel):
     claim_relevance_evaluations: list[
         ResearchClaimRelevanceEvaluation
     ] = Field(default_factory=list)
+    answer_coverage_evaluation: (
+        ResearchAnswerCoverageEvaluation | None
+    ) = None
 
     @model_validator(mode="after")
     def validate_result(self) -> Self:

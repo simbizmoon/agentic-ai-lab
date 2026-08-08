@@ -367,6 +367,7 @@ def pipeline(
     source_searcher: object | None = None,
     semantic_citation_verifier: object | None = None,
     claim_relevance_evaluator: object | None = None,
+    answer_coverage_evaluator: object | None = None,
 ) -> SingleResearchAgentPipeline:
     """Return one fully configured test pipeline."""
 
@@ -390,6 +391,9 @@ def pipeline(
         ),
         claim_relevance_evaluator=(
             claim_relevance_evaluator
+        ),
+        answer_coverage_evaluator=(
+            answer_coverage_evaluator
         ),
     )
 
@@ -1341,3 +1345,82 @@ def test_pipeline_defaults_to_no_claim_relevance_evaluations() -> None:
     result = research_pipeline.run(request())
 
     assert result.claim_relevance_evaluations == []
+
+
+def test_pipeline_records_answer_coverage_evaluation() -> None:
+    from app.schemas.answer_coverage_judgment import (
+        AnswerCoverageLevel,
+    )
+    from app.schemas.research_answer_coverage_evaluation import (
+        ResearchAnswerCoverageEvaluation,
+    )
+
+    class FakeAnswerCoverageEvaluationService:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, list[str]]] = []
+
+        def evaluate(
+            self,
+            *,
+            request: ResearchRequest,
+            claim_set: ResearchClaimSet,
+        ) -> ResearchAnswerCoverageEvaluation:
+            self.calls.append(
+                (
+                    request.request_id,
+                    [
+                        claim.claim_id
+                        for claim in claim_set.claims
+                    ],
+                )
+            )
+            return ResearchAnswerCoverageEvaluation(
+                evaluation_id="coverage-1",
+                request_id=request.request_id,
+                claim_ids=[
+                    claim.claim_id
+                    for claim in claim_set.claims
+                ],
+                coverage_level=(
+                    AnswerCoverageLevel.PARTIALLY_COVERED
+                ),
+                coverage_score=0.7,
+                covered_aspects=["memory definition"],
+                missing_aspects=["runtime use"],
+                rationale=(
+                    "The answer covers one requested aspect "
+                    "but omits another."
+                ),
+                metadata={"response_id": "resp-coverage-1"},
+            )
+
+    evaluator = FakeAnswerCoverageEvaluationService()
+    research_pipeline = pipeline(
+        answer_coverage_evaluator=evaluator,
+    )
+
+    result = research_pipeline.run(request())
+
+    assert evaluator.calls == [
+        (
+            result.workspace.request.request_id,
+            [
+                claim.claim_id
+                for claim in result.workspace.claim_set.claims
+            ],
+        )
+    ]
+    assert result.answer_coverage_evaluation is not None
+    assert (
+        result.answer_coverage_evaluation.claim_ids
+        == [
+            claim.claim_id
+            for claim in result.workspace.claim_set.claims
+        ]
+    )
+
+
+def test_pipeline_defaults_to_no_answer_coverage_evaluation() -> None:
+    result = pipeline().run(request())
+
+    assert result.answer_coverage_evaluation is None
