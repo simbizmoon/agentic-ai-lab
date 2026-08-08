@@ -462,6 +462,7 @@ Agent Runtime에 적용할 수 있어야 한다.
 - 최대 반복 횟수
 - 최대 실행시간
 - 실행당 비용 상한
+- Stage별 Usage 및 Latency 관측
 
 Budget 초과 시 다음 중 하나를 수행한다.
 
@@ -526,6 +527,29 @@ Budget 초과 시 다음 중 하나를 수행한다.
 - 핵심 품질 기준
 - Provider 교체 가능성
 - Regression 방지
+
+
+### 7.10 Observability는 최적화보다 먼저 측정한다
+
+성능, 비용 또는 Agent Loop를 최적화하기 전에 실제 Runtime의 병목을 측정한다.
+
+최소 관측 항목은 다음과 같다.
+
+- 전체 실행시간
+- Search Provider 호출 수·Credit·Latency
+- Source Reading 시간
+- Evidence Semantic Evaluation 호출 수·Token·시간
+- Claim Generation 호출 수·Token·시간
+- Citation Verification 호출 수·Token·시간
+- Claim Relevance 호출 수·Token·시간
+- Answer Coverage 호출 수·Token·시간
+- Replanning 여부와 추가 라운드 비용
+
+관측값은 품질 정책 자체를 변경하지 않는 진단 정보로 사용한다.
+결정론적 Baseline의 재현성을 깨뜨리는 Wall-clock 값은 기본 결과에 강제로
+포함하지 않고, Live Runtime과 같이 필요한 실행 경로에서 명시적으로 수집한다.
+
+최적화는 측정 결과에서 가장 큰 비용과 지연을 만드는 단계부터 수행한다.
 
 ---
 
@@ -980,6 +1004,8 @@ Fake 또는 Stub 테스트 통과만으로 Production-ready라고 판단하지 �
 - Report Completeness
 - Trace Completeness
 - Latency
+- Stage별 실행시간
+- LLM 및 Semantic Evaluator 호출 수
 - Token Usage
 - API Cost
 - Reproducibility

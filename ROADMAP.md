@@ -38,7 +38,8 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
 - 현재 제품 단계: Stage 3 — Minimal Intelligent Single Agent
 - 현재 상태: Live Research Vertical Slice, Generative Claim, Semantic Citation,
-  Claim Relevance 및 Semantic Evidence Relevance/RRF Hybrid Retrieval까지 통합·검증
+  Claim/Evidence Relevance, RRF Hybrid Retrieval, Semantic Answer Coverage,
+  Coverage-guided Bounded Replanning 및 Research Run Observability까지 통합·검증
 - 현재 기준일: 2026-08-08
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -73,12 +74,14 @@
 - Python: `3.12.3`
 - pytest: `9.1.1`
 - Ruff: `0.16.0`
-- Step 5.12 최종 전체 Regression: `4431 passed in 16.41s`
-- Step 5.12 RRF 변경 후 focused regression: `26 passed`
+- Step 6.5 최종 전체 Regression: `4468 passed in 10.19s`
 - Ruff: `All checks passed`
 - `git diff --cached --check`: 통과
-- Claim Relevance, Semantic Evidence Relevance, RRF Hybrid Retrieval 및
-  관련 문서 변경까지 포함한 현재 Checkpoint가 전체 Regression을 통과했다.
+- Step 6.5 Checkpoint Commit: `640df8a`
+- Commit Message: `feat: add research run observability and latency metrics`
+- `origin/main` Push 완료
+- Research Run Observability, Structured Output Recovery, Evidence Semantic Usage
+  계측 및 관련 Regression을 포함한 현재 Checkpoint가 전체 검증을 통과했다.
 
 판정 원칙:
 
@@ -597,7 +600,7 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [~] 진행 중 — Live Research 핵심 수직 경로와 Semantic Quality 계층 통합 완료
+- [~] 진행 중 — Semantic Answer Coverage, bounded coverage replanning 및 observability까지 완료; 다음은 성능 최적화
 
 ## Work Items
 
@@ -2109,3 +2112,192 @@ Blocking Semantic Quality Gate
 Ruff: All checks passed
 git diff --cached --check: passed
 ```
+
+
+---
+
+# 30. 2026-08-08 Step 6.5 — Research Run Observability 및 Latency Baseline 완료
+
+## 30.1 상태
+
+- [x] Research Run Metrics Schema
+- [x] Live Runtime opt-in observability
+- [x] Search Provider Call·Credit·Latency 계측
+- [x] Source Reading 및 Evidence Pipeline wall-clock 계측
+- [x] Claim Generation usage 계측
+- [x] Semantic Citation Verification usage 계측
+- [x] Claim Relevance usage 계측
+- [x] Answer Coverage usage 계측
+- [x] Evidence Semantic Evaluator usage 계측
+- [x] Coverage Round 별도 계측
+- [x] Answer Coverage Structured Output corrective retry
+- [x] Citation usage 중복 누적 버그 수정
+- [x] Answer Coverage `last_usage` 노출 누락 수정
+- [x] Evidence Semantic usage adapter 전달 누락 수정
+- [x] 전체 Regression
+- [x] Ruff
+- [x] `git diff --cached --check`
+- [x] Commit 및 `origin/main` Push
+
+## 30.2 Observability 정책
+
+```text
+Generic / deterministic pipeline
+→ run_metrics 기본 비활성화
+
+Live Research runtime
+→ run_metrics 명시적 활성화
+```
+
+Wall-clock처럼 실행마다 달라지는 값이 결정론적 Pipeline JSON 비교를
+깨뜨리지 않도록 Observability는 opt-in으로 운영한다.
+
+Semantic 품질 판정 자체와 Observability를 분리한다.
+Metrics는 진단·비용·성능 분석용이며 품질 Score나 Blocking Gate를
+자동 변경하지 않는다.
+
+## 30.3 Structured Output Recovery
+
+Answer Coverage Structured Output이 Schema의 교차 필드 의미 규칙을
+위반하는 Live Failure를 확인하였다.
+
+대표 실패:
+
+```text
+coverage_level = fully_covered
+missing_aspects != []
+```
+
+정책:
+
+```text
+첫 Structured Output
+→ Schema Validation 성공: 사용
+→ Validation 실패: corrective retry 최대 1회
+→ 두 번째도 실패: 명시적 StructuredResponseValidationError
+```
+
+Validator를 느슨하게 하거나 모순된 결과를 코드가 임의로 FULL 판정으로
+보정하지 않는다.
+
+## 30.4 최종 Live Latency Baseline
+
+질문:
+
+```text
+How does the OpenAI Agents SDK support tool calling?
+```
+
+목적:
+
+```text
+Explain the concrete mechanism by which functions or tools are made
+available to an agent and used during execution.
+```
+
+최종 실행:
+
+```text
+total_elapsed_seconds = 591.871
+tracked_llm_calls = 30
+tracked_tokens = 45,498
+tracked_llm_elapsed = 462.546
+search_provider_calls = 2
+search_elapsed_seconds = 3.723
+```
+
+Round 1:
+
+```text
+Evidence semantic:
+2 calls / 4,192 tokens / 93.599s
+Evidence pipeline wall-clock:
+135.746s
+
+Claim generation:
+4 calls / 3,074 tokens / 21.468s
+
+Citation verification:
+4 calls / 4,104 tokens / 14.540s
+
+Claim relevance:
+4 calls / 8,148 tokens / 47.441s
+
+Answer coverage:
+1 call / 2,501 tokens / 22.219s
+```
+
+Coverage Round:
+
+```text
+Evidence semantic:
+5 calls / 9,235 tokens / 37.076s
+Evidence pipeline wall-clock:
+81.357s
+
+Citation verification:
+5 calls / 5,488 tokens / 20.159s
+
+Claim relevance:
+3 calls / 6,255 tokens / 104.271s
+
+Answer coverage:
+2 calls / 2,501 tokens / 101.772s
+```
+
+최종 Answer Coverage:
+
+```text
+coverage_level = fully_covered
+coverage_score = 0.93
+missing_aspects = []
+```
+
+Timing accounting:
+
+```text
+accounted wall-clock = 559.166s
+unattributed = 32.704s
+```
+
+## 30.5 성능 진단
+
+확정된 결론:
+
+```text
+Search와 HTTP Reading은 핵심 병목이 아니다.
+병목은 검색 이후 Semantic LLM Processing과 Coverage Round 재평가에 있다.
+```
+
+주요 개선 후보:
+
+1. Coverage Round에서 기존 평가 결과 재사용
+2. Claim Relevance Batch Evaluation
+3. Citation Verification Batch Evaluation
+4. Evidence Semantic Evaluator 호출 축소
+5. Answer Coverage Structured Output 첫 시도 성공률 개선
+6. 필요 시 병렬 실행 가능성 평가
+
+Embedding Provider 호출은 현재 별도 Usage 계측 대상이 아니므로
+`tracked_llm_calls`를 모든 AI API 호출 총계로 해석하지 않는다.
+
+## 30.6 최종 Checkpoint
+
+```text
+pytest = 4468 passed in 10.19s
+Ruff = All checks passed
+git diff --cached --check = passed
+
+commit = 640df8a
+message = feat: add research run observability and latency metrics
+branch = main
+remote = origin/main
+working tree = clean
+```
+
+## 30.7 다음 작업
+
+**Step 6.6 — Performance Optimization**
+
+최적화는 검색 Provider가 아니라 실제 측정에서 가장 비싼 Semantic Evaluation과
+Coverage Round 재작업부터 검토한다.

@@ -2064,3 +2064,266 @@ Precision 단계에서는 LLM Semantic Relevance를 사용한다.
 이 구조는 특정 OpenAI Tool Calling 키워드를 Production 코드에 하드코딩하지
 않으면서도 Answer-bearing Evidence의 Recall을 개선하고,
 Groundedness와 Relevance를 독립적으로 평가할 수 있게 한다.
+
+
+---
+
+## D-038 — Semantic Answer Coverage 및 Coverage-guided Bounded Replanning
+
+- 상태: 확정
+- 날짜: 2026-08-08
+- 적용 범위: Single-Agent Live Research의 최종 Claim Set 평가 및 제한형 보완 조사
+
+### 문제
+
+Claim Relevance는 개별 Claim이 Research Question과 Objective에 관련되는지를
+평가하지만, 최종 Claim Set 전체가 사용자의 요구사항을 충분히 답하는지는
+별도의 문제다.
+
+다음은 서로 다른 품질 축이다.
+
+```text
+Citation Groundedness
+= Claim이 Evidence에 의해 지지되는가?
+
+Claim Relevance
+= 개별 Claim이 Question/Object에 관련되는가?
+
+Answer Coverage
+= 최종 Claim Set 전체가 Question/Object의 요구사항을 충분히 다루는가?
+```
+
+### 결정
+
+Semantic Answer Coverage를 별도의 Evaluated Capability로 도입한다.
+
+입력:
+
+```text
+Question
+Objective
+Final Claim Set
+```
+
+외부 지식, 추가 Search, Evidence Support 및 사실 검증은 이 Evaluator의
+책임이 아니다.
+
+판정 범주:
+
+```text
+fully_covered
+partially_covered
+insufficient
+```
+
+`coverage_score`는 진단용이며 Replanning Trigger는 범주형
+`coverage_level`을 기준으로 한다.
+
+### Coverage-guided Bounded Replanning
+
+`partially_covered` 또는 `insufficient`인 경우에만 Coverage Gap을 이용한
+추가 검색을 최대 한 번 수행한다.
+
+```text
+Round 1
+→ Answer Coverage
+   ├─ fully_covered
+   │  → 종료
+   └─ partially_covered / insufficient
+      → missing_aspects 기반 Coverage Query
+      → 추가 Search 최대 1회
+      → 신규 Document/Evidence 확인
+      → 실제 신규 Evidence가 있을 때만 Claim Set 재구성
+      → Citation / Relevance / Coverage 재평가
+      → 무조건 종료
+```
+
+불변조건:
+
+```text
+coverage_replanning_attempt_count ∈ {0, 1}
+FULLY_COVERED → retry 없음
+duplicate-only → rebuild 없음
+unreadable/no-evidence → 기존 결과 보존
+budget exhausted → 안전 종료
+Round 2 이후 추가 loop 없음
+```
+
+Search Provider Budget은 D-031의 동일 Run Budget을 공유하며
+초기 Live 기본 Provider Call/Credit 상한은 Coverage Round를 포함하여
+3회/3 Credit으로 확장한다.
+
+### Live 검증
+
+동일 Agents SDK Tool Calling 질문에서 실제 Live 실행으로 다음을 확인했다.
+
+```text
+initial coverage = partially_covered
+coverage replanning = true
+coverage query count = 1
+new documents = 3
+new evidence = 2
+claims rebuilt = true
+final coverage = fully_covered
+provider calls = 2
+```
+
+Coverage 결과는 현재 품질 Score Blocking Gate에 직접 연결하지 않는다.
+
+---
+
+## D-039 — Research Run Observability는 Live Runtime opt-in 진단 계층으로 운영
+
+- 상태: 확정
+- 날짜: 2026-08-08
+- 적용 범위: Single-Agent Research Pipeline 및 Live Runtime
+
+### 문제
+
+Live Research의 사용자 체감 실행시간이 길었지만 Search, Reading,
+Evidence Retrieval, Claim Generation, Citation, Relevance, Coverage 중
+어느 단계가 병목인지 정량적으로 구분할 수 없었다.
+
+또한 Wall-clock 시간은 실행마다 달라지므로 항상 Pipeline Result에 포함하면
+기존 결정론적 Regression을 깨뜨릴 수 있다.
+
+### 결정
+
+얇은 Pipeline 전용 `ResearchRunMetrics`를 사용한다.
+
+관측 항목:
+
+- 전체 실행시간
+- Search Provider 호출 수
+- Search Credit
+- Search Latency
+- Source Reading 시간
+- Evidence Pipeline wall-clock
+- Evidence Semantic Evaluator 호출 수·Token·시간
+- Claim Generation 호출 수·Token·시간
+- Semantic Citation 호출 수·Token·시간
+- Claim Relevance 호출 수·Token·시간
+- Answer Coverage 호출 수·Token·시간
+- Coverage Round의 동일 항목
+
+정책:
+
+```text
+Generic / deterministic pipeline
+→ collect_run_metrics = false
+
+Live Research runtime
+→ collect_run_metrics = true
+```
+
+Observability는 Research 품질 판정, Replanning Trigger, Budget 의미 또는
+Blocking Gate를 변경하지 않는다.
+
+### 구현 과정에서 발견한 계측 결함
+
+Observability 자체를 검증하면서 다음 오류를 발견하고 수정하였다.
+
+- Citation `record_attempt()` 중복 호출로 Usage가 2배 누적됨
+- Answer Coverage Service가 `_last_usage`를 기록하지만 `last_usage`를
+  노출하지 않아 Metrics가 0으로 기록됨
+- Evidence Semantic Reranker Usage가 Extraction metadata에 존재하지만
+  Pipeline Adapter에서 합산·노출되지 않음
+
+Citation 중복 수정 후 Stage wall-clock 합계는 전체 실행시간과 거의
+일치하는 것이 확인되었다.
+
+### 최종 Live Baseline
+
+```text
+total runtime = 591.871s
+tracked LLM calls = 30
+tracked tokens = 45,498
+tracked LLM elapsed = 462.546s
+search elapsed = 3.723s
+```
+
+결론:
+
+```text
+Search가 핵심 병목이 아니다.
+Semantic Evaluation과 Coverage Round 재평가가 핵심 병목이다.
+```
+
+Embedding Provider는 현재 별도 Usage 계측이 없으므로
+`tracked LLM calls`를 모든 AI API 호출 총계로 해석하지 않는다.
+
+### 검증
+
+```text
+4468 passed in 10.19s
+Ruff: All checks passed
+git diff --cached --check: passed
+commit: 640df8a
+origin/main push: completed
+```
+
+---
+
+## D-040 — Answer Coverage Structured Output Validation 실패는 1회 Corrective Retry로 복구
+
+- 상태: 확정
+- 날짜: 2026-08-08
+- 적용 범위: OpenAI Answer Coverage Evaluator
+
+### 문제
+
+실제 Live 실행에서 Structured Output이 JSON 형태로는 생성되었지만
+다음 교차 필드 의미 규칙을 위반하였다.
+
+```text
+coverage_level = fully_covered
+missing_aspects != []
+```
+
+`AnswerCoverageJudgment`의 Pydantic validator가 이를 거부하여
+`StructuredResponseValidationError`가 발생하고 전체 Live Pipeline이
+중단되었다.
+
+### 검토 대안
+
+1. Validator를 느슨하게 한다.
+2. `fully_covered`이면 코드가 `missing_aspects=[]`로 강제 정정한다.
+3. 모순된 Structured Output을 실패로 간주하고 제한적으로 재요청한다.
+
+### 결정
+
+3번을 채택한다.
+
+```text
+Attempt 1
+→ valid: 사용
+→ schema validation failure:
+   corrective retry 1회
+
+Attempt 2
+→ valid: 사용
+→ invalid: 명시적 StructuredResponseValidationError
+```
+
+Corrective instruction은 동일한 Question, Objective, Claim Set을 사용하며
+외부 지식을 추가하지 않는다.
+
+기존 Schema validator는 유지한다.
+
+코드는 모델의 모순된 결과를 임의로 `fully_covered`로 수정하지 않는다.
+
+### 이유
+
+Structured Output은 형식적 Schema를 따르더라도 필드 사이의 의미적
+일관성을 항상 보장하지 않는다.
+
+교차 필드 불변조건은 코드가 검증하고, 제한된 corrective retry로 복구하되,
+반복 실패를 숨기지 않는 것이 AIRA의 검증·기록 원칙에 부합한다.
+
+### 검증
+
+- 첫 Validation 실패 후 두 번째 응답 성공 테스트
+- 두 번째도 실패하면 명시적 오류 테스트
+- Live Runtime 성공
+- 전체 Regression 통과
+- Corrective retry 횟수를 Usage/Observability에 반영
