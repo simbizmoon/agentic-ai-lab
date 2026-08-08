@@ -9,12 +9,16 @@ from typing import Any
 import pytest
 
 from app.research.openai_evidence_claim_generator import (
+    GENERATIVE_CLAIM_BATCH_INSTRUCTIONS,
     GENERATIVE_CLAIM_INSTRUCTIONS,
+    ClaimGenerationProviderError,
     OpenAIEvidenceClaimGenerator,
     OpenAIEvidenceClaimGeneratorError,
 )
 from app.schemas.generated_claim_proposal import (
     GeneratedClaimProposal,
+    GeneratedClaimProposalBatch,
+    GeneratedClaimProposalBatchItem,
 )
 from app.schemas.research_evidence import (
     ResearchEvidence,
@@ -266,3 +270,45 @@ def test_generator_normalizes_provider_failure() -> None:
         match="request failed",
     ):
         generator.generate(evidence())
+
+
+def test_batch_generator_uses_one_structured_request() -> None:
+    batch = GeneratedClaimProposalBatch(
+        items=[
+            GeneratedClaimProposalBatchItem(
+                item_id="item-002",
+                proposal=GeneratedClaimProposal(text="Claim two.", rationale="Bounded two."),
+            ),
+            GeneratedClaimProposalBatchItem(
+                item_id="item-001",
+                proposal=GeneratedClaimProposal(text="Claim one.", rationale="Bounded one."),
+            ),
+        ]
+    )
+    client = FakeClient(response(output_parsed=batch))
+    generator = OpenAIEvidenceClaimGenerator(client=client, model="gpt-5")  # type: ignore[arg-type]
+    second = evidence().model_copy(update={"evidence_id": "evidence-002", "excerpt": "Second independent evidence."})
+
+    result = generator.generate_batch([("item-001", evidence()), ("item-002", second)])
+
+    assert len(client.responses.calls) == 1
+    call = client.responses.calls[0]
+    assert call["text_format"] is GeneratedClaimProposalBatch
+    assert call["instructions"] == GENERATIVE_CLAIM_BATCH_INSTRUCTIONS
+    assert result.proposals["item-001"].text == "Claim one."
+    assert "evidence-001" not in call["input"]
+    assert "source-001" not in call["input"]
+
+
+def test_batch_provider_failure_is_distinguishable() -> None:
+    class FailingResponses:
+        def parse(self, **kwargs: Any) -> Any:
+            raise RuntimeError("provider unavailable")
+
+    generator = OpenAIEvidenceClaimGenerator(
+        client=SimpleNamespace(responses=FailingResponses()),  # type: ignore[arg-type]
+        model="gpt-5",
+    )
+
+    with pytest.raises(ClaimGenerationProviderError, match="request failed"):
+        generator.generate_batch([("item-001", evidence())])

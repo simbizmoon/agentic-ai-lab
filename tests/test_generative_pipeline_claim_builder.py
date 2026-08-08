@@ -5,12 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import pytest
+
 from app.budget import ExecutionBudget
 from app.research.generative_pipeline_claim_builder import (
     GenerativePipelineClaimBuilder,
 )
 from app.research.openai_evidence_claim_generator import (
+    ClaimGenerationProviderError,
+    GeneratedClaimProposalBatchResult,
     GeneratedClaimProposalResult,
+    StructuredClaimGenerationError,
 )
 from app.schemas.generated_claim_proposal import (
     GeneratedClaimProposal,
@@ -376,3 +381,102 @@ def test_builder_treats_missing_usage_as_zero_tokens() -> None:
     assert len(result.claims) == 2
     assert builder.last_usage.attempts == 2
     assert builder.last_usage.recorded_tokens == 0
+
+
+@dataclass
+class BatchFakeGenerator(FakeGenerator):
+    batch_error: Exception | None = None
+
+    def __post_init__(self) -> None:
+        self.batch_calls: list[list[str]] = []
+        self.single_calls = 0
+
+    def generate_batch(self, evidence_items: list[tuple[str, ResearchEvidence]]) -> GeneratedClaimProposalBatchResult:
+        self.batch_calls.append([e.evidence_id for _item_id, e in evidence_items])
+        if self.batch_error is not None:
+            raise self.batch_error
+        return GeneratedClaimProposalBatchResult(
+            proposals={
+                item_id: GeneratedClaimProposal(
+                    text=f"Claim for {e.evidence_id}",
+                    rationale="Batch-bounded claim.",
+                )
+                for item_id, e in evidence_items
+            },
+            response_id="resp-batch-001",
+            request_id="req-batch-001",
+            usage=(SimpleNamespace(total_tokens=self.total_tokens) if self.total_tokens else None),
+            elapsed_seconds=self.elapsed_seconds,
+        )
+
+    def generate(self, evidence: ResearchEvidence) -> GeneratedClaimProposalResult:
+        self.single_calls += 1
+        return super().generate(evidence)
+
+
+def test_builder_batches_three_evidence_into_one_physical_call() -> None:
+    generator = BatchFakeGenerator(calls=[])
+    generator.__post_init__()
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(max_attempts=8, max_recorded_tokens=8_000, max_elapsed_seconds=60.0),
+    )
+    result = builder.build(evidence_set_with_count(3))
+    assert len(result.claims) == 3
+    assert len(generator.batch_calls) == 1
+    assert generator.single_calls == 0
+    assert builder.last_usage.attempts == 3
+    assert builder.last_api_usage.attempts == 1
+    assert [c.citations[0].evidence_id for c in result.claims] == ["evidence-001", "evidence-002", "evidence-003"]
+
+
+def test_batch_preserves_max_attempts_as_item_cap() -> None:
+    generator = BatchFakeGenerator(calls=[])
+    generator.__post_init__()
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(max_attempts=2, max_recorded_tokens=8_000, max_elapsed_seconds=60.0),
+    )
+    result = builder.build(evidence_set_with_count(3))
+    assert len(result.claims) == 2
+    assert generator.batch_calls == [["evidence-001", "evidence-002"]]
+    assert builder.last_usage.attempts == 2
+    assert builder.last_api_usage.attempts == 1
+
+
+def test_batch_structured_failure_falls_back_to_singles() -> None:
+    generator = BatchFakeGenerator(calls=[], batch_error=StructuredClaimGenerationError("bad batch"))
+    generator.__post_init__()
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(max_attempts=3, max_recorded_tokens=8_000, max_elapsed_seconds=60.0),
+    )
+    result = builder.build(evidence_set_with_count(3))
+    assert len(result.claims) == 3
+    assert len(generator.batch_calls) == 1
+    assert generator.single_calls == 3
+    assert builder.last_api_usage.attempts == 4
+
+
+def test_batch_provider_error_does_not_fallback() -> None:
+    generator = BatchFakeGenerator(calls=[], batch_error=ClaimGenerationProviderError("provider unavailable"))
+    generator.__post_init__()
+    builder = GenerativePipelineClaimBuilder(generator=generator)
+    with pytest.raises(ClaimGenerationProviderError, match="provider unavailable"):
+        builder.build(evidence_set_with_count(2))
+    assert generator.single_calls == 0
+
+
+def test_batch_shared_usage_is_recorded_once_physically() -> None:
+    generator = BatchFakeGenerator(calls=[], total_tokens=1_200, elapsed_seconds=1.2)
+    generator.__post_init__()
+    builder = GenerativePipelineClaimBuilder(
+        generator=generator,
+        budget=ExecutionBudget(max_attempts=5, max_recorded_tokens=1_000, max_elapsed_seconds=1.0),
+    )
+    result = builder.build(evidence_set_with_count(3))
+    assert len(result.claims) == 3
+    assert builder.last_usage.attempts == 3
+    assert builder.last_usage.recorded_tokens == 1_200
+    assert builder.last_usage.elapsed_seconds == 1.2
+    assert builder.last_api_usage.attempts == 1
