@@ -147,3 +147,75 @@ def test_live_runtime_accepts_semantic_citation_verifier() -> None:
     )
 
     assert pipeline.semantic_citation_verifier is verifier
+
+
+
+def test_live_runtime_accepts_claim_relevance_evaluator() -> None:
+    research_request = ResearchRequest(
+        request_id="request-relevance-runtime",
+        question="How can an agent bound model usage?",
+        objective="Describe a concrete runtime usage control.",
+        maximum_sources=1,
+    )
+    evaluator = object()
+
+    pipeline = build_live_research_pipeline(
+        request=research_request,
+        search_config=TavilySearchConfig(
+            api_key="test-key",
+            maximum_results=3,
+        ),
+        claim_relevance_evaluator=evaluator,
+    )
+
+    assert pipeline.claim_relevance_evaluator is evaluator
+
+def test_live_runtime_accepts_evidence_extractor_override() -> None:
+    class StubEvidenceExtractor:
+        def extract(self, document_set):  # type: ignore[no-untyped-def]
+            raise AssertionError("not called in composition test")
+
+    request = ResearchRequest(
+        request_id="research-evidence-override",
+        question="How does grounded research work?",
+        objective="Explain grounded research.",
+        maximum_sources=2,
+    )
+    override = StubEvidenceExtractor()
+
+    pipeline = build_live_research_pipeline(
+        request=request,
+        search_config=TavilySearchConfig(
+            api_key=SecretStr("test-secret"),
+            maximum_results=10,
+        ),
+        evidence_extractor=override,
+    )
+
+    assert pipeline.evidence_extractor is override
+
+
+def test_live_runtime_keeps_default_paragraph_evidence_extractor() -> None:
+    request = ResearchRequest(
+        request_id="research-default-evidence",
+        question="How does grounded research work?",
+        objective="Explain grounded research.",
+        maximum_sources=2,
+    )
+
+    pipeline = build_live_research_pipeline(
+        request=request,
+        search_config=TavilySearchConfig(
+            api_key=SecretStr("test-secret"),
+            maximum_results=10,
+        ),
+    )
+
+    assert isinstance(
+        pipeline.evidence_extractor,
+        PipelineEvidenceExtractorAdapter,
+    )
+    assert isinstance(
+        pipeline.evidence_extractor.extractor,
+        ParagraphEvidenceExtractor,
+    )

@@ -195,3 +195,74 @@ def test_hard_filters_multi_link_document_indexes() -> None:
             "responses and supports stateful interactions."
         )
     ]
+
+def test_candidate_chunks_expose_semantic_candidate_before_lexical_cutoff() -> None:
+    content = (
+        "Agent loops and Responses API overview material appear here "
+        "with the exact query terminology used by search.\n\n"
+        "A callable capability may be registered with a name, description, "
+        "and input shape, then selected during execution even when this "
+        "paragraph avoids the originating query's exact wording."
+    )
+    source = document(
+        content,
+        query="OpenAI Agents SDK tool calling mechanism",
+    )
+    extractor = ParagraphEvidenceExtractor(
+        maximum_evidence=1,
+        minimum_characters=40,
+        minimum_score=0.22,
+    )
+
+    candidates = extractor.candidate_chunks(source)
+
+    assert len(candidates) == 2
+    second = candidates[1]
+    assert second.text == content[second.start:second.end]
+    assert second.lexical_score < 0.22
+
+
+def test_candidate_chunks_remove_hard_noise_without_score_filtering() -> None:
+    content = (
+        "A meaningful natural-language paragraph explains runtime behavior "
+        "without requiring lexical overlap with the query.\n\n"
+        "```python\nclient.responses.create(model='example')\n```"
+    )
+    source = document(
+        content,
+        query="completely different vocabulary",
+    )
+    extractor = ParagraphEvidenceExtractor(
+        minimum_characters=20,
+    )
+
+    candidates = extractor.candidate_chunks(source)
+
+    assert len(candidates) == 1
+    assert "meaningful natural-language" in candidates[0].text
+    assert "client.responses.create" not in candidates[0].text
+
+
+def test_extract_still_applies_lexical_threshold_and_top_n() -> None:
+    content = (
+        "OpenAI Agents SDK tool calling mechanism tool function "
+        "execution provides highly overlapping query terminology.\n\n"
+        "A callable capability may be registered using alternate words "
+        "that remain semantically useful but have weak lexical overlap."
+    )
+    source = document(
+        content,
+        query="OpenAI Agents SDK tool calling mechanism",
+    )
+    extractor = ParagraphEvidenceExtractor(
+        maximum_evidence=1,
+        minimum_characters=40,
+        minimum_score=0.22,
+    )
+
+    candidates = extractor.candidate_chunks(source)
+    result = extractor.extract(source)
+
+    assert len(candidates) == 2
+    assert len(result.evidence) == 1
+    assert result.evidence[0].excerpt == candidates[0].text

@@ -14,6 +14,9 @@ from pydantic import (
 from app.research.research_citation_verifier_executor import (
     ResearchCitationVerification,
 )
+from app.schemas.research_claim_relevance_evaluation import (
+    ResearchClaimRelevanceEvaluation,
+)
 from app.schemas.research_quality import (
     ResearchQualityEvaluation,
 )
@@ -39,6 +42,9 @@ class SingleResearchPipelineResult(BaseModel):
     quality: ResearchQualityEvaluation
     citation_verifications: list[
         ResearchCitationVerification
+    ] = Field(default_factory=list)
+    claim_relevance_evaluations: list[
+        ResearchClaimRelevanceEvaluation
     ] = Field(default_factory=list)
 
     @model_validator(mode="after")

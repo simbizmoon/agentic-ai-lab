@@ -33,7 +33,9 @@ from app.research.research_source_type_classifier import (
     ResearchSourceTypeClassifier,
 )
 from app.research.single_research_agent_pipeline import (
+    ClaimRelevanceEvaluationServiceProtocol,
     ResearchClaimBuilderProtocol,
+    ResearchEvidenceExtractorProtocol,
     SemanticCitationVerifierProtocol,
     SingleResearchAgentPipeline,
 )
@@ -60,7 +62,11 @@ def build_live_research_pipeline(
     semantic_citation_verifier: (
         SemanticCitationVerifierProtocol | None
     ) = None,
+    claim_relevance_evaluator: (
+        ClaimRelevanceEvaluationServiceProtocol | None
+    ) = None,
     claim_builder: ResearchClaimBuilderProtocol | None = None,
+    evidence_extractor: ResearchEvidenceExtractorProtocol | None = None,
 ) -> SingleResearchAgentPipeline:
     """Compose deterministic planning with live search and reading."""
 
@@ -110,8 +116,11 @@ def build_live_research_pipeline(
                 or HttpHtmlReaderConfig()
             )
         ),
-        evidence_extractor=PipelineEvidenceExtractorAdapter(
-            ParagraphEvidenceExtractor()
+        evidence_extractor=(
+            evidence_extractor
+            or PipelineEvidenceExtractorAdapter(
+                ParagraphEvidenceExtractor()
+            )
         ),
         claim_builder=(
             claim_builder
@@ -128,5 +137,8 @@ def build_live_research_pipeline(
         ),
         semantic_citation_verifier=(
             semantic_citation_verifier
+        ),
+        claim_relevance_evaluator=(
+            claim_relevance_evaluator
         ),
     )

@@ -282,3 +282,10 @@ def test_pipeline_result_rejects_quality_report_mismatch() -> None:
             report=different_report,
             quality=value.quality,
         )
+
+
+
+def test_pipeline_result_defaults_to_empty_claim_relevance_evaluations() -> None:
+    value = result()
+
+    assert value.claim_relevance_evaluations == []

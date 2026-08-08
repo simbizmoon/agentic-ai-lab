@@ -43,11 +43,13 @@ _OPINION_MARKERS = (
 
 
 @dataclass(frozen=True)
-class _Chunk:
+class ParagraphEvidenceCandidate:
+    """One traceable paragraph candidate before final selection."""
+
     start: int
     end: int
     text: str
-    score: float
+    lexical_score: float
 
 
 class ParagraphEvidenceExtractor(ResearchEvidenceExtractor):
@@ -89,13 +91,17 @@ class ParagraphEvidenceExtractor(ResearchEvidenceExtractor):
     ) -> ResearchEvidenceExtractionResult:
         chunks = [
             chunk
-            for chunk in self._candidate_chunks(document)
-            if chunk.score >= self._minimum_score
+            for chunk in self.candidate_chunks(document)
+            if chunk.lexical_score >= self._minimum_score
         ]
         selected = sorted(
             sorted(
                 chunks,
-                key=lambda chunk: (-chunk.score, chunk.start, chunk.end),
+                key=lambda chunk: (
+                    -chunk.lexical_score,
+                    chunk.start,
+                    chunk.end,
+                ),
             )[: self._maximum_evidence],
             key=lambda chunk: (chunk.start, chunk.end),
         )
@@ -120,13 +126,15 @@ class ParagraphEvidenceExtractor(ResearchEvidenceExtractor):
             },
         )
 
-    def _candidate_chunks(
+    def candidate_chunks(
         self,
         document: ResearchSourceDocument,
-    ) -> list[_Chunk]:
+    ) -> list[ParagraphEvidenceCandidate]:
+        """Return traceable non-noise candidates before Top-N selection."""
+
         content = document.content
         query_terms, reference_terms = self._reference_terms(document)
-        chunks: list[_Chunk] = []
+        chunks: list[ParagraphEvidenceCandidate] = []
 
         for match in re.finditer(
             r"\S(?:.*?\S)?(?=\n\s*\n|\Z)",
@@ -141,12 +149,20 @@ class ParagraphEvidenceExtractor(ResearchEvidenceExtractor):
                 text = content[start:end]
                 if len(text) < self._minimum_characters:
                     continue
+
+                normalized = text.casefold()
+                if self._is_hard_noise(
+                    text,
+                    normalized=normalized,
+                ):
+                    continue
+
                 chunks.append(
-                    _Chunk(
+                    ParagraphEvidenceCandidate(
                         start=start,
                         end=end,
                         text=text,
-                        score=self._score(
+                        lexical_score=self._score(
                             text,
                             query_terms=query_terms,
                             reference_terms=reference_terms,
@@ -480,7 +496,7 @@ class ParagraphEvidenceExtractor(ResearchEvidenceExtractor):
         self,
         *,
         document: ResearchSourceDocument,
-        chunk: _Chunk,
+        chunk: ParagraphEvidenceCandidate,
         position: int,
     ) -> ResearchEvidence:
         candidate = document.candidate
@@ -495,7 +511,7 @@ class ParagraphEvidenceExtractor(ResearchEvidenceExtractor):
             end_character=chunk.end,
             evidence_type=ResearchEvidenceType.FACT,
             stance=ResearchEvidenceStance.SUPPORTS,
-            relevance_score=chunk.score,
+            relevance_score=chunk.lexical_score,
             confidence_score=0.8,
             rationale=(
                 "Selected using the originating search query, bounded "

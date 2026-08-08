@@ -16,8 +16,17 @@ from app.application.research_execution import (
 )
 from app.budget import ExecutionBudget
 from app.config import Settings, load_settings
+from app.rag.openai_embedding_provider import (
+    OpenAIEmbeddingProvider,
+)
+from app.research.claim_relevance_evaluation_service import (
+    ClaimRelevanceEvaluationService,
+)
 from app.research.concrete_aira_research_runner import (
     ConcreteAiraResearchRunner,
+)
+from app.research.embedding_semantic_evidence_shortlister import (
+    EmbeddingSemanticEvidenceShortlister,
 )
 from app.research.generative_pipeline_claim_builder import (
     GenerativePipelineClaimBuilder,
@@ -25,17 +34,35 @@ from app.research.generative_pipeline_claim_builder import (
 from app.research.live_runtime import (
     build_live_research_pipeline,
 )
+from app.research.openai_claim_relevance_evaluator import (
+    OpenAIClaimRelevanceEvaluator,
+)
 from app.research.openai_evidence_claim_generator import (
     OpenAIEvidenceClaimGenerator,
 )
+from app.research.openai_evidence_relevance_evaluator import (
+    OpenAIEvidenceRelevanceEvaluator,
+)
 from app.research.openai_semantic_citation_evaluator import (
     OpenAISemanticCitationEvaluator,
+)
+from app.research.paragraph_evidence_extractor import (
+    ParagraphEvidenceExtractor,
+)
+from app.research.pipeline_analysis_adapters import (
+    PipelineEvidenceExtractorAdapter,
 )
 from app.research.research_result_writer import (
     ResearchResultWriter,
 )
 from app.research.semantic_citation_verification_service import (
     SemanticCitationVerificationService,
+)
+from app.research.semantic_evidence_reranker import (
+    SemanticEvidenceReranker,
+)
+from app.research.semantic_research_evidence_extractor import (
+    SemanticResearchEvidenceExtractor,
 )
 from app.schemas.http_html_reader_config import (
     HttpHtmlReaderConfig,
@@ -49,6 +76,18 @@ from app.services.openai_client import (
 )
 
 LIVE_CLAIM_GENERATION_BUDGET = ExecutionBudget(
+    max_attempts=8,
+    max_recorded_tokens=8_000,
+    max_elapsed_seconds=60.0,
+)
+
+LIVE_CLAIM_RELEVANCE_BUDGET = ExecutionBudget(
+    max_attempts=8,
+    max_recorded_tokens=8_000,
+    max_elapsed_seconds=60.0,
+)
+
+LIVE_EVIDENCE_RELEVANCE_BUDGET = ExecutionBudget(
     max_attempts=8,
     max_recorded_tokens=8_000,
     max_elapsed_seconds=60.0,
@@ -126,6 +165,34 @@ class LiveResearchHandler:
                 )
             )
         )
+        claim_relevance_evaluator = (
+            ClaimRelevanceEvaluationService(
+                evaluator=OpenAIClaimRelevanceEvaluator(
+                    client=openai_client,
+                    model=settings.openai_model,
+                ),
+                budget=LIVE_CLAIM_RELEVANCE_BUDGET,
+            )
+        )
+        evidence_extractor = PipelineEvidenceExtractorAdapter(
+            SemanticResearchEvidenceExtractor(
+                question=question,
+                objective=objective,
+                paragraph_extractor=ParagraphEvidenceExtractor(),
+                shortlister=EmbeddingSemanticEvidenceShortlister(
+                    embedding_provider=OpenAIEmbeddingProvider(
+                        client=openai_client,
+                    )
+                ),
+                reranker=SemanticEvidenceReranker(
+                    evaluator=OpenAIEvidenceRelevanceEvaluator(
+                        client=openai_client,
+                        model=settings.openai_model,
+                    ),
+                    budget=LIVE_EVIDENCE_RELEVANCE_BUDGET,
+                ),
+            )
+        )
 
         reader_config = HttpHtmlReaderConfig(
             maximum_bytes=maximum_bytes
@@ -155,7 +222,11 @@ class LiveResearchHandler:
                     semantic_citation_verifier=(
                         semantic_citation_verifier
                     ),
+                    claim_relevance_evaluator=(
+                        claim_relevance_evaluator
+                    ),
                     claim_builder=claim_builder,
+                    evidence_extractor=evidence_extractor,
                 )
             ),
             writer=self._writer,

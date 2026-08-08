@@ -1590,3 +1590,477 @@ Development Dataset과 Blind Holdout을 구분해야 LLM-as-a-Judge의 실제
 - Controlled Live Runtime에서 Evidence 6개와 `max_attempts=3` 조건으로 Claim 3개만 생성되어 attempt ceiling이 실제로 작동함을 확인했다.
 - Controlled Live Runtime에서 Evidence 6개와 `max_recorded_tokens=1` 조건으로 첫 성공 Claim 1개를 보존한 뒤 추가 생성이 중단되어 token ceiling과 graceful degradation이 실제로 작동함을 확인했다.
 - 관련 Unit Test, 전체 pytest, Ruff 및 `git diff --check`를 통과했다.
+---
+
+## D-036 — Claim Relevance Evaluation을 Groundedness와 분리된 Evaluated Capability로 운영
+
+- 상태: 확정
+- 날짜: 2026-08-08
+- 적용 범위: Single-Agent Live Research의 Generated Claim 품질 평가
+
+### 문제
+
+Semantic Citation Verification은 다음 질문을 평가한다.
+
+```text
+Claim이 연결된 Evidence에 의해 실제로 지지되는가?
+```
+
+그러나 Citation이 완전히 지지되더라도 Claim 자체가 사용자의 Research
+Question과 Objective에 답하지 않을 수 있다.
+
+실제 Live Research에서 Generated Claim 3개가 모두 연결 Evidence에 의해
+지지되었지만, Research Question인 OpenAI Agents SDK의 Tool Calling
+mechanism과 관련해서는 모두 `irrelevant`로 평가되는 사례가 확인되었다.
+
+따라서 다음 두 품질 차원을 분리해야 한다.
+
+```text
+Groundedness:
+Claim ↔ Evidence
+
+Answer Relevance:
+Question + Objective ↔ Claim
+```
+
+### 결정
+
+- Claim Relevance Evaluation을 Semantic Citation Verification과 별도의
+  Evaluated Capability로 운영한다.
+- 입력은 `Question + Objective + Claim`으로 제한한다.
+- Evidence Support, Source Authority, 사실의 참·거짓 및 외부 지식은
+  Claim Relevance 판정에 사용하지 않는다.
+- 판정 범주는 다음 세 단계로 한다.
+
+```text
+directly_relevant
+partially_relevant
+irrelevant
+```
+
+- 연속형 `relevance_score`는 진단용 보조 신호로 유지하고,
+  범주 판정 자체를 점수 임계값으로 결정하지 않는다.
+- Claim Relevance는 Claim 생성 이후, 최종 Workspace/Report 합성 전에
+  평가한다.
+- Live Runtime은 별도의 Claim Relevance Budget을 사용한다.
+- 초기 Live engineering default는 최대 8회 평가, 최대 기록 Token 8,000,
+  최대 누적 평가시간 60초로 한다.
+- 현재 Claim Relevance 결과는 관측, 기록, Eval 및 실패 분석에 사용하되
+  Blocking Quality Gate 또는 Claim 삭제/필터링에는 연결하지 않는다.
+
+### 평가 결과
+
+Prompt v2.1을 Development Dataset 평가 후 동결하였다.
+
+Development Dataset:
+
+```text
+17 / 18 correct
+accuracy = 94.44%
+```
+
+동결된 Prompt v2.1로 새로운 Blind Holdout v2를 평가하였다.
+
+```text
+17 / 18 correct
+accuracy = 94.44%
+false_direct = 1
+false_irrelevant = 0
+```
+
+유일한 실패는 schema-definition 성격의 경계 사례에서
+`partially_relevant`를 `directly_relevant`로 과대평가한 사례였다.
+
+Blind Holdout 결과를 본 뒤 동일 Holdout에 맞춰 Prompt를 다시 수정하지 않았다.
+
+### Production Integration 검증
+
+Claim Relevance Evaluator를 Single Research Agent Pipeline과 Live Runtime에
+연결하였다.
+
+초기 Live Regression:
+
+```text
+Question:
+How does the OpenAI Agents SDK support tool calling?
+
+Objective:
+Explain the concrete mechanism by which functions or tools are made
+available to an agent and used during execution.
+
+Generated Claims = 3
+Semantic Citation = 3 / 3 fully_supported
+Claim Relevance = 3 / 3 irrelevant
+```
+
+이 결과로 다음 사실을 확인하였다.
+
+```text
+Grounded != Relevant
+```
+
+즉 Citation 정확성만으로 Research Answer 품질을 판단할 수 없다.
+
+### Capability 상태
+
+```text
+Implemented             = yes
+Unit Tested             = yes
+Pipeline Integrated     = yes
+Live Runtime Connected  = yes
+Golden Evaluated        = yes
+Blind Holdout Evaluated = yes
+Evaluated Capability    = yes
+
+Blocking Quality Gate   = no
+Claim Filtering         = no
+```
+
+### 이유
+
+AIRA는 근거가 있는 문장을 만드는 것뿐 아니라 실제 Research Question에
+답하는 문장을 만들어야 한다.
+
+Groundedness와 Relevance를 독립된 평가 축으로 유지하면 검색, Evidence,
+Claim Generation 및 Citation 중 어느 단계에서 품질이 떨어졌는지를
+정확하게 진단할 수 있다.
+
+---
+
+## D-037 — Semantic Evidence Relevance와 RRF Hybrid Retrieval
+
+- 상태: 확정
+- 날짜: 2026-08-08
+- 적용 범위: Live Research Evidence Retrieval 및 Final Evidence Selection
+
+### 문제
+
+D-036의 Live Regression에서 Generated Claim은 Evidence에 의해 완전히
+지지되었지만 Research Question에는 관련되지 않았다.
+
+Failure Localization 결과:
+
+- Search Query 자체는 적절하였다.
+- 선택된 Source Document 안에는 질문에 직접 답하는 Passage가 존재하였다.
+- 기존 Paragraph Evidence Extractor는 Question 중심의 lexical overlap을
+  기준으로 상위 Paragraph를 선택하였다.
+- Objective가 Evidence Retrieval에 충분히 반영되지 않았다.
+- 결과적으로 답이 문서 안에 존재해도 일반적인 소개 Paragraph가 선택되고
+  실제 mechanism Passage가 누락될 수 있었다.
+
+따라서 실패 원인을 `Semantic Evidence Relevance Gap`으로 정의하였다.
+
+### 아키텍처 결정
+
+Evidence Retrieval을 다음 단계로 분리한다.
+
+```text
+Document
+→ Paragraph Candidate Generation
+→ Embedding Ranking
+→ Lexical Ranking
+→ RRF Hybrid Shortlist
+→ LLM Semantic Evidence Relevance
+→ Precision-first Final Evidence Selection
+→ Claim Generation
+```
+
+각 단계의 책임은 다음과 같다.
+
+```text
+Paragraph Candidate Generation
+= provenance와 noise filtering을 유지하며 후보를 넓게 생성
+
+Embedding + Lexical + RRF
+= answer-bearing candidate를 놓치지 않는 Recall 단계
+
+LLM Evidence Relevance
+= Question + Objective 관점의 Precision 단계
+
+Final Evidence Selection
+= 평가된 Relevant Evidence를 최종 Evidence로 승격
+```
+
+### Semantic Evidence Relevance 판정
+
+LLM Evidence Relevance 입력은 다음으로 제한한다.
+
+```text
+Question
+Objective
+Evidence Excerpt
+```
+
+외부 지식, Search, Source Authority, 사실 검증 및 Evidence Support 판단은
+이 Evaluator의 책임이 아니다.
+
+판정 범주는 다음 세 단계로 한다.
+
+```text
+directly_relevant
+partially_relevant
+irrelevant
+```
+
+Score는 진단용으로 유지하되 범주를 Score threshold로 결정하지 않는다.
+
+### Evaluation 결과
+
+Golden Development Dataset v1:
+
+```text
+cases = 18
+initial = 16 / 18
+accuracy = 88.89%
+false_direct = 2
+false_irrelevant = 0
+```
+
+Input/measurement와 실제 enforcement/control을 구분하도록 Prompt를
+v1.1로 개선한 뒤 Development Dataset 결과:
+
+```text
+18 / 18 correct
+accuracy = 100%
+```
+
+이 100%는 Prompt 개선에 사용된 Development Dataset 결과이므로
+일반화 성능으로 해석하지 않는다.
+
+Prompt v1.1을 동결한 뒤 새로운 Blind Holdout v1을 평가하였다.
+
+```text
+cases = 18
+correct = 16 / 18
+accuracy = 88.89%
+false_direct = 2
+false_irrelevant = 0
+
+directly_relevant  = 6 / 6
+partially_relevant = 4 / 6
+irrelevant         = 6 / 6
+```
+
+Blind Holdout 결과를 본 뒤 동일 Holdout에 맞춰 Prompt를 수정하지 않았다.
+
+Semantic Evidence Relevance는 Evaluated Capability로 인정하지만
+Blocking Quality Gate로 사용하지 않는다.
+
+### Embedding-only Shortlist 실패
+
+초기 Production Integration에서는 Embedding Semantic Shortlist의
+`maximum_candidates=8`을 사용하였다.
+
+실제 Live Failure Audit에서 Document의 68개 Paragraph Candidate 중
+질문에 직접 답하는 핵심 Passage가 다음 순위에 있었다.
+
+```text
+Embedding rank 9:
+built-in agent loop that invokes tools,
+sends results back to the model,
+and continues until a final result is produced.
+
+Embedding rank 10:
+function tools with automatic schema generation
+and Pydantic-powered validation.
+
+Embedding rank 11:
+MCP server tools alongside native function tools.
+```
+
+따라서 Candidate Generation 실패가 아니라 Embedding-only Top-8의
+Recall 부족임을 확인하였다.
+
+특히 Embedding rank 10 Passage는 다음 값을 보였다.
+
+```text
+embedding_score = approximately 0.552
+lexical_score   = approximately 0.726
+```
+
+즉 Embedding과 Lexical Signal이 서로 다른 강점을 가진다는 사실이
+실제 문서에서 확인되었다.
+
+### RRF Hybrid Shortlist 결정
+
+Embedding Rank와 Lexical Rank를 Equal-weight Reciprocal Rank Fusion으로
+결합한다.
+
+초기 engineering default:
+
+```text
+rrf_k = 60
+maximum_candidates = 8
+weight = equal
+score threshold = none
+```
+
+RRF는 두 Rank를 결합하여 Shortlist 순서를 결정한다.
+
+기존 `semantic_score` metadata는 downstream diagnostics 호환성을 위해
+Embedding cosine score를 그대로 유지한다.
+
+실제 같은 68개 Candidate Simulation 결과:
+
+```text
+Core Passage                                      Embedding  Lexical  RRF
+
+SDK general overview                                   1        3      1
+function tools / schema / Pydantic                    10        1      5
+built-in agent loop / invokes tools                    9        8      6
+MCP + native function tools                           11       14     13
+```
+
+따라서 `maximum_candidates=8`을 증가시키지 않고도 핵심 Answer-bearing
+Passage 두 개를 LLM Relevance Evaluator의 평가 범위 안으로 올릴 수 있었다.
+
+### Precision-first Final Evidence Selection
+
+Semantic Evaluation 이후 최종 Evidence Selection은 다음 정책을 사용한다.
+
+1. `DIRECTLY_RELEVANT` 또는 `PARTIALLY_RELEVANT` Evidence가 하나 이상 있으면
+   최종 Evidence는 해당 평가 완료 Evidence만 사용한다.
+2. Relevant Evidence가 존재하는 경우 남은 Top-N을 `UNEVALUATED` Candidate로
+   채우지 않는다.
+3. Relevant Evidence가 하나도 없고 Budget exhaustion으로 일부 Candidate가
+   평가되지 못한 경우에만 최고 `UNEVALUATED` Candidate 1개를 graceful
+   fallback으로 허용한다.
+4. 모든 Candidate가 평가되었고 모두 `IRRELEVANT`이면 `NO_EVIDENCE`로 처리한다.
+
+이 정책은 Budget exhaustion을 의미적 `IRRELEVANT`와 동일시하지 않으면서도
+평가되지 않은 CTA 또는 일반 소개문이 최종 Evidence로 승격되는 것을 방지한다.
+
+### Live Regression 1 — Precision-first Selection
+
+초기 수정 후 동일 Research Question Live Test:
+
+```text
+UNEVALUATED final evidence = 0
+CTA final evidence = 0
+Final Evidence = 3
+All semantic_evaluated = true
+All 3 = partially_relevant
+```
+
+Precision 문제는 개선되었지만 직접적인 function-tool mechanism Passage가
+여전히 Embedding Top-8 밖에 있어 Recall 병목이 남아 있었다.
+
+### Live Regression 2 — RRF Hybrid Retrieval
+
+RRF Production Integration 후 동일 Research Question을 다시 실행하였다.
+
+최종 Source:
+
+```text
+OpenAI Agents SDK official documentation
+Title: Tools - OpenAI Agents SDK
+```
+
+Final Evidence:
+
+```text
+Evidence 1 = partially_relevant, score 0.55
+Evidence 2 = directly_relevant,  score 0.88
+Evidence 3 = partially_relevant, score 0.60
+
+semantic_evaluated = true for all
+UNEVALUATED = 0
+CTA noise = 0
+```
+
+Generated Claims:
+
+```text
+Claim 1:
+hosted tool search와 client-executed tool search의 사용 조건 및
+standard Runner 제약
+
+Claim 2:
+ProgrammaticToolCallingTool과 agent가 expose해야 하는
+programmatically callable/tool-search surface
+
+Claim 3:
+agent.as_tool을 사용하여 agent를 callable tool로 만들고
+structured input/runtime options를 제공하는 mechanism
+```
+
+Semantic Citation Verification:
+
+```text
+3 / 3 decision = verified
+3 / 3 support_level = fully_supported
+3 / 3 entailment_score = 1.0
+```
+
+Claim Relevance Evaluation:
+
+```text
+Claim 1 = partially_relevant, score 0.50
+Claim 2 = partially_relevant, score 0.60
+Claim 3 = directly_relevant,  score 0.78
+```
+
+Deterministic Research Quality:
+
+```text
+overall_score = 0.8845
+quality_level = high
+passed = true
+```
+
+이 Quality Score는 현재 Semantic Evidence Relevance나 Claim Relevance를
+Blocking Gate로 직접 사용하지 않으므로, 위 Semantic Evaluation 결과와
+분리하여 해석한다.
+
+### 최종 Regression Checkpoint
+
+RRF Production 변경 후 관련 focused regression:
+
+```text
+26 passed
+Ruff = passed
+git diff --cached --check = passed
+```
+
+Step 5.12 문서 업데이트를 포함한 최종 Repository Regression:
+
+```text
+4431 passed in 16.41s
+Ruff: All checks passed
+git diff --cached --check: passed
+```
+
+따라서 D-036 및 D-037에 포함된 Claim Relevance, Semantic Evidence Relevance,
+RRF Hybrid Retrieval 및 Precision-first Final Evidence Selection 변경은
+전체 기존 Regression을 깨뜨리지 않은 상태로 확인되었다.
+
+### Capability 상태
+
+```text
+Paragraph Candidate Exposure      = implemented
+Embedding Semantic Ranking        = implemented
+Lexical Ranking                   = implemented
+RRF Hybrid Shortlist              = implemented
+Semantic Evidence Relevance       = evaluated
+Precision-first Final Selection   = implemented
+Live Runtime Connected            = yes
+Live Regression Verified          = yes
+
+Blocking Quality Gate             = no
+Automatic Claim Filtering         = no
+```
+
+### 이유
+
+Embedding similarity는 문장의 의미적 유사성을 측정하지만 사용자의 질문에
+직접 답하는 Passage를 항상 최상위로 정렬하지는 않는다.
+
+Lexical Signal은 구체적인 함수명, API명, schema 및 mechanism 표현을 강하게
+포착할 수 있지만 일반적으로 의미적 표현 변화에는 취약하다.
+
+따라서 Recall 단계에서는 서로 다른 Signal을 RRF로 결합하고,
+Precision 단계에서는 LLM Semantic Relevance를 사용한다.
+
+이 구조는 특정 OpenAI Tool Calling 키워드를 Production 코드에 하드코딩하지
+않으면서도 Answer-bearing Evidence의 Recall을 개선하고,
+Groundedness와 Relevance를 독립적으로 평가할 수 있게 한다.

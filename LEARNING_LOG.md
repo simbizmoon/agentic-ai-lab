@@ -892,3 +892,365 @@ Semantic Verification이 어떻게 동작하는지 평가한다.
 - Evidence에 충실한 Claim이 실제 Research Question에도 충분히 관련 있는지를 어떻게 평가할 것인가?
 - Claim Relevance를 categorical policy로 둘 것인가, score 기반 Eval로 둘 것인가?
 - Relevance 평가를 blocking quality gate로 사용할 시점은 언제인가?
+
+---
+
+## 2026-08-08 — Grounded Claim과 Relevant Claim은 다르다
+
+### 학습 목표
+
+Semantic Citation이 완전히 지지되는 Claim도 사용자의 Research Question에
+답하지 않을 수 있다는 문제를 분리해서 이해한다.
+
+### 최초 Live Failure
+
+연구 질문:
+
+```text
+How does the OpenAI Agents SDK support tool calling?
+```
+
+생성된 Claim 3개는 모두 Semantic Citation Verification에서
+`fully_supported`였지만 Claim Relevance에서는 모두 `irrelevant`였다.
+
+### 배운 점
+
+1. `Claim ↔ Evidence`와 `Question/Objective ↔ Claim`은 서로 다른 평가 문제다.
+2. Citation 정확도만 높다고 Research Answer가 좋은 것은 아니다.
+3. Groundedness와 Answer Relevance를 분리하면 실패 위치를 더 정확히 찾을 수 있다.
+4. LLM Judge의 연속 score를 곧바로 정책 threshold로 쓰기보다 categorical
+   judgment를 중심에 두는 편이 안정적이다.
+5. Eval에 사용한 Development Dataset과 Blind Holdout을 구분해야 한다.
+6. Holdout 결과를 본 뒤 같은 Holdout에 맞춰 Prompt를 다시 조정하면
+   Blind Test의 의미가 사라진다.
+
+### Claim Relevance 평가
+
+```text
+Prompt v2.1 Development:
+17 / 18 = 94.44%
+
+Blind Holdout v2:
+17 / 18 = 94.44%
+false_direct = 1
+false_irrelevant = 0
+```
+
+현재 판단:
+
+```text
+Claim Relevance
+= Evaluated Capability
+
+Blocking Quality Gate
+= 보류
+```
+
+---
+
+## 2026-08-08 — Semantic Evidence Relevance: 답이 문서 안에 있어도 Retrieval이 실패할 수 있다
+
+### 학습 목표
+
+Search가 맞고 Source Document 안에 답이 존재하는데도 최종 Claim이 질문에
+답하지 못하는 경우, Evidence Retrieval 계층에서 실패를 찾는 방법을 학습한다.
+
+### Failure Localization
+
+초기 Live Failure를 단계별로 확인하였다.
+
+```text
+Search Query
+→ 적절함
+
+Selected Source
+→ 관련 문서임
+
+Full Document
+→ answer-bearing Passage 존재
+
+Selected Evidence
+→ 일반적인 소개 Paragraph 위주
+```
+
+따라서 문제는 Search 실패가 아니라:
+
+```text
+Semantic Evidence Relevance Gap
+```
+
+이었다.
+
+### 배운 점
+
+1. Search relevance와 Evidence relevance는 다른 단계다.
+2. 문서 전체가 관련 있어도 모든 Paragraph가 질문에 관련 있는 것은 아니다.
+3. Objective가 Retrieval 과정에 들어가지 않으면 Question 단어 overlap만 높은
+   Paragraph가 선택될 수 있다.
+4. Candidate Generation, Shortlisting, Semantic Evaluation, Final Selection을
+   분리하면 어느 단계가 실패했는지 추적할 수 있다.
+
+### Evidence Relevance 평가
+
+```text
+Golden Development initial:
+16 / 18 = 88.89%
+
+Prompt v1.1 Development:
+18 / 18 = 100%
+
+Blind Holdout v1:
+16 / 18 = 88.89%
+false_direct = 2
+false_irrelevant = 0
+```
+
+Development Dataset의 100%를 일반적인 현실 성능으로 해석하지 않는다.
+
+---
+
+## 2026-08-08 — Embedding similarity는 Answer Relevance와 같지 않다
+
+### 실제 관찰
+
+68개 Paragraph Candidate에서 질문에 직접 답하는 Passage의 Embedding 순위는:
+
+```text
+agent loop / invokes tools
+→ rank 9
+
+function tools / schema / Pydantic
+→ rank 10
+
+MCP + native function tools
+→ rank 11
+```
+
+기존 Top-8 Embedding Shortlist에서는 이 Passage들이 LLM Semantic Evaluator에
+도달하지 못했다.
+
+특히 다음 Passage는:
+
+```text
+function tools with automatic schema generation
+and Pydantic-powered validation
+```
+
+다음 신호를 보였다.
+
+```text
+embedding score ≈ 0.552
+lexical score   ≈ 0.726
+```
+
+### 핵심 학습
+
+Embedding은 의미적 유사성을 잘 측정하지만 다음을 보장하지 않는다.
+
+```text
+"이 Passage가 사용자의 질문에 가장 직접적으로 답하는가?"
+```
+
+Lexical ranking도 반대로 단독으로 완전하지 않다.
+
+따라서 서로 다른 signal을 결합해야 한다.
+
+---
+
+## 2026-08-08 — Recall과 Precision을 분리하고 RRF로 결합하기
+
+### 구조
+
+```text
+Paragraph Candidates
+       ↓
+Embedding Rank ──┐
+                 ├─ RRF Hybrid Shortlist
+Lexical Rank ────┘
+       ↓
+LLM Evidence Relevance
+       ↓
+Precision-first Final Selection
+```
+
+### 개념
+
+- **Recall**: 필요한 정답 후보를 놓치지 않는 능력
+- **Precision**: 가져온 후보 중 정말 필요한 것만 고르는 능력
+
+이번 구조에서:
+
+```text
+Embedding + Lexical + RRF
+= Recall 담당
+
+LLM Semantic Evidence Relevance
+= Precision 담당
+```
+
+### RRF Simulation
+
+```text
+Core Passage                              Embedding  Lexical  RRF
+
+SDK general overview                           1        3      1
+function tools / schema / Pydantic            10        1      5
+built-in agent loop / invokes tools            9        8      6
+```
+
+Top-8 budget을 늘리지 않고도 핵심 Passage가 평가 범위에 들어왔다.
+
+### 배운 점
+
+1. Budget 문제를 후보 수 증가로만 해결하지 않아도 된다.
+2. 서로 다른 Ranking signal을 결합하면 Recall을 개선할 수 있다.
+3. 특정 질문의 keyword를 Production 코드에 하드코딩해서는 안 된다.
+4. Retrieval algorithm 개선은 일반화 가능한 signal 조합으로 해결해야 한다.
+
+---
+
+## 2026-08-08 — UNEVALUATED와 IRRELEVANT는 같은 상태가 아니다
+
+### 문제
+
+Semantic Relevance Budget이 먼저 소진되면 일부 Candidate는 평가되지 않은
+`UNEVALUATED` 상태로 남는다.
+
+초기 구현에서는:
+
+```text
+DIRECT
+→ PARTIAL
+→ UNEVALUATED
+→ IRRELEVANT
+```
+
+순서 때문에 이미 Relevant Evidence가 있어도 남은 Top-N을 UNEVALUATED
+Candidate가 채웠고 CTA 같은 노이즈가 최종 Evidence에 들어갈 수 있었다.
+
+### 최종 정책
+
+```text
+Relevant Evidence 존재
+→ DIRECT/PARTIAL만 최종 Evidence
+
+Relevant 없음 + Budget exhaustion
+→ best UNEVALUATED 1개 fallback
+
+모두 평가 완료 + 모두 IRRELEVANT
+→ NO_EVIDENCE
+```
+
+### 배운 점
+
+1. `평가하지 못함`은 `관련 없음`과 다르다.
+2. Budget exhaustion은 의미 판정이 아니라 실행 상태다.
+3. graceful degradation은 불확실성을 숨기지 않아야 한다.
+4. Final promotion policy와 Reranker trace policy는 서로 다른 책임이다.
+
+---
+
+## 2026-08-08 — RRF 이후 Live Regression에서 확인한 것
+
+최종 Live Source:
+
+```text
+Tools - OpenAI Agents SDK
+official OpenAI Agents SDK documentation
+```
+
+Final Evidence:
+
+```text
+PARTIAL 0.55
+DIRECT  0.88
+PARTIAL 0.60
+
+UNEVALUATED = 0
+CTA noise = 0
+```
+
+Citation:
+
+```text
+3 / 3 verified
+3 / 3 fully_supported
+```
+
+Claim Relevance:
+
+```text
+PARTIAL 0.50
+PARTIAL 0.60
+DIRECT  0.78
+```
+
+Deterministic Quality:
+
+```text
+0.8845
+high
+passed = true
+```
+
+### 중요한 해석
+
+이번 결과는 시스템이 완벽하게 Tool Calling 전체 흐름을 설명했다는 뜻은 아니다.
+
+Evaluator는 여전히 일부 Claim에 대해 다음 부족함을 지적했다.
+
+- Tool 등록/노출 방식의 전체 설명 부족
+- 실행 시 Agent가 Tool을 선택하는 과정 부족
+- Argument 전달 부족
+- Tool invocation 부족
+- Tool result가 모델로 돌아오는 흐름 부족
+
+즉 다음 품질 문제는:
+
+```text
+Relevant Evidence를 찾는가?
+```
+
+에서 한 단계 나아가:
+
+```text
+여러 Relevant Evidence를 어떻게 조합해
+Question 전체를 충분히 Coverage하는가?
+```
+
+로 이동하였다.
+
+### 최종 학습
+
+1. Grounded != Relevant.
+2. Embedding similarity != Answer relevance.
+3. Recall과 Precision은 분리해야 한다.
+4. RRF는 서로 다른 retrieval signal을 결합하는 단순하고 강력한 방법이다.
+5. LLM Judge는 candidate filtering보다는 의미적 precision 판단에 적합하다.
+6. UNEVALUATED와 IRRELEVANT를 구분해야 한다.
+7. Live E2E 실패는 단위 테스트가 찾지 못하는 retrieval pathology를 보여준다.
+8. 실제 코드, schema, runtime artifact를 문서나 추측보다 우선해야 한다.
+9. Evaluation 결과가 존재하는 위치도 schema와 writer를 실제로 확인해야 한다.
+10. 높은 deterministic quality score와 semantic answer quality는 별개일 수 있다.
+
+### 최종 Regression Checkpoint
+
+Step 5.12의 Claim Relevance, Semantic Evidence Relevance,
+RRF Hybrid Retrieval, Precision-first Selection 및 문서 업데이트를 포함해
+전체 Repository를 다시 검증하였다.
+
+```text
+4431 passed in 16.41s
+Ruff: All checks passed
+git diff --cached --check: passed
+```
+
+이 결과는 focused test 성공만이 아니라 기존 Repository 전체 Regression과의
+호환성도 유지되었음을 의미한다.
+
+### 다음 학습 과제
+
+- 여러 Relevant Evidence의 coverage를 측정하는 방법
+- Direct Evidence가 부족할 때 추가 Retrieval/Replanning 여부
+- Claim set 전체가 Question/Objective를 충분히 커버하는지 평가하는 방법
+- Semantic Relevance를 언제 Blocking Quality Gate로 승격할지

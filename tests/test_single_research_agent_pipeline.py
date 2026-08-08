@@ -26,12 +26,18 @@ from app.research.single_research_agent_pipeline import (
 from app.research.supplemental_research_query_planner import (
     SupplementalResearchQueryPlanner,
 )
+from app.schemas.claim_relevance_judgment import (
+    ClaimRelevanceLevel,
+)
 from app.schemas.research_claim import (
     ResearchCitation,
     ResearchClaim,
     ResearchClaimSet,
     ResearchClaimStatus,
     ResearchClaimType,
+)
+from app.schemas.research_claim_relevance_evaluation import (
+    ResearchClaimRelevanceEvaluation,
 )
 from app.schemas.research_evidence import (
     ResearchEvidence,
@@ -360,6 +366,7 @@ def pipeline(
     *,
     source_searcher: object | None = None,
     semantic_citation_verifier: object | None = None,
+    claim_relevance_evaluator: object | None = None,
 ) -> SingleResearchAgentPipeline:
     """Return one fully configured test pipeline."""
 
@@ -380,6 +387,9 @@ def pipeline(
         ),
         semantic_citation_verifier=(
             semantic_citation_verifier
+        ),
+        claim_relevance_evaluator=(
+            claim_relevance_evaluator
         ),
     )
 
@@ -1272,3 +1282,62 @@ def test_pipeline_has_no_semantic_verifications_by_default() -> None:
     result = pipeline().run(request())
 
     assert result.citation_verifications == []
+
+
+
+class FakeClaimRelevanceEvaluationService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[str]]] = []
+
+    def evaluate(
+        self,
+        *,
+        request: ResearchRequest,
+        claim_set: ResearchClaimSet,
+    ) -> list[ResearchClaimRelevanceEvaluation]:
+        self.calls.append(
+            (
+                request.request_id,
+                [claim.claim_id for claim in claim_set.claims],
+            )
+        )
+        return [
+            ResearchClaimRelevanceEvaluation(
+                evaluation_id="relevance-1",
+                claim_id=claim_set.claims[0].claim_id,
+                relevance_level=ClaimRelevanceLevel.DIRECTLY_RELEVANT,
+                relevance_score=0.9,
+                rationale="Directly answers the request.",
+                issues=[],
+                metadata={"response_id": "resp-1"},
+            )
+        ]
+
+
+def test_pipeline_records_claim_relevance_evaluations() -> None:
+    evaluator = FakeClaimRelevanceEvaluationService()
+    research_pipeline = pipeline(
+        claim_relevance_evaluator=evaluator,
+    )
+
+    result = research_pipeline.run(request())
+
+    assert evaluator.calls == [
+        (
+            result.workspace.request.request_id,
+            [claim.claim_id for claim in result.workspace.claim_set.claims],
+        )
+    ]
+    assert len(result.claim_relevance_evaluations) == 1
+    assert (
+        result.claim_relevance_evaluations[0].claim_id
+        == result.workspace.claim_set.claims[0].claim_id
+    )
+
+
+def test_pipeline_defaults_to_no_claim_relevance_evaluations() -> None:
+    research_pipeline = pipeline()
+
+    result = research_pipeline.run(request())
+
+    assert result.claim_relevance_evaluations == []

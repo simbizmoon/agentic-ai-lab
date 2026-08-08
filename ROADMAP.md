@@ -36,9 +36,10 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 2 — Target Product and Architecture
-- 현재 상태: Target Architecture 및 첫 Search Provider 결정 완료, Tavily Search Adapter 구현 준비
-- 현재 기준일: 2026-08-06
+- 현재 제품 단계: Stage 3 — Minimal Intelligent Single Agent
+- 현재 상태: Live Research Vertical Slice, Generative Claim, Semantic Citation,
+  Claim Relevance 및 Semantic Evidence Relevance/RRF Hybrid Retrieval까지 통합·검증
+- 현재 기준일: 2026-08-08
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -66,15 +67,18 @@
 - [ ] `LEARNING_LOG.md`
 - [ ] 기타 기존 핵심 문서
 
-현재 테스트 기준선:
+현재 검증 기준:
 
-- 기준일: 2026-08-06
+- 기준일: 2026-08-08
 - Python: `3.12.3`
 - pytest: `9.1.1`
 - Ruff: `0.16.0`
-- 전체 테스트: `4088 passed in 15.93s`
+- Step 5.12 최종 전체 Regression: `4431 passed in 16.41s`
+- Step 5.12 RRF 변경 후 focused regression: `26 passed`
 - Ruff: `All checks passed`
-- 테스트 및 정적 검사 후 Git 작업 트리 변경 없음
+- `git diff --cached --check`: 통과
+- Claim Relevance, Semantic Evidence Relevance, RRF Hybrid Retrieval 및
+  관련 문서 변경까지 포함한 현재 Checkpoint가 전체 Regression을 통과했다.
 
 판정 원칙:
 
@@ -519,7 +523,8 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [ ] 시작 전
+- [x] 핵심 Target Architecture 및 Integration 방향 확정
+- 세부 문서 보강은 지속 관리 Track에서 수행한다.
 
 ## Work Items
 
@@ -592,7 +597,7 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [ ] 시작 전
+- [~] 진행 중 — Live Research 핵심 수직 경로와 Semantic Quality 계층 통합 완료
 
 ## Work Items
 
@@ -1849,3 +1854,258 @@ Golden Dataset과 Blind Holdout을 기준으로 한다.
 **Step 5 — Claim Relevance / Answer Relevance Evaluation Existing Capability Audit**
 
 Citation이 Evidence를 정확히 지지하는지와 별개로, 생성된 Claim이 사용자의 Research Question과 Objective에 실제로 답하는지를 평가하는 capability를 검토한다.
+
+---
+
+# 29. 2026-08-08 Step 5 — Claim / Evidence Relevance 통합 완료 기록
+
+## 29.1 Claim Relevance Evaluation
+
+상태: **완료**
+
+완료 항목:
+
+- [x] Existing Capability Audit
+- [x] `ClaimRelevanceLevel`
+- [x] Structured `ClaimRelevanceJudgment`
+- [x] OpenAI Claim Relevance Evaluator
+- [x] Golden Development Dataset
+- [x] Blind Holdout Dataset
+- [x] Prompt v2.1 동결
+- [x] Single Research Pipeline 연결
+- [x] Live Runtime 연결
+- [x] 독립 Execution Budget
+- [x] result.json persistence
+- [x] 실제 Live Regression
+
+평가 결과:
+
+```text
+Development Dataset:
+17 / 18 = 94.44%
+
+Blind Holdout v2:
+17 / 18 = 94.44%
+false_direct = 1
+false_irrelevant = 0
+```
+
+초기 Live Failure:
+
+```text
+Generated Claims = 3
+Semantic Citation = 3 / 3 fully_supported
+Claim Relevance = 3 / 3 irrelevant
+```
+
+확정된 진단:
+
+```text
+Groundedness != Answer Relevance
+```
+
+Claim Relevance는 현재 Evaluated Capability이며 Blocking Quality Gate나
+자동 Claim 필터링에는 연결하지 않는다.
+
+## 29.2 Semantic Evidence Relevance
+
+상태: **완료**
+
+완료 항목:
+
+- [x] `EvidenceRelevanceLevel`
+- [x] Structured `EvidenceRelevanceJudgment`
+- [x] OpenAI Evidence Relevance Evaluator
+- [x] Golden Development Dataset
+- [x] Prompt v1.1 동결
+- [x] Blind Holdout v1
+- [x] Paragraph Candidate Exposure
+- [x] Embedding Semantic Shortlist
+- [x] Semantic Evidence Reranker
+- [x] Semantic-aware Evidence Extractor
+- [x] Live Runtime DI
+- [x] Live Handler Wiring
+- [x] Precision-first Final Evidence Selection
+- [x] Embedding-only shortlist coverage audit
+- [x] RRF Hybrid Retrieval simulation
+- [x] RRF Hybrid Retrieval production integration
+- [x] Live Regression
+
+평가 결과:
+
+```text
+Golden Development initial:
+16 / 18 = 88.89%
+
+Prompt v1.1 Development:
+18 / 18 = 100%
+(Development Dataset이므로 일반화 성능으로 해석하지 않음)
+
+Blind Holdout v1:
+16 / 18 = 88.89%
+false_direct = 2
+false_irrelevant = 0
+```
+
+## 29.3 Embedding-only Failure와 RRF 개선
+
+실제 68개 Paragraph Candidate Audit에서 핵심 answer-bearing Passage는:
+
+```text
+built-in agent loop / invokes tools
+Embedding rank = 9
+
+function tools / automatic schema / Pydantic
+Embedding rank = 10
+
+MCP + native function tools
+Embedding rank = 11
+```
+
+기존 `maximum_candidates=8`에서는 핵심 Passage가 Semantic Evaluator에
+도달하지 못했다.
+
+RRF Hybrid Simulation:
+
+```text
+Core Passage                              Embedding  Lexical  RRF
+
+SDK general overview                           1        3      1
+function tools / schema / Pydantic            10        1      5
+built-in agent loop / invokes tools            9        8      6
+MCP + native function tools                   11       14     13
+```
+
+확정된 초기 정책:
+
+```text
+Embedding Rank + Lexical Rank
+→ Equal-weight Reciprocal Rank Fusion
+
+rrf_k = 60
+maximum_candidates = 8
+score threshold = none
+```
+
+## 29.4 Precision-first Final Evidence Selection
+
+정책:
+
+```text
+DIRECT 또는 PARTIAL Evidence가 존재
+→ 평가 완료 Relevant Evidence만 최종 승격
+→ UNEVALUATED backfill 금지
+
+Relevant Evidence 없음 + Budget exhaustion
+→ best UNEVALUATED 1개만 graceful fallback
+
+모두 평가 완료 + 모두 IRRELEVANT
+→ NO_EVIDENCE
+```
+
+## 29.5 최종 Live Regression
+
+연구 질문:
+
+```text
+How does the OpenAI Agents SDK support tool calling?
+```
+
+목적:
+
+```text
+Explain the concrete mechanism by which functions or tools are made
+available to an agent and used during execution.
+```
+
+최종 Source:
+
+```text
+OpenAI Agents SDK official documentation
+Title: Tools - OpenAI Agents SDK
+```
+
+Final Evidence:
+
+```text
+1 x directly_relevant   (0.88)
+2 x partially_relevant  (0.55, 0.60)
+
+semantic_evaluated = true for all
+UNEVALUATED = 0
+CTA noise = 0
+```
+
+Semantic Citation Verification:
+
+```text
+3 / 3 verified
+3 / 3 fully_supported
+3 / 3 entailment_score = 1.0
+```
+
+Claim Relevance:
+
+```text
+Claim 1 = partially_relevant 0.50
+Claim 2 = partially_relevant 0.60
+Claim 3 = directly_relevant  0.78
+```
+
+Deterministic Quality:
+
+```text
+overall_score = 0.8845
+quality_level = high
+passed = true
+```
+
+주의:
+
+현재 Deterministic Quality Score는 Semantic Evidence Relevance 또는 Claim
+Relevance를 Blocking Gate로 직접 사용하지 않는다. 따라서 Semantic 평가 결과와
+별도로 해석한다.
+
+## 29.6 현재 Step 5 상태
+
+```text
+Claim Relevance Evaluation
+→ Evaluated Capability
+
+Semantic Evidence Relevance
+→ Evaluated Capability
+
+RRF Hybrid Retrieval
+→ Implemented + Focused Tested + Live Verified
+
+Precision-first Final Evidence Selection
+→ Implemented + Live Verified
+
+Semantic Citation Verification
+→ Evaluated Capability
+
+Blocking Semantic Quality Gate
+→ Deferred
+```
+
+## 29.7 최종 Checkpoint
+
+- [x] `DECISIONS.md` 최신화
+- [x] `ROADMAP.md` 최신화
+- [x] `LEARNING_LOG.md` 최신화
+- [x] `AIRA_CAPABILITY_MATRIX.md` 최신화
+- [x] Step 5.12 이후 전체 Repository pytest
+- [x] 전체 Ruff
+- [x] `git diff --cached --check`
+- [x] 최종 Regression Checkpoint 기록
+- [ ] 전체 Git Diff 최종 검토
+- [ ] 의미 있는 Git Commit
+- [ ] 다음 연구 품질 과제 선정
+
+최종 검증:
+
+```text
+4431 passed in 16.41s
+Ruff: All checks passed
+git diff --cached --check: passed
+```

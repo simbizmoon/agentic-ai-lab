@@ -11,6 +11,9 @@ from app.research.research_pipeline_error import ResearchPipelineError
 from app.research.research_quality_evaluator import ResearchQualityEvaluator
 from app.research.research_synthesizer import DeterministicResearchSynthesizer
 from app.schemas.research_claim import ResearchClaimSet
+from app.schemas.research_claim_relevance_evaluation import (
+    ResearchClaimRelevanceEvaluation,
+)
 from app.schemas.research_evidence import (
     ResearchEvidence,
     ResearchEvidenceSet,
@@ -107,6 +110,17 @@ class SemanticCitationVerifierProtocol(Protocol):
     ) -> list[ResearchCitationVerification]: ...
 
 
+class ClaimRelevanceEvaluationServiceProtocol(Protocol):
+    # Evaluate research claims against the request.
+
+    def evaluate(
+        self,
+        *,
+        request: ResearchRequest,
+        claim_set: ResearchClaimSet,
+    ) -> list[ResearchClaimRelevanceEvaluation]: ...
+
+
 class SupplementalResearchQueryPlannerProtocol(Protocol):
     def plan(
         self,
@@ -140,6 +154,9 @@ class SingleResearchAgentPipeline:
         semantic_citation_verifier: (
             SemanticCitationVerifierProtocol | None
         ) = None,
+        claim_relevance_evaluator: (
+            ClaimRelevanceEvaluationServiceProtocol | None
+        ) = None,
     ) -> None:
         self._request_validator = request_validator
         self._task_decomposer = task_decomposer
@@ -158,6 +175,9 @@ class SingleResearchAgentPipeline:
         self._semantic_citation_verifier = (
             semantic_citation_verifier
         )
+        self._claim_relevance_evaluator = (
+            claim_relevance_evaluator
+        )
 
     @property
     def semantic_citation_verifier(
@@ -166,6 +186,12 @@ class SingleResearchAgentPipeline:
         """Return the optional semantic citation verifier."""
 
         return self._semantic_citation_verifier
+
+    @property
+    def claim_relevance_evaluator(
+        self,
+    ) -> ClaimRelevanceEvaluationServiceProtocol | None:
+        return self._claim_relevance_evaluator
 
     @property
     def source_searcher(self) -> ResearchSourceSearcherProtocol:
@@ -390,6 +416,18 @@ class SingleResearchAgentPipeline:
                 )
             )
 
+        claim_relevance_evaluations: list[
+            ResearchClaimRelevanceEvaluation
+        ] = []
+
+        if self._claim_relevance_evaluator is not None:
+            claim_relevance_evaluations = (
+                self._claim_relevance_evaluator.evaluate(
+                    request=request,
+                    claim_set=claim_set,
+                )
+            )
+
         workspace = ResearchWorkspace(
             workspace_id=resolved_workspace_id,
             request=request,
@@ -439,6 +477,9 @@ class SingleResearchAgentPipeline:
             quality=quality,
             citation_verifications=(
                 citation_verifications
+            ),
+            claim_relevance_evaluations=(
+                claim_relevance_evaluations
             ),
         )
 
