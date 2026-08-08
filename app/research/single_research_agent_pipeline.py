@@ -553,6 +553,7 @@ class SingleResearchAgentPipeline:
                 "coverage_replanning_candidate_count": "0",
                 "coverage_replanning_novel_candidate_count": "0",
                 "coverage_replanning_new_document_count": "0",
+                "coverage_replanning_novel_evidence_count": "0",
                 "coverage_replanning_new_evidence_count": "0",
                 "coverage_replanning_claims_rebuilt": "false",
                 "coverage_replanning_blocked_by_budget": "false",
@@ -645,6 +646,23 @@ class SingleResearchAgentPipeline:
                         self._evidence_extractor
                     )
                     coverage_evidence_started_at = time.perf_counter()
+                    (
+                        _,
+                        novel_coverage_evidence_set,
+                        _,
+                        _,
+                        _,
+                    ) = self._select_documents_with_evidence(
+                        coverage_document_set,
+                        query_set=query_set,
+                        maximum_sources=request.maximum_sources,
+                        evidence_cache=evidence_cache,
+                    )
+                    coverage_replanning_metadata[
+                        "coverage_replanning_novel_evidence_count"
+                    ] = str(
+                        len(novel_coverage_evidence_set.evidence)
+                    )
                     (
                         candidate_document_set,
                         candidate_evidence_set,

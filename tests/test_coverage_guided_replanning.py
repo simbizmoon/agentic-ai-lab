@@ -577,3 +577,51 @@ def test_coverage_replanning_reuses_negative_evidence_results() -> None:
     assert first[1].evidence == []
     assert second[1].evidence == []
     assert extractor.calls == ["source-a"]
+
+def test_coverage_replanning_evaluates_novel_document_when_source_limit_is_full() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a", "source-d"})
+    pipeline, _, _, _ = coverage_pipeline(
+        levels=[AnswerCoverageLevel.PARTIALLY_COVERED],
+    )
+    pipeline._evidence_extractor = extractor
+    request = coverage_request().model_copy(
+        update={"maximum_sources": 1}
+    )
+
+    result = pipeline.run(request)
+
+    assert extractor.calls == ["source-a", "source-d"]
+    assert result.workspace.metadata[
+        "coverage_replanning_novel_evidence_count"
+    ] == "1"
+    assert result.workspace.metadata[
+        "coverage_replanning_new_evidence_count"
+    ] == "0"
+    assert result.workspace.metadata[
+        "coverage_replanning_claims_rebuilt"
+    ] == "false"
+
+
+def test_coverage_replanning_records_novel_document_without_evidence() -> None:
+    extractor = BackfillEvidenceExtractor({"source-a"})
+    pipeline, _, _, _ = coverage_pipeline(
+        levels=[AnswerCoverageLevel.PARTIALLY_COVERED],
+        evidence_sources={"source-a"},
+    )
+    pipeline._evidence_extractor = extractor
+    request = coverage_request().model_copy(
+        update={"maximum_sources": 1}
+    )
+
+    result = pipeline.run(request)
+
+    assert extractor.calls == ["source-a", "source-d"]
+    assert result.workspace.metadata[
+        "coverage_replanning_novel_evidence_count"
+    ] == "0"
+    assert result.workspace.metadata[
+        "coverage_replanning_new_evidence_count"
+    ] == "0"
+    assert result.workspace.metadata[
+        "coverage_replanning_claims_rebuilt"
+    ] == "false"
