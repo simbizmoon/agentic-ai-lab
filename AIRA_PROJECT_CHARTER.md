@@ -1709,6 +1709,61 @@ AIRA 프로젝트는 다음 원칙을 따른다.
 
 ---
 
+
+
+# 38.1 Cost-effectiveness와 Stage Stop Rule
+
+AIRA는 기술적으로 가능한 모든 개선을 즉시 구현하지 않는다.
+
+개발 판단에는 API 비용뿐 아니라 다음 비용을 함께 포함한다.
+
+* 개발 시간
+* 테스트와 회귀 검증 시간
+* 설계 복잡성
+* 유지보수 비용
+* 디버깅 비용
+* 학습 및 다음 Capability로 이동하는 기회비용
+
+각 주요 Stage 또는 Work Item은 가능한 범위에서 다음을 정의한다.
+
+```text
+Goal
+Acceptance Criteria
+Measured Baseline
+Known Limitations
+Stop Rule
+Reopen Conditions
+```
+
+다음 조건을 만족하면 알려진 한계가 남아 있어도 다음 Stage로 이동할 수 있다.
+
+* 핵심 Runtime이 실제로 동작한다.
+* 주요 실패를 탐지하고 기록할 수 있다.
+* 비용과 반복에 명시적인 상한이 있다.
+* 회귀 테스트가 안정적이다.
+* 현재 제품·학습 목표에 필요한 Baseline이 확보되었다.
+* 추가 개선의 기대효과가 구현·검증 비용보다 명확히 크지 않다.
+
+보류된 개선은 폐기된 것으로 간주하지 않는다.
+
+실제 사용자 실패, Evaluation Dataset, 운영 비용 또는 새로운 Architecture
+비교에서 필요성이 입증되면 다시 연다.
+
+Multi-Agent 역시 동일한 원칙을 적용한다.
+
+Agent 수 증가가 아니라 Single-Agent 대비 다음 중 하나의 의미 있는 개선을
+입증해야 한다.
+
+* 품질
+* Evidence Coverage
+* Citation 또는 Verification
+* Context 관리
+* 실패 격리
+* 처리시간
+* 비용 대비 성능
+
+---
+
 # 39. 문서 우선순위
 
 프로젝트 목표와 제품 방향에 관한 잠정 문서 우선순위는 다음과 같다.

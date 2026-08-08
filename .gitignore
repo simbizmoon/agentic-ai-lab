@@ -51,3 +51,6 @@ tmp/
 # Generated evaluation outputs
 evals/results/*
 !evals/results/.gitkeep
+
+# Local document backups
+backup/

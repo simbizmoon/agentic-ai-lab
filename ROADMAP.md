@@ -36,11 +36,12 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 3 — Minimal Intelligent Single Agent
+- 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 최적화 완료 → 다음 학습 초점은 Multi-Agent Experiment
 - 현재 상태: Live Research Vertical Slice, Generative Claim, Semantic Citation,
   Claim/Evidence Relevance, RRF Hybrid Retrieval, Semantic Answer Coverage,
-  Coverage-guided Bounded Replanning 및 Research Run Observability까지 통합·검증
-- 현재 기준일: 2026-08-08
+  Coverage-guided Bounded Replanning, Research Run Observability 및
+  Step 6.6 Performance Optimization까지 통합·검증 완료
+- 현재 기준일: 2026-08-09
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -600,7 +601,8 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [~] 진행 중 — Semantic Answer Coverage, bounded coverage replanning 및 observability까지 완료; 다음은 성능 최적화
+- [x] 핵심 Single-Agent Live Research 경로 완료 및 성능 최적화 Checkpoint 확보
+- 추가 미세조정은 보류한다. 현재 Baseline을 유지한 채 다음 학습 초점은 Multi-Agent의 필요성, 패턴, 비용 및 구현 비교로 이동한다.
 
 ## Work Items
 
@@ -2301,3 +2303,210 @@ working tree = clean
 
 최적화는 검색 Provider가 아니라 실제 측정에서 가장 비싼 Semantic Evaluation과
 Coverage Round 재작업부터 검토한다.
+
+---
+
+# 31. 2026-08-09 Step 6.6 — Single-Agent Performance Optimization 완료 기록
+
+## 31.1 목표
+
+Step 6.5 Observability에서 확인된 Semantic LLM fan-out과 Coverage Round 재작업을
+줄이되, 기존 Evidence→Claim provenance, Citation 의미, Relevance 평가,
+Coverage 판정 및 Budget 계약을 깨뜨리지 않는 것을 목표로 하였다.
+
+최적화 우선순위는 다음 원칙을 따랐다.
+
+```text
+1. 불필요한 호출 제거
+2. 기존 결과 재사용
+3. 독립 작업의 Batch 처리
+4. 필요 시 병렬화·저가 모델을 후속 검토
+```
+
+## 31.2 완료된 최적화
+
+- [x] Coverage Round Incremental Reuse
+- [x] Evidence Semantic Usage 계측 정확도 보정
+- [x] Per-run Document-level Evidence Reuse
+- [x] Coverage Novel-document Evidence Evaluation
+- [x] Coverage Novel-source Adoption
+- [x] Coverage Substitution Acceptance Gate
+- [x] Post-Optimization Performance Re-baseline
+- [x] Document-local Batched Evidence Relevance Evaluation
+- [x] Batched Claim Relevance Evaluation
+- [x] Batched Semantic Citation Verification
+- [x] Batched Evidence-to-Claim Generation
+- [x] 전체 Regression
+- [x] Ruff
+- [x] `git diff --check`
+- [x] Git Commit 및 `origin/main` Push
+
+## 31.3 핵심 설계 원칙
+
+Batching은 의미적 계약을 바꾸지 않는다.
+
+```text
+Evidence 1 → Claim 1
+Evidence 2 → Claim 2
+Evidence 3 → Claim 3
+```
+
+위 의미는 유지하면서 Transport/API 호출만 묶는다.
+
+Claim ID, Citation ID, Evidence ID, Source ID, Document ID 및 provenance는
+계속 코드가 결정한다.
+
+```text
+Meaning by LLM
+Provenance by code
+```
+
+논리적 작업량과 실제 API 호출량도 분리한다.
+
+```text
+last_usage
+= logical item usage
+
+last_api_usage
+= physical API call usage
+```
+
+## 31.4 성능 Baseline 변화
+
+Step 6.6.4 heavy-path re-baseline:
+
+```text
+tracked LLM calls ≈ 24
+recorded tokens ≈ 40.9K
+total elapsed median ≈ 293s
+quality = 0.8845
+search calls = 2
+```
+
+최종 C1 Live Regression:
+
+```text
+tracked LLM calls = 10
+recorded tokens = 27,248
+total elapsed = 163.709s
+quality = 0.8845
+passed = true
+search calls = 2
+```
+
+동일 heavy-path 계열에서 구조적으로 확인된 변화:
+
+```text
+tracked LLM calls
+24 → 10
+약 58.3% 감소
+```
+
+Token과 latency는 실행별 변동이 있으므로 동일 비율의 인과적 절감으로
+일반화하지 않는다.
+
+## 31.5 최종 Batch 구조
+
+Round 1:
+
+```text
+Evidence Semantic        1
+Claim Generation         1
+Citation Verification    1
+Claim Relevance          1
+Answer Coverage          1
+```
+
+Coverage Round:
+
+```text
+Evidence Semantic        1
+Claim Generation         1
+Citation Verification    1
+Claim Relevance          1
+Answer Coverage          1
+```
+
+Coverage가 발생하는 heavy path의 tracked LLM call 구조는 총 10회까지
+감소하였다.
+
+## 31.6 품질 해석
+
+최종 C1 Live Run:
+
+```text
+quality = 0.8845
+passed = true
+initial coverage = partially_covered
+final coverage = partially_covered
+```
+
+Coverage Replanning은 신규 문서와 신규 Evidence를 확보했으나,
+최종 Evidence가 function-tool 등록, argument/result 흐름 및 tool-call lifecycle을
+충분히 포함하지 못하여 Coverage Level은 개선되지 않았다.
+
+최종 Evidence는 다음 주제에 집중되어 있었다.
+
+```text
+Agents + tools + built-in loop
+Agents as tools / handoffs
+MCP tools alongside function tools
+```
+
+따라서 이 실행의 PARTIALLY_COVERED 결과는 Claim batching이 Evidence 의미를
+훼손한 문제로 판단하지 않는다. Upstream retrieval/replanning quality의
+알려진 한계로 기록한다.
+
+## 31.7 Stop Rule 및 비용 대비 효과 판단
+
+Single-Agent Live Research는 현재 다음 수준까지 확보하였다.
+
+```text
+Live Web Search
+HTTP/HTML Reading
+Source Quality
+Evidence-aware Selection
+RRF Hybrid Retrieval
+Semantic Evidence Relevance
+Generative Claim
+Semantic Citation Verification
+Claim Relevance
+Answer Coverage
+Bounded Coverage Replanning
+Budget
+Observability
+Batch Optimization
+```
+
+추가 미세조정으로 일부 호출, prompt 또는 coverage behavior를 더 개선할 수
+있지만 현재 단계에서는 개발·테스트·분석 시간의 한계비용이 커졌다고 판단한다.
+
+따라서:
+
+```text
+추가 Single-Agent micro-optimization
+→ Deferred
+
+현재 성능 Baseline
+→ 고정
+
+다음 학습 초점
+→ Multi-Agent가 언제 필요한지,
+   어떤 패턴이 있는지,
+   Single-Agent 대비 품질·비용 효과가 있는지 검증
+```
+
+으로 전환한다.
+
+미세조정은 폐기하지 않으며 다음 조건에서 다시 연다.
+
+- 실제 사용에서 반복되는 동일 failure pattern이 확인됨
+- Golden Dataset에서 품질 병목이 측정됨
+- 비용 또는 latency가 실제 운영 요구를 위반함
+- Multi-Agent 비교를 위한 Single-Agent baseline 보정이 필요함
+
+## 31.8 다음 문서 작업
+
+- [~] 지금까지의 프로젝트 작업 문서 최신화
+- [ ] 현재 구현된 AIRA 기능·사용법·한계·개선방향 사용자 문서화
+- [ ] Multi-Agent 학습·구현 Roadmap 별도 정리

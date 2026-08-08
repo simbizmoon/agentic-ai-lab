@@ -1254,3 +1254,279 @@ git diff --cached --check: passed
 - Direct Evidence가 부족할 때 추가 Retrieval/Replanning 여부
 - Claim set 전체가 Question/Objective를 충분히 커버하는지 평가하는 방법
 - Semantic Relevance를 언제 Blocking Quality Gate로 승격할지
+
+---
+
+## 2026-08-09 — Observability 이후 최적화는 측정된 병목부터 한다
+
+### 학습 목표
+
+Agent 시스템 최적화를 감으로 수행하지 않고 실제 Stage별 Call, Token,
+Latency를 측정하여 가장 비싼 부분부터 개선하는 방법을 학습한다.
+
+### 출발점
+
+Step 6.5 Observability에서 다음 heavy path가 측정되었다.
+
+```text
+tracked LLM calls = 30
+tracked tokens = 45,498
+total elapsed = 591.871s
+```
+
+후속 re-baseline에서는 동일 benchmark 계열의 대표 heavy path가:
+
+```text
+tracked calls median ≈ 24
+recorded tokens median ≈ 40.9K
+total elapsed median ≈ 293s
+quality = 0.8845
+```
+
+로 확인되었다.
+
+핵심 병목은 Web Search가 아니라 검색 이후 Semantic Evaluation과
+Coverage Round의 반복 평가였다.
+
+### 배운 점
+
+1. 최적화 전에 반드시 관측 가능성이 있어야 한다.
+2. 가장 눈에 띄는 외부 Tool이 가장 비싼 단계라는 보장은 없다.
+3. Stage별 wall-clock과 API Usage를 분리해야 병목을 찾을 수 있다.
+4. 모든 AI API 호출이 동일한 계측 경로에 들어오는 것은 아니므로
+   `tracked calls`의 의미를 명시해야 한다.
+
+---
+
+## 2026-08-09 — 재사용은 새 호출보다 먼저 검토한다
+
+Coverage Replanning에서는 기존 Round의 결과를 그대로 버리고 전체를 다시
+평가하면 비용이 급격히 증가한다.
+
+따라서 다음 순서를 적용하였다.
+
+```text
+기존 Evidence/Claim/Evaluation 재사용 가능성 확인
+→ 새 문서만 Semantic Evaluation
+→ 필요할 때만 새 Claim 생성
+→ 최종 Coverage는 전체 Claim Set으로 평가
+```
+
+### 학습
+
+- Agentic loop에서 Replanning은 모든 단계를 처음부터 다시 실행하는 것을
+  의미하지 않는다.
+- 불변 부분과 신규 부분을 분리하면 호출 수와 latency를 크게 줄일 수 있다.
+- Incremental path는 기존 상태가 정확히 보존되는 경우에만 사용해야 한다.
+- 기존 Evidence가 바뀌면 Full Rebuild fallback이 더 안전하다.
+
+---
+
+## 2026-08-09 — Batch는 의미를 합치는 것이 아니라 Transport를 합치는 것
+
+Evidence, Claim, Citation 및 Relevance 단계에서 API fan-out이 컸다.
+
+잘못된 최적화는 여러 Evidence를 하나의 의미적 synthesis 요청으로 바꾸는 것이다.
+그렇게 하면 기존 provenance 계약이 바뀐다.
+
+선택한 방식:
+
+```text
+독립된 N개 작업의 의미는 유지
+→ 하나의 Structured Batch 요청으로 전송
+→ item_id로 결과를 다시 매핑
+→ 최종 ID와 provenance는 코드가 재구성
+```
+
+### 적용 결과
+
+- Evidence Semantic Relevance: 문서별 batch
+- Claim Relevance: claim batch
+- Semantic Citation Verification: claim/citation pair batch
+- Claim Generation: evidence→claim batch
+
+### 핵심 학습
+
+1. Batch Optimization과 Semantic Architecture 변경은 다른 문제다.
+2. 모델에게 내부 provenance ID를 맡기지 않는다.
+3. Batch output은 temporary item ID만 사용해 순서 변화에 안전해야 한다.
+4. 구조화 응답 오류와 Provider/runtime 오류를 구분해야 한다.
+5. Structured batch 오류에는 bounded single fallback을 사용할 수 있지만,
+   Provider/runtime failure를 무조건 N개의 single call로 확대하면 안 된다.
+
+---
+
+## 2026-08-09 — Logical Usage와 Physical API Usage는 다르다
+
+Batch를 도입하면 다음 두 값이 달라진다.
+
+```text
+Evidence 3개 평가
+
+logical attempts = 3
+physical API calls = 1
+```
+
+따라서 Usage 의미를 분리하였다.
+
+```text
+last_usage
+= 논리적 item/budget usage
+
+last_api_usage
+= 실제 Provider/API 호출 usage
+```
+
+### 배운 점
+
+- Budget은 업무량 제한과 외부 비용 제한이라는 두 목적을 가질 수 있다.
+- Batch 이후에도 논리적 item cap을 유지해야 기존 안전장치가 사라지지 않는다.
+- Observability에서는 physical API usage를 사용해야 실제 fan-out 감소가 보인다.
+- Token/time을 item별로 정확히 분배할 수 없는 batch 응답은 그 한계를
+  명시적으로 기록해야 한다.
+
+---
+
+## 2026-08-09 — Step 6.6 최종 성능 결과와 한계효용 체감
+
+최종 C1 Live Regression:
+
+```text
+Round 1
+Evidence Semantic       1
+Claim Generation        1
+Citation Verification   1
+Claim Relevance         1
+Answer Coverage         1
+
+Coverage Round
+Evidence Semantic       1
+Claim Generation        1
+Citation Verification   1
+Claim Relevance         1
+Answer Coverage         1
+```
+
+최종 결과:
+
+```text
+tracked LLM calls = 10
+recorded tokens = 27,248
+total elapsed = 163.709s
+quality = 0.8845
+passed = true
+```
+
+대표 heavy-path baseline과 비교:
+
+```text
+tracked calls:
+24 → 10
+약 58.3% 감소
+```
+
+### 중요한 실패 사례
+
+최종 Coverage는:
+
+```text
+partially_covered
+→ partially_covered
+```
+
+였다.
+
+새 Evidence 3개가 생겼지만 내용은:
+
+```text
+Agents + tools + built-in loop
+Agents as tools / handoffs
+MCP tools alongside function tools
+```
+
+에 집중되었다.
+
+정작 필요한:
+
+```text
+function tool 정의/등록
+argument 전달
+tool invocation
+tool result 반환
+runner loop lifecycle
+```
+
+이 부족했다.
+
+### 해석
+
+Claim batch가 좋은 Evidence를 망친 것이 아니라 최종 Evidence 자체가 필요한
+세부 메커니즘을 충분히 포함하지 않았다.
+
+즉 Failure Localization은:
+
+```text
+Batch Claim Generation
+→ 핵심 원인 아님
+
+Upstream Retrieval / Coverage Replanning
+→ Known Limitation
+```
+
+으로 판단하였다.
+
+---
+
+## 2026-08-09 — 언제 최적화를 멈출 것인가
+
+### 새 학습
+
+소프트웨어와 Agent 시스템은 항상 더 개선할 수 있다.
+
+하지만 다음 질문이 더 중요하다.
+
+```text
+이 개선이 가능한가?
+```
+
+보다:
+
+```text
+이 개선이 지금 할 가치가 있는가?
+```
+
+### 현재 판단
+
+Single-Agent Live Research는 주요 기능과 실패 감지, Budget, Observability,
+Replanning 및 Batch 최적화까지 확보하였다.
+
+추가 미세조정은 가능하지만 현재 단계에서는 다음 비용이 커지기 시작했다.
+
+- 분석 시간
+- 코드 복잡성
+- Regression 범위
+- 특정 benchmark 과최적화
+- 새로운 Agent Architecture 학습 지연
+
+따라서 현재 Baseline을 고정하고 Multi-Agent 학습으로 이동한다.
+
+### Stop Rule
+
+앞으로 각 주요 단계는 가능하면 다음을 기록한다.
+
+```text
+Goal
+Acceptance Criteria
+Measured Result
+Known Limitation
+Stop Rule
+Reopen Condition
+```
+
+### 최종 교훈
+
+1. 완벽함은 Stage 완료 조건이 아니다.
+2. 실패를 탐지하고 한계를 기록할 수 있으면 다음 단계로 이동할 수 있다.
+3. 큰 구조적 낭비를 먼저 제거하고 작은 최적화는 실제 필요가 생길 때 한다.
+4. Cost-effectiveness에는 API 비용뿐 아니라 개발자의 시간과 복잡성도 포함된다.
+5. Multi-Agent도 같은 원칙으로 평가해야 한다.

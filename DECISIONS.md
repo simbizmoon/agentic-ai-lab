@@ -2327,3 +2327,134 @@ Structured Output은 형식적 Schema를 따르더라도 필드 사이의 의미
 - Live Runtime 성공
 - 전체 Regression 통과
 - Corrective retry 횟수를 Usage/Observability에 반영
+
+---
+
+## D-041 — Single-Agent Micro-optimization 종료 기준과 Cost-effectiveness 우선 원칙
+
+- 상태: 확정
+- 날짜: 2026-08-09
+- 적용 범위: AIRA 기능 최적화, 품질 개선 및 후속 Agent Architecture 실험
+
+### 배경
+
+Step 6.5 Observability 이후 Semantic LLM fan-out을 실제 측정하고,
+Step 6.6에서 결과 재사용과 Batch Evaluation/Generation을 순차적으로
+적용하였다.
+
+Heavy-path re-baseline과 최종 Live Regression 비교:
+
+```text
+tracked LLM calls:
+약 24 → 10
+
+recorded tokens:
+약 40.9K → 27,248
+
+observed elapsed:
+약 293s median → 163.709s
+
+quality:
+0.8845 유지
+```
+
+호출 수 감소는 구조적으로 확인되었으며, Token과 latency는 실행별 변동이
+있으므로 동일 비율의 인과적 개선으로 일반화하지 않는다.
+
+### 문제
+
+추가 개선 후보는 계속 존재한다.
+
+예:
+
+- Coverage Replanning Query 고도화
+- 추가 prompt tuning
+- 세부 Cache 확대
+- 10회 이하의 추가 API call reduction
+- Semantic Quality Gate 조정
+- 추가 Judge tuning
+
+그러나 모든 작은 문제를 즉시 수정하면 다음 비용이 증가한다.
+
+- 개발 시간
+- 회귀 테스트 비용
+- 설계 복잡성
+- 관측 및 분석 시간
+- 새로운 Capability 학습 지연
+- 특정 benchmark에 대한 과최적화 위험
+
+### 결정
+
+AIRA는 기능 또는 성능을 무한히 미세조정하지 않는다.
+
+각 주요 Work Item 또는 Stage에는 가능한 범위에서 다음을 명시한다.
+
+```text
+Goal
+Acceptance Criteria
+Measured Baseline
+Known Limitations
+Stop Rule
+Reopen Conditions
+```
+
+다음 조건을 충족하면 해당 단계의 추가 미세조정을 보류할 수 있다.
+
+1. 핵심 기능이 실제 Runtime에서 동작한다.
+2. 기존 Regression을 깨뜨리지 않는다.
+3. 주요 실패가 탐지·기록 가능하다.
+4. 비용·호출·시간에 명시적 상한이 있다.
+5. 현재 학습 또는 제품 목적에 충분한 Baseline이 확보된다.
+6. 추가 개선의 예상 편익이 개발·검증 비용보다 명확히 크지 않다.
+
+### 현재 적용
+
+Step 6.6 이후 Single-Agent Live Research의 추가 micro-optimization은
+보류한다.
+
+현재 Baseline을 다음 목적에 사용한다.
+
+- Multi-Agent 비교 기준
+- 향후 Golden Dataset 평가 기준
+- 실제 사용 Failure 재현 기준
+- 향후 Provider/Model 비교 기준
+
+Coverage Replanning이 topically related하지만 answer-bearing하지 않은
+Evidence를 선택할 수 있다는 한계는 Known Limitation으로 유지한다.
+
+이 한계는 현재 즉시 수정하지 않고 다음 조건에서 다시 연다.
+
+- 실제 사용에서 반복적으로 나타남
+- 평가 Dataset에서 의미 있는 실패율로 측정됨
+- Multi-Agent 또는 다른 Architecture 비교에 영향을 줌
+- 비용 대비 효과가 명확한 개선안이 확인됨
+
+### 이유
+
+AIRA 프로젝트의 목표는 특정 Single-Agent benchmark를 끝없이 최적화하는 것이
+아니라 Agentic AI의 주요 Architecture와 Capability를 학습하고 실제 AIRA로
+통합하는 것이다.
+
+따라서 최적화의 최종 판단 기준은 절대적 완벽성이 아니라
+`quality / cost / complexity / learning value`의 균형으로 한다.
+
+---
+
+## D-042 — 다음 학습 초점은 Multi-Agent의 필요성과 효과 검증
+
+- 상태: 확정
+- 날짜: 2026-08-09
+
+결정:
+
+- 현재 Single-Agent Live Research Baseline을 유지한다.
+- 다음 주요 학습·설계 주제는 Multi-Agent System으로 이동한다.
+- Multi-Agent는 Agent 수 증가 자체를 목표로 하지 않는다.
+- 첫 질문은 구현 방법보다 `언제 Multi-Agent를 사용해야 하는가`로 한다.
+- Single Agent + Tools, Agent-as-Tool, Handoff, Manager/Worker,
+  Sequential Specialist, Parallel Specialist 및 Critic/Verifier 패턴을
+  구분하여 학습한다.
+- 구현 전 Single-Agent 대비 예상 이점과 추가 비용을 정의한다.
+- 실제 채택은 동일 또는 유사한 평가 과제에서 품질, 비용, latency,
+  context management, failure isolation 중 의미 있는 개선이 확인될 때만 한다.
+- 구체적인 Multi-Agent 구현 Roadmap은 별도 문서화 작업에서 확정한다.
