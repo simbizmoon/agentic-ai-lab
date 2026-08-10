@@ -4,7 +4,7 @@
 - 상위 저장소: `/home/moon/Project/agentic-ai-lab`
 - 문서 위치: `local-llm/MODEL_EVALUATION.md`
 - 단계: Phase 2 — Local LLM Model Research
-- 상태: 후보군 조사 및 3계층 선정 완료, 실제 로컬 Benchmark 대기
+- 상태: 후보군 조사 완료, Qwen3.5-4B Small Worker 잠정 수용, Main Agent benchmark 대기
 
 ---
 
@@ -136,9 +136,55 @@ Phase 2의 Small Worker 1순위로 선정한다.
 - Simple Summarizer
 - lightweight structured-output worker
 
-### 주의
+### 실제 Phase 3/5 측정 반영
 
-실제 usable context와 VRAM margin은 설치 후 반드시 측정한다.
+Qwen3.5-4B는 현재 RTX 3060 Ti 8GB에서 다음이 확인되었다.
+
+- Ollama `0.32.6`
+- Context 4096
+- 100% GPU inference
+- model load 후 VRAM 증가량 약 3886 MiB
+- generation throughput 약 86~88 tokens/s
+- verified reasoning Think OFF: 10/10 정답
+- Think ON @3072: 5/5 정답
+- 현재 verified reasoning set에서는 Think ON의 정확도 이득이 관찰되지 않음
+- Think ON @3072는 Think OFF 대비 평균 latency 약 6.2배, 생성 token 약 9.6배
+
+### 현재 잠정 역할 결정
+
+**Status: PROVISIONAL SMALL WORKER ACCEPTED**
+
+기본 inference policy:
+
+```text
+think=false
+```
+
+현재 적합성이 높은 역할:
+
+- Classifier
+- Router
+- schema / structured-output worker
+- simple summarizer
+- simple relevance evaluator
+- deterministic tool selector
+- lightweight critic/evaluator
+
+복잡한 reasoning에서는 Qwen3.5-4B의 `think=true`를 자동 기본값으로 사용하지 않는다.
+AIRA-native 복합 task에서 Think ON의 실제 품질 이득과 stronger model escalation을 비교한 뒤 결정한다.
+
+### 아직 미검증
+
+- formal JSON Schema reliability
+- native tool calling
+- research planning
+- source/evidence/claim judgment
+- factual discipline
+- AIRA 실제 production-like workload
+- long context
+- concurrent execution
+
+상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 
 ---
 
@@ -347,9 +393,11 @@ MoE로 active parameter 수가 작더라도 전체 model weight와 runtime memor
 - [x] Larger Comparison 선정
 - [x] Reasoning Comparator 지정
 
-아직 미완료:
+후속 단계에서 계속 수행:
 
-- [ ] 실제 local runtime benchmark
+- [x] Qwen3.5-4B 실제 local runtime benchmark 시작
+- [x] Qwen3.5-4B deterministic reasoning / Thinking baseline
+- [ ] Qwen3.5-4B AIRA-native capability benchmark 완료
 - [ ] 최종 Main Agent 선정
 
 위 미완료 항목은 다음 runtime/benchmark 단계에서 수행한다.
@@ -447,3 +495,5 @@ Phase 2에서 더 많은 모델을 무한히 조사하지 않는다.
 - 새로운 모델이 현저한 성능/메모리 우위를 보임
 - GPU/RAM hardware upgrade
 - vision/coding 등 새로운 필수 capability가 추가됨
+
+=== RUNTIME EVALUATION ===

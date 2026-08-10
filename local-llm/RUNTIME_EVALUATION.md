@@ -203,31 +203,43 @@ Phase 4 시작 baseline:
 
 ## 13. Known Limitations
 
+Phase 5에서 추가 확인 완료:
+
+- cold/warm latency 분리 측정
+- repeated reasoning run 측정
+- Think OFF vs Think ON verified reasoning 비교
+- Thinking generation budget 1024 / 2048 / 3072 비교
+
+상세 결과는 `BENCHMARK_RESULTS.md`에 기록한다.
+
 아직 확인되지 않은 항목:
+
 - 8K/16K/32K context에서 VRAM 변화
 - concurrent agent execution
 - long-context quality
 - formal JSON Schema reliability
 - actual tool calling reliability
-- repeated-run variance
-- warm-load latency distribution
-- reasoning quality Think OFF vs Think ON
+- AIRA-native complex reasoning에서 Think ON의 품질 이득
 - Main Agent 후보 9B/8B 비교
 
 ## 14. Next Phase
 
-다음 단계:
-**Phase 4 — First Local Model Benchmark**
+Runtime 설치 및 first inference 단계는 완료되었다.
+
+현재 공식 다음 단계:
+**Phase 5 — Local Model Benchmark**
 
 첫 benchmark model:
 `qwen3.5:4b`
 
-핵심 실험:
-1. Worker capability
-2. Agent capability
-3. Structured output
-4. Tool selection/calling
-5. Korean quality
+이미 완료된 runtime/reasoning checkpoint는 `BENCHMARK_RESULTS.md`에서 관리한다.
+
+남은 핵심 실험:
+1. Korean instruction following
+2. Structured output / JSON Schema
+3. Tool selection / native tool calling
+4. Research planning
+5. Source relevance / evidence judgment
 6. Factual discipline
-7. Think OFF vs Think ON
-8. Performance / VRAM / latency
+7. AIRA-native workload
+8. Main Agent 후보 비교

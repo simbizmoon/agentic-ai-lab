@@ -5,7 +5,7 @@
 - Repository: `/home/moon/Project/agentic-ai-lab`
 - Track directory: `/home/moon/Project/agentic-ai-lab/local-llm`
 - Large data root: `/mnt/ai-data`
-- 상태: Local LLM Track 준비 완료 → Model Research가 다음 단계
+- 상태: Phase 5 — Local Model Benchmark 진행 중
 
 ---
 
@@ -234,7 +234,7 @@ Stop Rule:
 
 # 7. Phase 2 — Local LLM Candidate Research
 
-상태: **NEXT**
+상태: **COMPLETE**
 
 ## Goal
 
@@ -304,7 +304,7 @@ C. Larger Comparison Model
 
 # 8. Phase 3 — Runtime Evaluation and Selection
 
-상태: **PENDING**
+상태: **COMPLETE**
 
 ## Candidates
 
@@ -337,15 +337,24 @@ Observability
 Operational Complexity
 ```
 
+## Measured Result
+
+- 초기 Runtime으로 Ollama `0.32.6` 사용
+- NVIDIA CUDA 및 RTX 3060 Ti 인식 확인
+- `qwen3.5:4b` 100% GPU inference 확인
+- Context 4096 baseline 확인
+- Phase 5 benchmark를 위한 runtime으로 사용 중
+
 ## Stop Rule
 
-- 첫 Local LLM benchmark를 수행할 기본 Runtime 1개와 보조 Runtime 필요 여부를 확정한다.
+- 첫 Local LLM benchmark를 수행할 기본 Runtime으로 Ollama가 검증되었으므로 종료한다.
+- llama.cpp / vLLM은 현재 benchmark에서 필요성이 확인될 때 재검토한다.
 
 ---
 
 # 9. Phase 4 — First Local Model Execution
 
-상태: **PENDING**
+상태: **COMPLETE**
 
 ## Goal
 
@@ -372,17 +381,29 @@ OOM 여부
 
 ## Acceptance Criteria
 
-- NVIDIA GPU inference 확인
-- OOM 없이 반복 실행 가능
-- 한국어 정상 생성
-- structured output 테스트 통과
-- 실제 VRAM/RAM/속도 기록
+- [x] NVIDIA GPU inference 확인
+- [x] OOM 없이 반복 실행 가능
+- [x] 한국어 정상 생성
+- [x] prompt-only structured output baseline 통과
+- [x] 실제 VRAM/RAM/속도 기록
+
+## Measured Result
+
+- Model: `qwen3.5:4b`
+- Processor: 100% GPU
+- Context: 4096
+- 모델 적재 후 VRAM 증가량: 약 3886 MiB
+- System RAM used: 약 7 GiB
+- swap used: 0 B
+- generation throughput baseline: 약 86~88 tokens/s
+
+세부 내용은 `RUNTIME_EVALUATION.md`를 기준으로 한다.
 
 ---
 
 # 10. Phase 5 — Local Model Benchmark
 
-상태: **PENDING**
+상태: **IN PROGRESS**
 
 동일 prompt/eval set으로 여러 후보를 비교한다.
 
@@ -414,6 +435,28 @@ VRAM
 RAM
 Failure Rate
 ```
+
+### 현재 완료된 benchmark checkpoint
+
+- [x] benchmark foundation
+- [x] cold vs warm runtime benchmark
+- [x] verified deterministic reasoning benchmark
+- [x] Think OFF vs Think ON comparison
+- [x] Thinking generation budget sweep (1024 / 2048 / 3072)
+- [x] Qwen3.5-4B Small Worker 잠정 inference policy
+
+### 남은 핵심 benchmark
+
+- [ ] Korean instruction following
+- [ ] structured JSON / JSON Schema
+- [ ] tool selection
+- [ ] native tool calling
+- [ ] research planning
+- [ ] source relevance / evidence judgment
+- [ ] factual discipline
+- [ ] AIRA-native workload에서 Small Worker 최종 역할 결정
+
+상세 실측은 `BENCHMARK_RESULTS.md`에 기록한다.
 
 ---
 
@@ -645,7 +688,7 @@ Local vs OpenAI quality gap
 
 # 18. Progress Snapshot
 
-2026-08-09 현재:
+2026-08-10 현재:
 
 ```text
 [x] Existing AIRA repository 확인
@@ -653,22 +696,25 @@ Local vs OpenAI quality gap
 [x] Multi-Agent와 Local LLM 실험 축 분리
 [x] 별도 repository를 만들지 않기로 결정
 [x] root-level local-llm workstream 결정
-[x] 현재 PC CPU 확인
-[x] GPU/VRAM 확인
-[x] RAM 확인
-[x] storage 확인
-[x] 2TB Ethereum HDD 데이터 확인
-[x] HDD SMART 확인
-[x] Ethereum data 제거
-[x] ext4 ai-data 구성
-[x] /mnt/ai-data 자동 mount 설정
-[x] write test 성공
+[x] 현재 PC CPU/GPU/VRAM/RAM 확인
+[x] AI data storage 구성
+[x] Local LLM 최신 후보 조사
+[x] First model set 선정
+[x] Ollama Runtime 선정 및 설치
+[x] Qwen3.5-4B first local model 실행
+[x] GPU/VRAM/RAM/tokens/sec baseline
+[x] benchmark foundation
+[x] cold/warm benchmark
+[x] verified reasoning benchmark
+[x] Think OFF/ON benchmark
+[x] Thinking budget sweep
 
-[ ] Local LLM 최신 후보 조사
-[ ] First model set 선정
-[ ] Runtime 선정
-[ ] First local model 실행
-[ ] VRAM/RAM/tokens/sec benchmark
+[ ] Korean instruction benchmark
+[ ] structured output / JSON Schema benchmark
+[ ] tool selection / native tool calling benchmark
+[ ] research planning benchmark
+[ ] source relevance / evidence judgment benchmark
+[ ] factual discipline benchmark
 [ ] AIRA Local LLM adapter audit/design
 [ ] Local provider integration
 [ ] OpenAI vs Local Single-Agent
@@ -699,16 +745,20 @@ Reopen Condition
 
 # 20. Immediate Next Step
 
-**Phase 2 — Local LLM Candidate Research**를 수행한다.
+**Phase 5 — Local Model Benchmark**를 계속한다.
 
-코딩이나 Ollama 설치를 먼저 하지 않는다.
+현재 Qwen3.5-4B는 Small Worker 후보로서 runtime 및 deterministic reasoning baseline을 통과했다.
 
-먼저 현재 RTX 3060 Ti 8GB에서 사용할 모델 후보를 공식 자료 기준으로 조사하고:
+다음 순서:
 
 ```text
-Small Worker
-Main Agent
-Larger Comparison
+Korean instruction following
+→ Structured Output / JSON Schema
+→ Tool Selection / Native Tool Calling
+→ Research Planning
+→ Source Relevance / Evidence Judgment
+→ Factual Discipline
+→ Qwen3.5-4B Small Worker 최종 결정
 ```
 
-의 초기 모델 세트를 선정한다.
+이후 동일 핵심 benchmark를 Main Agent 후보인 Qwen3.5-9B와 Ministral 3 8B에 적용한다.

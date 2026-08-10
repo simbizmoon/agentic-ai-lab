@@ -5,7 +5,7 @@
 - 권장 저장 위치: `local-llm/BENCHMARK_PLAN.md`
 - 단계: Phase 4 — First Local Model Benchmark
 - 최초 대상: `qwen3.5:4b`
-- 상태: READY
+- 상태: IN PROGRESS
 
 ## 1. 목적
 
@@ -341,13 +341,19 @@ generation 성능과 전체 latency를 분리해야 한다.
 
 ## 17. Experiment Artifact Policy
 
-대용량/raw experiment data:
+대용량/raw experiment data의 canonical 저장 위치:
 `/mnt/ai-data/experiments/`
 
-최종 요약/결정 문서:
-`/home/moon/Project/agentic-ai-lab/local-llm/`
+현재 초기 benchmark harness가 생성하는 transient JSON:
+`evals/results/local_llm/`
 
-benchmark scripts는 repository의 기존 `scripts/` 및 `evals/` 구조를 실제 audit한 뒤 배치한다.
+위 디렉터리는 Git ignore 대상이며 raw JSON은 source commit에 포함하지 않는다.
+반복/대규모 실험으로 확장할 때 raw artifact의 canonical 위치를 `/mnt/ai-data/experiments/`로 통일한다.
+
+최종 요약/결정 문서:
+`/home/moon/Project/agentic-ai-lab/local-llm/BENCHMARK_RESULTS.md`
+
+benchmark scripts와 evaluator code는 repository의 기존 `scripts/`, `app/evals/`, `evals/` 구조를 재사용한다.
 
 ## 18. Phase 4 Initial Sequence
 
@@ -361,10 +367,10 @@ benchmark scripts는 repository의 기존 `scripts/` 및 `evals/` 구조를 실�
 8. Think OFF vs Think ON reasoning A/B
 9. 결과 정리 및 Phase 4 decision
 
-## 19. Phase 4 Acceptance Criteria
+## 19. Phase 5 Acceptance Criteria
 
-- [ ] benchmark harness 또는 재현 가능한 command/script 확보
-- [ ] raw result 저장
+- [x] benchmark harness 또는 재현 가능한 command/script 확보
+- [x] raw result 저장
 - [ ] Korean instruction benchmark
 - [ ] structured output benchmark
 - [ ] tool selection benchmark
@@ -372,16 +378,19 @@ benchmark scripts는 repository의 기존 `scripts/` 및 `evals/` 구조를 실�
 - [ ] research planning benchmark
 - [ ] evidence judgment benchmark
 - [ ] factual discipline benchmark
-- [ ] Think OFF/ON comparison
-- [ ] cold/warm performance measurement
-- [ ] VRAM/RAM measurement
-- [ ] failure cases 기록
-- [ ] Qwen3.5-4B의 AIRA 역할 결정
+- [x] Think OFF/ON comparison
+- [x] cold/warm performance measurement
+- [x] VRAM/RAM baseline measurement
+- [x] failure cases 기록
+- [x] Qwen3.5-4B Small Worker 잠정 역할 결정
+- [ ] AIRA-native capability benchmark 후 Qwen3.5-4B 최종 역할 결정
 
 ## 20. Stop Rule
 
-Qwen3.5-4B가 Small Worker로서 필요한 수준을 충족하는지가 확인되면
+Qwen3.5-4B가 Small Worker로서 필요한 수준을 충족하는지가 AIRA-native capability benchmark까지 확인되면
 세부 benchmark를 무한히 확장하지 않는다.
+
+현재 deterministic reasoning 결과만으로는 Phase 5 전체를 종료하지 않는다.
 
 다음으로 Main Agent 후보:
 - Qwen3.5-9B

@@ -51,7 +51,11 @@ Local LLM 작업을 위해 별도 Git repository를 만들지 않는다.
 ├── local-llm/
 │   ├── README.md
 │   ├── ROADMAP.md
-│   └── HARDWARE_BASELINE.md
+│   ├── HARDWARE_BASELINE.md
+│   ├── MODEL_EVALUATION.md
+│   ├── RUNTIME_EVALUATION.md
+│   ├── BENCHMARK_PLAN.md
+│   └── BENCHMARK_RESULTS.md
 ├── app/
 ├── tests/
 ├── evals/
@@ -206,7 +210,7 @@ Local LLM 조사, runtime 설치, first model, benchmark, AIRA 통합, OpenAI/Lo
 
 현재 PC의 실제 CPU, GPU, VRAM, RAM, storage, SMART 및 AI용 저장장치 구성을 기록한다.
 
-향후 필요할 때 다음 문서를 추가한다.
+현재 다음 문서를 운영한다.
 
 ```text
 MODEL_EVALUATION.md
@@ -215,18 +219,35 @@ BENCHMARK_PLAN.md
 BENCHMARK_RESULTS.md
 ```
 
-빈 문서를 미리 만들지 않고 실제 작업이 시작되는 시점에 추가한다.
+- `MODEL_EVALUATION.md`: 후보 모델 선정 근거와 benchmark 이후 모델 역할 결정을 기록한다.
+- `RUNTIME_EVALUATION.md`: runtime 설치, GPU/VRAM/RAM, inference 동작을 기록한다.
+- `BENCHMARK_PLAN.md`: benchmark 항목, 방법, acceptance criteria를 정의한다.
+- `BENCHMARK_RESULTS.md`: 실제 측정 결과, 무효화된 실험, 해석 및 현재 결정을 기록한다.
 
 ## 9. 현재 다음 작업
 
-다음 작업은 **Local LLM Candidate Research**이다.
+현재 공식 진행 단계는 **Phase 5 — Local Model Benchmark**이다.
 
-현재 PC에서 실제로 사용할 수 있는 최신 Open-Source / Open-Weight LLM을 공식 자료 기준으로 조사하고 최소 다음 역할의 후보를 선정한다.
+완료된 주요 항목:
+
+- Local LLM candidate research
+- Ollama runtime 설치 및 GPU inference
+- Qwen3.5-4B cold/warm baseline
+- verified reasoning benchmark
+- Think OFF/ON 및 generation budget 비교
+- Small Worker 잠정 inference policy 결정
+
+다음 작업은 Qwen3.5-4B에 대해 기존 AIRA capability와 연결되는 실제 task benchmark를 수행하는 것이다.
+
+우선순위:
 
 ```text
-A. Small Worker Model
-B. Main Local Agent Model
-C. Larger Comparison Model
+1. Korean instruction following
+2. structured JSON / JSON Schema
+3. tool selection / native tool calling
+4. research planning
+5. source relevance / evidence judgment
+6. factual discipline
 ```
 
-그 이후에 Runtime(Ollama / llama.cpp / 필요 시 vLLM)을 선정하고 실제 설치·benchmark를 시작한다.
+상세 실측 결과와 현재 결정은 `BENCHMARK_RESULTS.md`를 기준으로 한다.
