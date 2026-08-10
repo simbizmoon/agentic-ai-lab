@@ -25,7 +25,6 @@
 - instruction following
 - structured JSON
 - tool calling
-- research planning
 - citation/evidence 판단
 - failure rate
 - AIRA 실제 workload 품질
@@ -204,6 +203,18 @@ core native behavior 9/9를 기록했다.
 따라서 Qwen3.5-4B는 현재 작은 registry에서 schema/tool-constrained worker로 유망하지만,
 free/constrained no-tool routing과 AIRA-specific orchestration policy는 외부 validation 또는
 stronger-model escalation 없이 신뢰한다고 간주하지 않는다.
+
+Phase 5B-4 Research Planning에서는 official 1536-token baseline과
+3072-token diagnostic 모두 full-pass 0/9를 기록했다.
+완결된 non-length task runs에서도 duplicate task ID,
+synthesis requires_search/dependency 오류가 반복되었고,
+완결된 rag-agent query plan은 task_id를 request_id로 잘못 사용하여
+existing `ResearchSearchQuerySet` validation을 통과하지 못했다.
+memory/seat query planning은 3072 tokens에서도 length termination이 발생했다.
+
+따라서 Qwen3.5-4B는 autonomous AIRA Research Planner 역할로 수용하지 않는다.
+기존 deterministic task decomposition / query planning을 authoritative path로 유지하고,
+Qwen3.5-4B는 validated plan 이후의 bounded downstream worker 역할에 한정하여 계속 평가한다.
 
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 

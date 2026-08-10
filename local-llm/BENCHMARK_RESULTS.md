@@ -671,12 +671,185 @@ approval-required tools, or production research tools.
 
 ---
 
-## 17. Remaining Phase 5 Benchmarks
+## 17. Phase 5B-4 — Research Planning
+
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+cases: 3
+repetitions: 3
+official num_predict: 1536
+diagnostic num_predict: 3072
+```
+
+Repository validation before live run:
+
+```text
+pytest: 4572 passed
+ruff: All checks passed
+```
+
+The benchmark reused actual AIRA planning objects and validators:
+
+```text
+ResearchTask
+ResearchTaskGraph
+ResearchSearchQuery
+ResearchSearchQuerySet
+```
+
+The model therefore had to produce planning objects that passed the same
+identity, dependency, graph, task-reference, query-uniqueness, and source-policy
+constraints used by the application.
+
+### Official 1536-token baseline
+
+Task decomposition:
+
+```text
+run pass: 0/9
+semantic checks: 15/54 = 27.8%
+mean total latency: 11.56 s
+mean eval tokens: 835.33
+```
+
+Query planning:
+
+```text
+run pass: 0/9
+semantic checks: 0/54
+mean total latency: 19.28 s
+mean eval tokens: 1536.0
+```
+
+All nine query runs hit the configured generation limit, so the 1536-token
+query score alone was not treated as sufficient evidence of planning inability.
+
+### 3072-token diagnostic
+
+Task decomposition:
+
+```text
+run pass: 0/9
+semantic checks: 15/54 = 27.8%
+```
+
+Stable non-budget failures:
+
+```text
+memory-001
+→ done=stop
+→ 470 eval tokens
+→ duplicate task IDs
+→ ResearchTaskGraph rejected: task IDs must be unique
+
+rag-agent-001
+→ done=stop
+→ 500 eval tokens
+→ task graph structurally valid
+→ synthesis_not_searchable
+→ synthesis_dependencies
+→ 4/6 semantic checks
+```
+
+Budget-related task failure:
+
+```text
+seat-001
+→ 3/3 done=length
+→ 3072 eval tokens
+→ JSON incomplete
+```
+
+Query planning diagnostic:
+
+```text
+run pass: 0/9
+semantic checks: 3/54 = 5.6%
+```
+
+`memory-001` and `seat-001` still stopped by length in all three runs at
+3072 tokens.
+
+`rag-agent-001` completed at 1585 tokens but the generated query set was rejected.
+
+Primary confirmed validation failure:
+
+```text
+all query request IDs must match the query set request_id
+```
+
+The model incorrectly used task IDs such as:
+
+```text
+local-plan-rag-agent-001-task-001
+local-plan-rag-agent-001-task-002
+```
+
+as `request_id` values instead of:
+
+```text
+local-plan-rag-agent-001
+```
+
+The completed `rag-agent-001` plan also showed additional planning drift:
+all generated queries were typed as `focused`, `preferred_source_types`
+were empty, and more queries were generated than required by the bounded plan.
+
+### Phase 5B-4 decision
+
+Status:
+
+**COMPLETE — RESEARCH PLANNING CAPABILITY NOT ACCEPTED FOR QWEN3.5-4B**
+
+Observed failure classes:
+
+```text
+task identity integrity
+→ duplicate task IDs
+
+orchestration semantics
+→ synthesis search/dependency policy not preserved
+
+bounded planning
+→ task/query expansion can exhaust 1536 and 3072 token budgets
+
+query identity integrity
+→ request_id confused with task_id
+
+query planning policy
+→ required query types/source preferences not reliably preserved
+```
+
+Current role policy:
+
+```text
+Qwen3.5-4B
+→ do not use as autonomous AIRA research planner
+
+deterministic AIRA planner
+→ remains authoritative for task decomposition and query construction
+
+local 4B model
+→ may still be used for bounded downstream worker tasks after a valid plan exists
+```
+
+Increasing generation budget further is not required for the current role
+decision because multiple completed non-length runs already exhibit structural
+and orchestration failures.
+
+---
+
+## 18. Remaining Phase 5 Benchmarks
 
 - [x] Korean instruction following
 - [x] tool selection
 - [x] native tool calling
-- [ ] research planning
+- [x] research planning
 - [ ] source relevance judgment
 - [ ] evidence / claim judgment
 - [ ] factual discipline
@@ -687,7 +860,7 @@ approval-required tools, or production research tools.
 
 ---
 
-## 18. Next Step
+## 19. Next Step
 
 ```text
 Korean Instruction
@@ -702,7 +875,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 19. Stop Rule
+## 20. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 

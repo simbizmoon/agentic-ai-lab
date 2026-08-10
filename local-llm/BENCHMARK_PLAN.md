@@ -174,6 +174,18 @@ Current status:
 - task decomposition
 - feasibility
 
+Current status:
+- [x] actual `ResearchTask` generation tested
+- [x] actual `ResearchTaskGraph` validation tested
+- [x] actual `ResearchSearchQuery` generation tested
+- [x] actual `ResearchSearchQuerySet` validation tested
+- [x] 1536-token baseline measured
+- [x] 3072-token diagnostic measured
+
+Decision:
+- Qwen3.5-4B research-planner role: not accepted
+- deterministic AIRA planner remains authoritative
+
 ## 7. Source Relevance Judgment
 
 source title/snippet 또는 short document를 제공하고
