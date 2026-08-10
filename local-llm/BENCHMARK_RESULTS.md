@@ -415,11 +415,103 @@ The Think ON runs are diagnostic and do not replace or rescore the B1 benchmark.
 
 ---
 
-## 15. Remaining Phase 5 Benchmarks
+## 15. Phase 5B-2 — Structured Output / JSON Schema
+
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+num_predict: 256
+repetitions: 3
+cases: 3
+modes: prompt_only / json / json_schema
+runs: 27
+```
+
+Official result:
+
+| Mode | Runtime | JSON parse | Schema | Exact value |
+|---|---:|---:|---:|---:|
+| prompt_only | 9/9 | 6/9 | 6/9 | 6/9 (66.7%) |
+| json | 9/9 | 9/9 | 9/9 | 9/9 (100%) |
+| json_schema | 9/9 | 9/9 | 9/9 | 9/9 (100%) |
+
+Mean generation metrics:
+
+```text
+prompt_only
+mean total: 1127.93 ms
+mean eval tokens: 25.0
+
+json
+mean total: 737.08 ms
+mean eval tokens: 23.33
+
+json_schema
+mean total: 734.91 ms
+mean eval tokens: 23.33
+```
+
+Latency comparison is not treated as a controlled speed conclusion because the first prompt-only request included the cold model load while later modes were warm.
+
+### Prompt-only failure pattern
+
+`seat-schedule-001` failed 3/3 in prompt-only mode.
+
+The semantic values were correct, but the model wrapped the JSON-like body with extra formatting text/backticks, so parsing the complete response with `json.loads` failed.
+
+Therefore the failure was not a value-extraction failure; it was a strict serialization/compliance failure.
+
+### Constrained output result
+
+Both `format="json"` and `format=<JSON Schema>` produced:
+
+```text
+runtime success: 9/9
+JSON parse: 9/9
+strict Pydantic schema: 9/9
+exact expected values: 9/9
+```
+
+under the current 3-case dataset.
+
+### Phase 5B-2 decision
+
+Status:
+
+**COMPLETE — CONSTRAINED STRUCTURED OUTPUT ACCEPTED FOR CURRENT TEST SCOPE**
+
+Current policy:
+
+```text
+strict structured worker task
+→ do not rely on prompt-only JSON
+→ prefer JSON Schema when a schema is known
+→ format="json" remains a fallback when only valid JSON is required
+```
+
+JSON Schema is preferred for AIRA typed outputs because the application already has Pydantic schemas and strict validation, even though `json` and `json_schema` achieved the same 9/9 exact result on this small dataset.
+
+This result narrows the B1 formatting concern:
+
+```text
+plain-text strict formatting
+→ unreliable in B1
+
+native constrained structured output
+→ 100% exact in B2 current scope
+```
+
+The result does not yet establish reliability for large/deep schemas, optional/union fields, long outputs, tool schemas, or production AIRA workloads.
+
+---
+
+## 16. Remaining Phase 5 Benchmarks
 
 - [ ] Korean instruction following
-- [ ] structured JSON
-- [ ] JSON Schema reliability
 - [ ] tool selection
 - [ ] native tool calling
 - [ ] research planning
@@ -433,7 +525,7 @@ The Think ON runs are diagnostic and do not replace or rescore the B1 benchmark.
 
 ---
 
-## 16. Next Step
+## 17. Next Step
 
 ```text
 Korean Instruction
@@ -448,7 +540,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 17. Stop Rule
+## 18. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 

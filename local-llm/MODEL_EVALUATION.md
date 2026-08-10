@@ -188,6 +188,11 @@ Phase 5B-1 Korean instruction benchmark에서는 Think OFF 기준 15/24 (62.5%) 
 정확 출력·추출·두 줄 형식·단순 변환·금지조건은 통과했으나, 가나다 정렬·복수 조건 선택·strict key/value binding에서 반복 가능한 실패가 관찰되었다.
 따라서 Qwen3.5-4B는 아직 최종 Small Worker로 수용하지 않고 후속 structured output, tool, AIRA-native capability를 계속 검증한다.
 
+Phase 5B-2에서는 prompt-only JSON이 6/9 exact에 그쳤으나,
+Ollama `format="json"`과 JSON Schema constrained output은 각각 9/9 JSON parse,
+9/9 strict schema validation, 9/9 exact-value match를 기록했다.
+따라서 strict structured-output task에서는 prompt-only formatting보다 native constrained output을 기본으로 한다.
+
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 
 ---

@@ -122,6 +122,7 @@ class OllamaClient:
         num_predict: int | None = None,
         temperature: float | None = None,
         seed: int | None = None,
+        response_format: str | dict[str, Any] | None = None,
     ) -> OllamaGenerateResponse:
         """Generate one completion and normalize Ollama metrics."""
         cleaned_model = model.strip()
@@ -145,6 +146,10 @@ class OllamaClient:
         if keep_alive is not None:
             payload["keep_alive"] = self._validate_keep_alive(
                 keep_alive
+            )
+        if response_format is not None:
+            payload["format"] = self._validate_response_format(
+                response_format
             )
 
         options: dict[str, Any] = {}
@@ -236,6 +241,22 @@ class OllamaClient:
                 "Ollama generate API response must be an object"
             )
         return data
+
+    @staticmethod
+    def _validate_response_format(
+        value: str | dict[str, Any],
+    ) -> str | dict[str, Any]:
+        if isinstance(value, str):
+            if value.strip() != "json":
+                raise ValueError(
+                    "response_format string must be 'json'"
+                )
+            return "json"
+        if not isinstance(value, dict) or not value:
+            raise ValueError(
+                "response_format must be 'json' or a nonempty schema"
+            )
+        return value
 
     @staticmethod
     def _validate_keep_alive(value: str | int) -> str | int:

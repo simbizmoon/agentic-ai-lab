@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.evals.local_llm_benchmark import (
     LocalLLMBenchmarkMetrics,
@@ -33,6 +33,7 @@ class LocalLLMGenerateClient(Protocol):
         num_predict: int | None = None,
         temperature: float | None = None,
         seed: int | None = None,
+        response_format: str | dict[str, Any] | None = None,
     ) -> OllamaGenerateResponse:
         """Generate one normalized local-model response."""
 
@@ -52,16 +53,20 @@ class LocalLLMBenchmarkRunner:
         request: LocalLLMBenchmarkRequest,
     ) -> LocalLLMBenchmarkResult:
         """Execute one benchmark and normalize runtime metrics."""
-        generated = self._client.generate(
-            model=request.model,
-            prompt=request.prompt,
-            think=request.think,
-            stream=False,
-            keep_alive=request.keep_alive,
-            num_predict=request.num_predict,
-            temperature=request.temperature,
-            seed=request.seed,
-        )
+        generate_kwargs: dict[str, Any] = {
+            "model": request.model,
+            "prompt": request.prompt,
+            "think": request.think,
+            "stream": False,
+            "keep_alive": request.keep_alive,
+            "num_predict": request.num_predict,
+            "temperature": request.temperature,
+            "seed": request.seed,
+        }
+        if request.response_format is not None:
+            generate_kwargs["response_format"] = request.response_format
+
+        generated = self._client.generate(**generate_kwargs)
 
         response_present = bool(generated.response.strip())
         stopped_by_length = generated.done_reason == "length"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Self
+from typing import Any, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -35,6 +35,7 @@ class LocalLLMBenchmarkRequest(BaseModel):
     num_predict: int | None = Field(default=None, ge=1)
     temperature: float | None = Field(default=None, ge=0)
     seed: int | None = None
+    response_format: str | dict[str, Any] | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -76,6 +77,19 @@ class LocalLLMBenchmarkRequest(BaseModel):
         ):
             raise ValueError(
                 "use either expected_substring or expected_answer"
+            )
+
+        if isinstance(self.response_format, str):
+            if self.response_format.strip() != "json":
+                raise ValueError(
+                    "response_format string must be 'json'"
+                )
+        elif (
+            isinstance(self.response_format, dict)
+            and not self.response_format
+        ):
+            raise ValueError(
+                "response_format schema must not be empty"
             )
 
         for key, value in self.metadata.items():

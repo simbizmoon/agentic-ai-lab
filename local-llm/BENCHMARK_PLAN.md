@@ -372,7 +372,7 @@ benchmark scripts와 evaluator code는 repository의 기존 `scripts/`, `app/eva
 - [x] benchmark harness 또는 재현 가능한 command/script 확보
 - [x] raw result 저장
 - [x] Korean instruction benchmark
-- [ ] structured output benchmark
+- [x] structured output benchmark
 - [ ] tool selection benchmark
 - [ ] native tool calling benchmark
 - [ ] research planning benchmark

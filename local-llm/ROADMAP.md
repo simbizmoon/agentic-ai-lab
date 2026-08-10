@@ -448,7 +448,7 @@ Failure Rate
 ### 남은 핵심 benchmark
 
 - [x] Korean instruction following
-- [ ] structured JSON / JSON Schema
+- [x] structured JSON / JSON Schema
 - [ ] tool selection
 - [ ] native tool calling
 - [ ] research planning
@@ -710,7 +710,7 @@ Local vs OpenAI quality gap
 [x] Thinking budget sweep
 
 [ ] Korean instruction benchmark
-[ ] structured output / JSON Schema benchmark
+[x] structured output / JSON Schema benchmark
 [ ] tool selection / native tool calling benchmark
 [ ] research planning benchmark
 [ ] source relevance / evidence judgment benchmark
