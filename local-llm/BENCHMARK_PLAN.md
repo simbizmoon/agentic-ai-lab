@@ -117,18 +117,23 @@ Model:
 
 ### B3 — Tool Selection
 
-예시 tool set:
-- web_search
-- read_url
-- calculator
-- filesystem_read
-- no_tool
+실제 AIRA 등록 tool set을 사용한다.
+
+현재 검증 대상:
+- `get_document_statistics`
+- `extract_document_keywords`
+- no tool
 
 측정:
 - correct tool
 - correct arguments
 - unnecessary tool call
 - missed tool call
+- AIRA one-tool workflow policy compliance
+
+Status:
+- [x] constrained tool selection benchmark
+- [x] native tool calling benchmark
 
 ## 5. Native Tool Calling
 
@@ -140,6 +145,15 @@ Ollama의 native tool calling API를 사용하여 실제 function calling을 테
 - argument schema accuracy
 - tool result interpretation
 - second-turn answer quality
+
+Current status:
+- [x] function name accuracy
+- [x] argument accuracy
+- [x] existing dispatcher validation/execution
+- [x] no-tool native decision
+- [x] AIRA one-tool policy behavior measured
+- [ ] second-turn tool-result answer quality
+- [ ] correction-loop behavior with local model
 
 ## 6. Research Planning
 

@@ -212,7 +212,7 @@ Think ON eval tokens / Think OFF eval tokens ≈ 9.6x
 
 ## 11. Current Qwen3.5-4B Decision
 
-**Status: PROVISIONAL SMALL WORKER ACCEPTED**
+**Status: PROVISIONAL SMALL WORKER CANDIDATE**
 
 Default:
 
@@ -509,11 +509,173 @@ The result does not yet establish reliability for large/deep schemas, optional/u
 
 ---
 
-## 16. Remaining Phase 5 Benchmarks
+## 16. Phase 5B-3 — Tool Selection / Native Tool Calling
 
-- [ ] Korean instruction following
-- [ ] tool selection
-- [ ] native tool calling
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+repetitions: 3
+cases: 4
+selection runs: 12
+native runs: 12
+```
+
+Repository validation before live run:
+
+```text
+pytest: 4565 passed
+ruff: All checks passed
+```
+
+The benchmark reused the actual AIRA registered document tools:
+
+```text
+get_document_statistics
+extract_document_keywords
+```
+
+Cases:
+
+```text
+statistics-001
+→ expected tool: get_document_statistics
+
+keywords-001
+→ expected tool: extract_document_keywords
+
+direct-001
+→ expected: no tool
+
+multiple-ops-001
+→ expected: no tool
+   because the current AIRA workflow allows at most one Tool
+   and requires the user to split requests that need different Tools
+```
+
+### 5B-3a — Constrained Tool Selection
+
+Official result:
+
+```text
+9/12 = 75.0%
+```
+
+Per-case:
+
+```text
+PASS
+statistics-001    3/3
+keywords-001      3/3
+multiple-ops-001  3/3
+
+FAIL
+direct-001        0/3
+```
+
+After tightening `tool_name` to the actual registry names plus JSON null,
+`direct-001` still selected `get_document_statistics` in all three runs.
+
+Therefore this is treated as a reproducible tool-selection limitation,
+not a loose-schema artifact.
+
+Decision:
+
+**COMPLETE — TOOL SELECTION NOT FULLY ACCEPTED**
+
+Current interpretation:
+
+```text
+explicit registered-tool routing
+→ reliable on the current statistics / keywords cases
+
+no-tool decision in constrained selector
+→ unreliable on the current direct-explanation case
+
+AIRA one-tool multi-operation policy
+→ correctly represented by null in 3/3 constrained-selection runs
+```
+
+### 5B-3b — Ollama Native Tool Calling
+
+Official aggregate score:
+
+```text
+9/12 = 75.0%
+```
+
+The aggregate is split because the three failures are policy failures,
+not failures to identify the required functions.
+
+Core native behavior:
+
+```text
+single-tool selection:
+  statistics 3/3
+  keywords   3/3
+
+exact arguments:
+  statistics 3/3
+  keywords   3/3
+
+existing AIRA dispatcher validation/execution:
+  statistics 3/3
+  keywords   3/3
+
+native no-tool decision:
+  direct 3/3
+
+core native behavior:
+  9/9
+```
+
+AIRA-specific one-tool policy:
+
+```text
+multiple-ops-001
+expected: no tool
+actual: two tool calls
+result: 0/3 policy compliance
+```
+
+The model selected both semantically appropriate tools rather than abstaining.
+This demonstrates native multi-tool capability but violates the current
+AIRA workflow rule that a request requiring different tools must be split.
+
+Decision:
+
+**COMPLETE — NATIVE CORE TOOL CALLING ACCEPTED FOR CURRENT SINGLE-TOOL SCOPE; AIRA MULTI-OP POLICY NOT ACCEPTED**
+
+Current policy:
+
+```text
+single known tool + typed arguments
+→ native Ollama tool calling is viable
+
+direct request requiring no tool
+→ native Ollama path is viable on current case
+
+free/constrained selector
+→ do not assume reliable no-tool judgment
+
+multi-operation request under AIRA one-tool policy
+→ enforce orchestration policy outside the model or validate/reject multiple calls
+```
+
+This benchmark does not yet establish reliability for larger registries,
+tool-result second-turn synthesis, argument correction loops, state-changing tools,
+approval-required tools, or production research tools.
+
+---
+
+## 17. Remaining Phase 5 Benchmarks
+
+- [x] Korean instruction following
+- [x] tool selection
+- [x] native tool calling
 - [ ] research planning
 - [ ] source relevance judgment
 - [ ] evidence / claim judgment
@@ -525,7 +687,7 @@ The result does not yet establish reliability for large/deep schemas, optional/u
 
 ---
 
-## 17. Next Step
+## 18. Next Step
 
 ```text
 Korean Instruction
@@ -540,7 +702,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 18. Stop Rule
+## 19. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 

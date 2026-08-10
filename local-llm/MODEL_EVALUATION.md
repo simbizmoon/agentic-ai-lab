@@ -167,7 +167,7 @@ think=false
 - schema / structured-output worker
 - simple summarizer
 - simple relevance evaluator
-- deterministic tool selector
+- constrained tool selector (with known limitations)
 - lightweight critic/evaluator
 
 복잡한 reasoning에서는 Qwen3.5-4B의 `think=true`를 자동 기본값으로 사용하지 않는다.
@@ -175,8 +175,6 @@ AIRA-native 복합 task에서 Think ON의 실제 품질 이득과 stronger model
 
 ### 아직 미검증
 
-- formal JSON Schema reliability
-- native tool calling
 - research planning
 - source/evidence/claim judgment
 - factual discipline
@@ -192,6 +190,20 @@ Phase 5B-2에서는 prompt-only JSON이 6/9 exact에 그쳤으나,
 Ollama `format="json"`과 JSON Schema constrained output은 각각 9/9 JSON parse,
 9/9 strict schema validation, 9/9 exact-value match를 기록했다.
 따라서 strict structured-output task에서는 prompt-only formatting보다 native constrained output을 기본으로 한다.
+
+Phase 5B-3 constrained tool selection은 9/12 (75.0%)를 기록했다.
+등록된 statistics / keywords tool routing과 multi-operation abstention은 통과했지만,
+도구가 필요 없는 direct 설명 요청에서는 `get_document_statistics`를 3/3 오선택했다.
+
+Ollama native tool calling에서는 single-tool selection, exact arguments,
+existing AIRA dispatcher validation/execution, direct no-tool 판단이 모두 통과하여
+core native behavior 9/9를 기록했다.
+반면 current AIRA one-tool workflow policy가 no-tool을 요구하는 multi-operation case에서는
+모델이 두 개의 적절한 tool call을 생성하여 policy compliance 0/3을 기록했다.
+
+따라서 Qwen3.5-4B는 현재 작은 registry에서 schema/tool-constrained worker로 유망하지만,
+free/constrained no-tool routing과 AIRA-specific orchestration policy는 외부 validation 또는
+stronger-model escalation 없이 신뢰한다고 간주하지 않는다.
 
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 

@@ -438,6 +438,17 @@ Failure Rate
 
 ### 현재 완료된 benchmark checkpoint
 
+```text
+✓ runtime / deterministic reasoning baseline
+✓ Phase 5B-1 Korean Instruction Following
+✓ Phase 5B-2 Structured Output / JSON Schema
+✓ Phase 5B-3 Tool Selection
+✓ Phase 5B-3 Native Tool Calling
+```
+
+Current Phase 5 status remains **IN PROGRESS**.
+
+
 - [x] benchmark foundation
 - [x] cold vs warm runtime benchmark
 - [x] verified deterministic reasoning benchmark
@@ -752,12 +763,10 @@ Reopen Condition
 다음 순서:
 
 ```text
-Korean instruction following
-→ Structured Output / JSON Schema
-→ Tool Selection / Native Tool Calling
-→ Research Planning
+Research Planning
 → Source Relevance / Evidence Judgment
 → Factual Discipline
+→ AIRA-native complex reasoning
 → Qwen3.5-4B Small Worker 최종 결정
 ```
 
