@@ -274,7 +274,148 @@ summary/decisions               → local-llm/BENCHMARK_RESULTS.md
 
 ---
 
-## 14. Remaining Phase 5 Benchmarks
+## 14. Phase 5B-1 — Korean Instruction Following
+
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+num_predict: 256
+repetitions: 3
+cases: 8
+runs: 24
+```
+
+Repository validation before live run:
+
+```text
+pytest: 4551 passed
+ruff: All checks passed
+```
+
+Official Think OFF result:
+
+```text
+runtime success: 24/24
+instruction pass: 15/24 = 62.5%
+deterministic checks: 27/36 = 75.0%
+mean total latency: 675.25 ms
+mean eval tokens: 6.875
+```
+
+Per-case result:
+
+```text
+PASS
+exact-001        3/3
+extract-001      3/3
+lines-001        3/3
+transform-001    3/3
+negative-001     3/3
+
+FAIL
+order-001        0/3
+selection-001    0/3
+format-001       0/3
+```
+
+Observed deterministic failures:
+
+```text
+order-001
+expected: 바나나, 사과, 포도
+actual:   바나나, 포도, 사과
+
+selection-001
+expected: C
+actual:   A
+
+format-001
+expected: 도시=서울;온도=24
+actual:   서울=24;온도=24
+```
+
+All three failures repeated identically across all three runs at temperature 0 and seed 42.
+The failure pattern is therefore treated as a reproducible capability limitation under the current Think OFF configuration rather than a runtime failure.
+
+### Think ON diagnostic
+
+The three failed cases were rerun once with:
+
+```text
+think: true
+num_predict: 3072
+temperature: 0.0
+seed: 42
+```
+
+Result:
+
+```text
+selection-001
+PASS
+response: C
+eval tokens: 780
+total latency: 9.315 s
+
+format-001
+PASS
+response: 도시=서울;온도=24
+eval tokens: 227
+total latency: 3.079 s
+
+order-001
+FAIL
+done_reason: length
+final response: empty
+eval tokens: 3072
+thinking chars: 9958
+total latency: 39.439 s
+```
+
+Interpretation:
+
+- Think ON recovered the multi-constraint selection case.
+- Think ON also recovered the strict key/value binding case, but at substantially higher generation cost.
+- Korean lexical ordering still failed to complete within a 3072-token reasoning budget.
+- Deterministic tasks such as lexical sorting should prefer deterministic code/tool execution rather than longer LLM reasoning.
+- Structured formatting failures should be tested next with native structured output / JSON Schema rather than using Think ON as the default workaround.
+
+### Phase 5B-1 decision
+
+Status:
+
+**COMPLETE — CAPABILITY NOT FULLY ACCEPTED**
+
+Qwen3.5-4B remains a Small Worker candidate, but the prior provisional acceptance is narrowed.
+
+Current policy:
+
+```text
+simple exact output / extraction / transformation
+→ Think OFF remains viable
+
+multi-constraint judgment
+→ do not assume Think OFF reliability
+→ test Think ON or stronger-model escalation
+
+strict structured data
+→ prefer constrained structured output
+→ do not use Think ON as the primary formatting mechanism
+
+deterministic lexical ordering
+→ prefer deterministic code/tool execution
+```
+
+The official B1 score remains the Think OFF 24-run result.
+The Think ON runs are diagnostic and do not replace or rescore the B1 benchmark.
+
+---
+
+## 15. Remaining Phase 5 Benchmarks
 
 - [ ] Korean instruction following
 - [ ] structured JSON
@@ -292,7 +433,7 @@ summary/decisions               → local-llm/BENCHMARK_RESULTS.md
 
 ---
 
-## 15. Next Step
+## 16. Next Step
 
 ```text
 Korean Instruction
@@ -307,7 +448,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 16. Stop Rule
+## 17. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 

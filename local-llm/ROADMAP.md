@@ -447,7 +447,7 @@ Failure Rate
 
 ### 남은 핵심 benchmark
 
-- [ ] Korean instruction following
+- [x] Korean instruction following
 - [ ] structured JSON / JSON Schema
 - [ ] tool selection
 - [ ] native tool calling

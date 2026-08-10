@@ -152,7 +152,7 @@ Qwen3.5-4B는 현재 RTX 3060 Ti 8GB에서 다음이 확인되었다.
 
 ### 현재 잠정 역할 결정
 
-**Status: PROVISIONAL SMALL WORKER ACCEPTED**
+**Status: PROVISIONAL SMALL WORKER CANDIDATE**
 
 기본 inference policy:
 
@@ -183,6 +183,10 @@ AIRA-native 복합 task에서 Think ON의 실제 품질 이득과 stronger model
 - AIRA 실제 production-like workload
 - long context
 - concurrent execution
+
+Phase 5B-1 Korean instruction benchmark에서는 Think OFF 기준 15/24 (62.5%) run pass가 측정되었다.
+정확 출력·추출·두 줄 형식·단순 변환·금지조건은 통과했으나, 가나다 정렬·복수 조건 선택·strict key/value binding에서 반복 가능한 실패가 관찰되었다.
+따라서 Qwen3.5-4B는 아직 최종 Small Worker로 수용하지 않고 후속 structured output, tool, AIRA-native capability를 계속 검증한다.
 
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 
