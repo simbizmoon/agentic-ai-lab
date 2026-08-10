@@ -445,6 +445,7 @@ Failure Rate
 ✓ Phase 5B-3 Tool Selection
 ✓ Phase 5B-3 Native Tool Calling
 ✓ Phase 5B-4 Research Planning
+✓ Phase 5B-5 Claim Relevance
 ```
 
 Current Phase 5 status remains **IN PROGRESS**.
@@ -764,8 +765,7 @@ Reopen Condition
 다음 순서:
 
 ```text
-Source Relevance / Evidence Judgment
-→ Factual Discipline
+Factual Discipline
 → AIRA-native complex reasoning
 → Qwen3.5-4B Small Worker 최종 결정
 ```

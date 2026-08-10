@@ -216,6 +216,21 @@ memory/seat query planning은 3072 tokens에서도 length termination이 발생�
 기존 deterministic task decomposition / query planning을 authoritative path로 유지하고,
 Qwen3.5-4B는 validated plan 이후의 bounded downstream worker 역할에 한정하여 계속 평가한다.
 
+Phase 5B-5 Claim Relevance에서는 DEV v2 16/18 (88.9%),
+blind HOLDOUT v2 18/18 (100.0%)를 기록했다.
+HOLDOUT에서는 directly_relevant / partially_relevant / irrelevant 각각 6/6을 맞췄고,
+false directly relevant와 false irrelevant가 모두 0이었다.
+
+DEV에서는 cost observability를 partially_relevant에서 irrelevant로 내린 1건과,
+prompt versioning을 irrelevant에서 partially_relevant로 올린 1건이 있었다.
+따라서 relevance-boundary judgment는 완벽하지 않지만,
+bounded semantic relevance classification worker로는 현재 test scope에서 수용한다.
+
+이 결과는 claim relevance에 한정한다.
+해당 evaluator policy는 factual truth와 evidence support를 의도적으로 분리하므로,
+이 결과를 factual discipline, evidence support, source authority 또는 citation correctness로
+확장 해석하지 않는다.
+
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 
 ---

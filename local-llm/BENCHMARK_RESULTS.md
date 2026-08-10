@@ -844,13 +844,180 @@ and orchestration failures.
 
 ---
 
-## 18. Remaining Phase 5 Benchmarks
+## 18. Phase 5B-5 — Claim Relevance / Evidence Judgment
+
+### 5B-5a — Claim Relevance
+
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+num_predict: 256
+response schema: ClaimRelevanceJudgment
+DEV dataset: claim-relevance-golden-v2 / 2.0.0
+HOLDOUT dataset: claim-relevance-holdout-v2 / 2.0.0
+```
+
+Repository validation before live run:
+
+```text
+pytest: 4578 passed
+ruff: All checks passed
+```
+
+The benchmark reused:
+
+```text
+ClaimRelevanceJudgment
+ClaimRelevanceEvaluationRunner
+build_claim_relevance_golden_dataset_v2()
+build_claim_relevance_holdout_dataset_v2()
+```
+
+The local evaluator also reused the exact AIRA
+`CLAIM_RELEVANCE_INSTRUCTIONS`.
+
+#### DEV result
+
+```text
+16/18 = 88.9%
+false directly relevant: 0
+false irrelevant: 1
+```
+
+Per class:
+
+```text
+directly_relevant: 6/6
+partially_relevant: 5/6
+irrelevant: 5/6
+```
+
+Observed failures:
+
+```text
+v2-partial-004-cost-observability
+expected: partially_relevant
+actual: irrelevant
+
+v2-irrelevant-004-versioning
+expected: irrelevant
+actual: partially_relevant
+```
+
+Interpretation:
+
+```text
+cost observability
+→ model under-valued a materially useful measurement signal
+
+prompt versioning
+→ model over-promoted unrelated operational context
+```
+
+The DEV failures therefore occurred at relevance-boundary classification,
+not at structured-output parsing.
+
+#### Blind HOLDOUT result
+
+```text
+18/18 = 100.0%
+false directly relevant: 0
+false irrelevant: 0
+```
+
+Per class:
+
+```text
+directly_relevant: 6/6
+partially_relevant: 6/6
+irrelevant: 6/6
+```
+
+The HOLDOUT dataset was not used to tune the local evaluator configuration
+between DEV and HOLDOUT execution.
+
+### Phase 5B-5a decision
+
+Status:
+
+**COMPLETE — CLAIM RELEVANCE ACCEPTED FOR CURRENT TEST SCOPE**
+
+Current interpretation:
+
+```text
+structured semantic relevance classification
+→ strong
+
+direct / partial / irrelevant distinction
+→ strong on blind holdout
+
+false-direct risk
+→ 0 on DEV and HOLDOUT
+
+false-irrelevant risk
+→ 1 on DEV, 0 on HOLDOUT
+
+boundary judgment
+→ not perfect; retain deterministic/schema validation and escalation policy
+```
+
+Current role policy:
+
+```text
+Qwen3.5-4B
+→ suitable candidate for bounded claim-relevance worker
+
+use cases:
+- claim relevance filtering
+- claim prioritization
+- semantic triage before expensive stronger-model evaluation
+
+not established by this benchmark:
+- factual truth
+- evidence support
+- source authority
+- citation correctness
+```
+
+The claim-relevance prompt explicitly separates semantic relevance from
+truth and evidence support, so these results must not be generalized into
+factual-discipline capability.
+
+### 5B-5b — Evidence Relevance
+
+The repository contains:
+
+```text
+EvidenceRelevanceJudgment
+OpenAIEvidenceRelevanceEvaluator
+```
+
+but this checkpoint did not identify a dedicated evidence-relevance
+golden/holdout dataset equivalent to the claim-relevance v2 datasets.
+
+Therefore no official evidence-relevance accuracy is recorded here.
+
+Status:
+
+**NOT SCORED — NO VERIFIED GOLDEN/HOLDOUT DATASET IN CURRENT AUDIT**
+
+Evidence relevance should be evaluated later only with an explicitly
+identified or intentionally created benchmark dataset whose status is
+clearly distinguished from the existing claim-relevance holdout.
+
+---
+
+## 19. Remaining Phase 5 Benchmarks
 
 - [x] Korean instruction following
 - [x] tool selection
 - [x] native tool calling
 - [x] research planning
-- [ ] source relevance judgment
+- [x] source relevance judgment
 - [ ] evidence / claim judgment
 - [ ] factual discipline
 - [ ] AIRA-native complex reasoning
@@ -860,7 +1027,7 @@ and orchestration failures.
 
 ---
 
-## 19. Next Step
+## 20. Next Step
 
 ```text
 Korean Instruction
@@ -875,7 +1042,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 20. Stop Rule
+## 21. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 
