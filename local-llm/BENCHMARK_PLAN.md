@@ -233,6 +233,20 @@ evidence와 claim pair를 제공하고 다음을 판정한다.
 
 ## 11. Factual Discipline
 
+Current status:
+- [x] actual `SemanticCitationJudgment` schema used
+- [x] actual `SemanticCitationEvaluationRunner` reused
+- [x] semantic-citation DEV v2 evaluated
+- [x] semantic-citation blind HOLDOUT v1 evaluated
+- [x] unsupported vs contradicted distinction evaluated
+- [x] false-fully-supported risk measured
+
+Current decision:
+- Qwen3.5-4B first-pass factual triage: conditionally accepted
+- Qwen3.5-4B final authoritative factual verifier: not accepted
+- partial-support boundary cases require escalation
+
+
 테스트 유형:
 - insufficient evidence
 - deliberately missing fact

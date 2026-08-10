@@ -176,7 +176,6 @@ AIRA-native 복합 task에서 Think ON의 실제 품질 이득과 stronger model
 
 - research planning
 - source/evidence/claim judgment
-- factual discipline
 - AIRA 실제 production-like workload
 - long context
 - concurrent execution
@@ -230,6 +229,27 @@ bounded semantic relevance classification worker로는 현재 test scope에서 �
 해당 evaluator policy는 factual truth와 evidence support를 의도적으로 분리하므로,
 이 결과를 factual discipline, evidence support, source authority 또는 citation correctness로
 확장 해석하지 않는다.
+
+Phase 5B-6 Semantic Citation Entailment에서는 DEV 17/20 (85.0%),
+blind HOLDOUT 17/20 (85.0%)를 기록했다.
+
+DEV와 HOLDOUT을 합치면 `unsupported` 10/10,
+`contradicted` 11/11로 명백한 비지지/모순 사례는 21/21을 정확히 분류했다.
+반면 `partially_supported`는 5/10으로 경계 판단이 약했다.
+HOLDOUT에서는 예외 조건을 생략한 claim을 `fully_supported`로 잘못 승인한
+false-fully-supported 사례도 1건 발생했다.
+
+따라서 Qwen3.5-4B는 semantic citation의 first-pass triage worker로는
+조건부 수용하지만, final authoritative factual verifier로는 수용하지 않는다.
+
+운영 정책은 다음과 같다.
+
+- unsupported / contradicted: 1차 flag/reject에 활용 가능
+- partially_supported / ambiguous: stronger-model 또는 deterministic review로 escalation
+- fully_supported: high-impact claim은 추가 검증 유지
+
+이 결과 역시 source authority, freshness, authenticity 또는 report-level factual correctness를
+직접 검증한 것은 아니다.
 
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 

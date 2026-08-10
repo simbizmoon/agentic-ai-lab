@@ -1011,7 +1011,204 @@ clearly distinguished from the existing claim-relevance holdout.
 
 ---
 
-## 19. Remaining Phase 5 Benchmarks
+## 19. Phase 5B-6 — Factual Discipline / Semantic Citation Entailment
+
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+num_predict: 256
+response schema: SemanticCitationJudgment
+
+DEV:
+semantic-citation-golden-v2 / 2.0.0 / 20 cases
+
+HOLDOUT:
+semantic-citation-holdout-v1 / 1.0.0 / 20 cases
+```
+
+Repository validation before live execution:
+
+```text
+pytest: 4583 passed
+ruff: All checks passed
+```
+
+The benchmark reused the actual AIRA semantic citation components:
+
+```text
+SemanticCitationJudgment
+SemanticCitationEvaluationRunner
+SEMANTIC_CITATION_INSTRUCTIONS
+build_semantic_citation_golden_dataset_v2()
+build_semantic_citation_holdout_dataset()
+```
+
+Support classes:
+
+```text
+fully_supported
+partially_supported
+unsupported
+contradicted
+```
+
+The evaluator policy explicitly separates missing support from contradiction:
+
+```text
+unsupported
+→ evidence does not establish the core claim but does not explicitly conflict
+
+contradicted
+→ evidence contains an assertion mutually incompatible with the claim
+```
+
+### DEV result
+
+```text
+17/20 = 85.0%
+false fully supported: 0
+false rejected: 3
+```
+
+Per class:
+
+```text
+fully_supported:      3/4 = 75%
+partially_supported:  3/5 = 60%
+unsupported:          5/5 = 100%
+contradicted:         6/6 = 100%
+```
+
+Failures:
+
+```text
+fully-004-numeric-narrowing
+expected: fully_supported
+actual: contradicted
+
+partial-001-conjunction
+expected: partially_supported
+actual: unsupported
+
+partial-005-secondary-assertion
+expected: partially_supported
+actual: unsupported
+```
+
+### Blind HOLDOUT result
+
+```text
+17/20 = 85.0%
+false fully supported: 1
+false rejected: 2
+```
+
+Per class:
+
+```text
+fully_supported:      5/5 = 100%
+partially_supported:  2/5 = 40%
+unsupported:          5/5 = 100%
+contradicted:         5/5 = 100%
+```
+
+Failures:
+
+```text
+holdout-partial-001-time-scope
+expected: partially_supported
+actual: contradicted
+
+holdout-partial-002-exception-omitted
+expected: partially_supported
+actual: fully_supported
+
+holdout-partial-003-conjunction
+expected: partially_supported
+actual: unsupported
+```
+
+### Combined interpretation
+
+Across DEV and HOLDOUT:
+
+```text
+unsupported:          10/10 = 100%
+contradicted:         11/11 = 100%
+unsupported+contradicted: 21/21 = 100%
+
+partially_supported:   5/10 = 50%
+fully_supported:       8/9  = 88.9%
+```
+
+The dominant weakness is therefore not rejection of clearly unsupported or
+contradicted claims. It is the boundary between partial support and the other
+classes.
+
+Observed partial-support failure modes include:
+
+```text
+qualifier / scope handling
+exception omission
+conjunctive claims
+secondary unsupported assertions
+numeric narrowing semantics
+```
+
+One HOLDOUT case was incorrectly promoted from `partially_supported` to
+`fully_supported`, so the model must not be treated as an authoritative final
+citation verifier.
+
+### Phase 5B-6 decision
+
+Status:
+
+**COMPLETE — CONDITIONAL ACCEPTANCE FOR FIRST-PASS FACTUAL TRIAGE**
+
+Role policy:
+
+```text
+Qwen3.5-4B
+→ accepted for first-pass semantic citation triage
+→ not accepted as final authoritative factual verifier
+```
+
+Appropriate use:
+
+```text
+strong candidate:
+- detect clearly unsupported claims
+- detect explicitly contradicted claims
+- first-pass citation triage
+
+requires escalation / additional validation:
+- partially supported claims
+- qualifier / exception boundaries
+- conjunctions
+- scope broadening
+- final acceptance of important factual claims
+```
+
+Recommended control:
+
+```text
+Qwen3.5-4B first pass
+→ unsupported / contradicted: flag or reject
+→ partial / ambiguous: escalate
+→ fully_supported: retain schema/rule checks and escalate high-impact claims
+```
+
+This benchmark evaluates claim-to-evidence semantic support only.
+It does not establish source authority, source freshness, document authenticity,
+or full report-level factual correctness.
+
+---
+
+## 20. Remaining Phase 5 Benchmarks
 
 - [x] Korean instruction following
 - [x] tool selection
@@ -1019,7 +1216,7 @@ clearly distinguished from the existing claim-relevance holdout.
 - [x] research planning
 - [x] source relevance judgment
 - [ ] evidence / claim judgment
-- [ ] factual discipline
+- [x] factual discipline
 - [ ] AIRA-native complex reasoning
 - [ ] Qwen3.5-4B Small Worker 최종 역할 결정
 - [ ] Qwen3.5-9B benchmark
@@ -1027,7 +1224,7 @@ clearly distinguished from the existing claim-relevance holdout.
 
 ---
 
-## 20. Next Step
+## 21. Next Step
 
 ```text
 Korean Instruction
@@ -1042,7 +1239,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 21. Stop Rule
+## 22. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 
