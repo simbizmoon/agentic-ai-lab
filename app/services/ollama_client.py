@@ -119,6 +119,9 @@ class OllamaClient:
         think: bool,
         stream: bool = False,
         keep_alive: str | int | None = None,
+        num_predict: int | None = None,
+        temperature: float | None = None,
+        seed: int | None = None,
     ) -> OllamaGenerateResponse:
         """Generate one completion and normalize Ollama metrics."""
         cleaned_model = model.strip()
@@ -143,6 +146,29 @@ class OllamaClient:
             payload["keep_alive"] = self._validate_keep_alive(
                 keep_alive
             )
+
+        options: dict[str, Any] = {}
+        if num_predict is not None:
+            if isinstance(num_predict, bool):
+                raise TypeError("num_predict must be an integer")
+            if num_predict < 1:
+                raise ValueError("num_predict must be positive")
+            options["num_predict"] = num_predict
+
+        if temperature is not None:
+            if isinstance(temperature, bool):
+                raise TypeError("temperature must be numeric")
+            if temperature < 0:
+                raise ValueError("temperature must be nonnegative")
+            options["temperature"] = temperature
+
+        if seed is not None:
+            if isinstance(seed, bool):
+                raise TypeError("seed must be an integer")
+            options["seed"] = seed
+
+        if options:
+            payload["options"] = options
 
         data = self._post_generate(payload)
         return self._parse_generate_response(data)

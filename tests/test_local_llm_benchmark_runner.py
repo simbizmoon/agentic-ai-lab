@@ -6,6 +6,7 @@ import pytest
 
 from app.evals.local_llm_benchmark import (
     LocalLLMBenchmarkRequest,
+    LocalLLMBenchmarkStatus,
 )
 from app.evals.local_llm_benchmark_runner import (
     LocalLLMBenchmarkRunner,
@@ -18,7 +19,16 @@ from app.services.ollama_client import (
 class FakeOllamaClient:
     """Return one deterministic normalized Ollama response."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        response: str = "정답: C",
+        thinking: str = "",
+        done_reason: str | None = "stop",
+    ) -> None:
+        self._response = response
+        self._thinking = thinking
+        self._done_reason = done_reason
         self.calls: list[dict[str, object]] = []
 
     def generate(
@@ -29,6 +39,9 @@ class FakeOllamaClient:
         think: bool,
         stream: bool = False,
         keep_alive: str | int | None = None,
+        num_predict: int | None = None,
+        temperature: float | None = None,
+        seed: int | None = None,
     ) -> OllamaGenerateResponse:
         self.calls.append(
             {
@@ -37,14 +50,17 @@ class FakeOllamaClient:
                 "think": think,
                 "stream": stream,
                 "keep_alive": keep_alive,
+                "num_predict": num_predict,
+                "temperature": temperature,
+                "seed": seed,
             }
         )
         return OllamaGenerateResponse(
             model=model,
-            response="정상 응답",
-            thinking="",
+            response=self._response,
+            thinking=self._thinking,
             done=True,
-            done_reason="stop",
+            done_reason=self._done_reason,
             total_duration_ns=2_000_000_000,
             load_duration_ns=500_000_000,
             prompt_eval_count=20,
@@ -54,49 +70,64 @@ class FakeOllamaClient:
         )
 
 
-def test_runner_produces_normalized_benchmark_result() -> None:
+def substring_request(
+    *,
+    think: bool = False,
+) -> LocalLLMBenchmarkRequest:
+    """Return one backward-compatible substring benchmark request."""
+    return LocalLLMBenchmarkRequest(
+        benchmark_id="local-llm-smoke-001",
+        model="qwen3.5:4b",
+        prompt="문제를 풀어라.",
+        think=think,
+        run_label="phase4a3",
+        keep_alive="5m",
+        expected_substring="정답: C",
+        metadata={"category": "thinking_ab"},
+    )
+
+
+def test_runner_produces_successful_substring_result() -> None:
     client = FakeOllamaClient()
     runner = LocalLLMBenchmarkRunner(client=client)
 
-    request = LocalLLMBenchmarkRequest(
-        benchmark_id="local-llm-smoke-001",
-        model="qwen3.5:4b",
-        prompt="한국어로 한 문장으로 답하라.",
-        think=False,
-        run_label="phase4a1",
-        keep_alive="5m",
-        metadata={"category": "korean_instruction"},
+    result = runner.run(substring_request())
+
+    assert result.status is LocalLLMBenchmarkStatus.SUCCEEDED
+    assert result.quality_passed is True
+    assert result.response == "정답: C"
+    assert result.failure_reason is None
+    assert result.response_char_count == len("정답: C")
+    assert result.thinking_char_count == 0
+
+
+def test_runner_records_wrong_substring_without_runtime_failure() -> None:
+    runner = LocalLLMBenchmarkRunner(
+        client=FakeOllamaClient(response="정답: A")
     )
 
-    result = runner.run(request)
+    result = runner.run(substring_request())
 
-    assert result.benchmark_id == "local-llm-smoke-001"
-    assert result.run_label == "phase4a1"
-    assert result.model == "qwen3.5:4b"
-    assert result.think is False
-    assert result.response == "정상 응답"
-    assert result.metadata == {
-        "category": "korean_instruction",
-        "provider": "ollama",
-    }
+    assert result.status is LocalLLMBenchmarkStatus.SUCCEEDED
+    assert result.quality_passed is False
 
-    assert result.metrics.prompt_tokens_per_second == pytest.approx(
-        200.0
-    )
-    assert (
-        result.metrics.generation_tokens_per_second
-        == pytest.approx(100.0)
+
+def test_runner_records_length_failure_instead_of_raising() -> None:
+    runner = LocalLLMBenchmarkRunner(
+        client=FakeOllamaClient(
+            response="",
+            thinking="긴 사고 과정",
+            done_reason="length",
+        )
     )
 
-    assert client.calls == [
-        {
-            "model": "qwen3.5:4b",
-            "prompt": "한국어로 한 문장으로 답하라.",
-            "think": False,
-            "stream": False,
-            "keep_alive": "5m",
-        }
-    ]
+    result = runner.run(substring_request(think=True))
+
+    assert result.status is LocalLLMBenchmarkStatus.FAILED
+    assert result.quality_passed is False
+    assert result.failure_reason == "generation_stopped_by_length"
+    assert result.response == ""
+    assert result.thinking == "긴 사고 과정"
 
 
 def test_request_rejects_blank_prompt() -> None:
@@ -107,45 +138,3 @@ def test_request_rejects_blank_prompt() -> None:
             prompt=" ",
             think=False,
         )
-
-
-def test_result_requires_nonblank_successful_response() -> None:
-    class EmptyResponseClient(FakeOllamaClient):
-        def generate(
-            self,
-            *,
-            model: str,
-            prompt: str,
-            think: bool,
-            stream: bool = False,
-            keep_alive: str | int | None = None,
-        ) -> OllamaGenerateResponse:
-            return OllamaGenerateResponse(
-                model=model,
-                response="",
-                thinking="too much thinking",
-                done=True,
-                done_reason="length",
-                total_duration_ns=10,
-                load_duration_ns=1,
-                prompt_eval_count=1,
-                prompt_eval_duration_ns=1,
-                eval_count=1,
-                eval_duration_ns=1,
-            )
-
-    runner = LocalLLMBenchmarkRunner(
-        client=EmptyResponseClient()
-    )
-    request = LocalLLMBenchmarkRequest(
-        benchmark_id="local-llm-smoke-001",
-        model="qwen3.5:4b",
-        prompt="prompt",
-        think=True,
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="response must not be blank",
-    ):
-        runner.run(request)

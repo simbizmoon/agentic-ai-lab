@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class LocalLLMBenchmarkStatus(StrEnum):
+    """Terminal status of one local LLM benchmark run."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 class LocalLLMBenchmarkRequest(BaseModel):
@@ -22,6 +30,11 @@ class LocalLLMBenchmarkRequest(BaseModel):
     think: bool
     run_label: str = "baseline"
     keep_alive: str | int | None = None
+    expected_substring: str | None = None
+    expected_answer: str | None = None
+    num_predict: int | None = Field(default=None, ge=1)
+    temperature: float | None = Field(default=None, ge=0)
+    seed: int | None = None
     metadata: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -45,6 +58,24 @@ class LocalLLMBenchmarkRequest(BaseModel):
         ):
             raise ValueError(
                 "keep_alive must not be blank when provided"
+            )
+
+        optional_text = {
+            "expected_substring": self.expected_substring,
+            "expected_answer": self.expected_answer,
+        }
+        for field_name, value in optional_text.items():
+            if value is not None and not value.strip():
+                raise ValueError(
+                    f"{field_name} must not be blank when provided"
+                )
+
+        if (
+            self.expected_substring is not None
+            and self.expected_answer is not None
+        ):
+            raise ValueError(
+                "use either expected_substring or expected_answer"
             )
 
         for key, value in self.metadata.items():
@@ -98,15 +129,31 @@ class LocalLLMBenchmarkResult(BaseModel):
     run_label: str
     model: str
     think: bool
+    status: LocalLLMBenchmarkStatus
     response: str
     thinking: str
     done_reason: str | None = None
+    failure_reason: str | None = None
+    quality_passed: bool | None = None
+    expected_substring: str | None = None
+    expected_answer: str | None = None
+    parsed_answer: str | None = None
     metrics: LocalLLMBenchmarkMetrics
     metadata: dict[str, str] = Field(default_factory=dict)
 
+    @property
+    def response_char_count(self) -> int:
+        """Return final-response character count."""
+        return len(self.response)
+
+    @property
+    def thinking_char_count(self) -> int:
+        """Return thinking-trace character count."""
+        return len(self.thinking)
+
     @model_validator(mode="after")
     def validate_result(self) -> Self:
-        """Validate result identity and response semantics."""
+        """Validate result identity and success/failure semantics."""
         required_text = {
             "benchmark_id": self.benchmark_id,
             "run_label": self.run_label,
@@ -118,27 +165,21 @@ class LocalLLMBenchmarkResult(BaseModel):
                     f"{field_name} must not be blank"
                 )
 
-        if not self.response.strip():
-            raise ValueError(
-                "response must not be blank for a successful benchmark"
-            )
-
-        if (
-            self.done_reason is not None
-            and not self.done_reason.strip()
+        if self.status is LocalLLMBenchmarkStatus.SUCCEEDED:
+            if not self.response.strip():
+                raise ValueError(
+                    "successful benchmark must include response"
+                )
+            if self.failure_reason is not None:
+                raise ValueError(
+                    "successful benchmark must not include failure_reason"
+                )
+        elif (
+            self.failure_reason is None
+            or not self.failure_reason.strip()
         ):
             raise ValueError(
-                "done_reason must not be blank when provided"
+                "failed benchmark must include failure_reason"
             )
-
-        for key, value in self.metadata.items():
-            if not key.strip():
-                raise ValueError(
-                    "metadata keys must not be blank"
-                )
-            if not value.strip():
-                raise ValueError(
-                    "metadata values must not be blank"
-                )
 
         return self

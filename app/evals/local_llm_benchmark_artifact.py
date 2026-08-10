@@ -10,6 +10,9 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.evals.local_llm_benchmark import LocalLLMBenchmarkResult
+from app.evals.local_llm_benchmark_summary import (
+    LocalLLMBenchmarkSummary,
+)
 
 
 class LocalLLMBenchmarkArtifact(BaseModel):
@@ -21,11 +24,14 @@ class LocalLLMBenchmarkArtifact(BaseModel):
         frozen=True,
     )
 
-    artifact_version: str = "1.0.0"
+    artifact_version: str = "1.1.0"
     created_at: datetime
     model: str
     benchmark_group: str
     results: list[LocalLLMBenchmarkResult] = Field(min_length=1)
+    summaries: list[LocalLLMBenchmarkSummary] = Field(
+        default_factory=list
+    )
     metadata: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -56,6 +62,20 @@ class LocalLLMBenchmarkArtifact(BaseModel):
                 "benchmark result run labels must be unique"
             )
 
+        if any(
+            summary.model.strip().casefold() != normalized_model
+            for summary in self.summaries
+        ):
+            raise ValueError(
+                "all benchmark summaries must use artifact model"
+            )
+
+        summary_modes = [summary.think for summary in self.summaries]
+        if len(set(summary_modes)) != len(summary_modes):
+            raise ValueError(
+                "benchmark summaries must have unique think modes"
+            )
+
         for key, value in self.metadata.items():
             if not key.strip():
                 raise ValueError(
@@ -77,7 +97,7 @@ class LocalLLMBenchmarkArtifactWriter:
         artifact: LocalLLMBenchmarkArtifact,
         path: Path,
     ) -> Path:
-        """Write artifact atomically enough for local benchmark usage."""
+        """Write artifact as UTF-8 JSON."""
         if not path.name:
             raise ValueError("path must include a file name")
 
