@@ -101,6 +101,7 @@ class OllamaClient:
             raise ValueError("base_url must not be blank")
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+
         self._base_url = cleaned_base_url
         self._timeout_seconds = timeout_seconds
         self._http_client = http_client
@@ -117,23 +118,60 @@ class OllamaClient:
         prompt: str,
         think: bool,
         stream: bool = False,
+        keep_alive: str | int | None = None,
     ) -> OllamaGenerateResponse:
         """Generate one completion and normalize Ollama metrics."""
         cleaned_model = model.strip()
         cleaned_prompt = prompt.strip()
+
         if not cleaned_model:
             raise ValueError("model must not be blank")
         if not cleaned_prompt:
             raise ValueError("prompt must not be blank")
         if stream:
-            raise ValueError("stream=True is not supported by the benchmark client")
+            raise ValueError(
+                "stream=True is not supported by the benchmark client"
+            )
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": cleaned_model,
             "prompt": cleaned_prompt,
             "stream": False,
             "think": think,
         }
+        if keep_alive is not None:
+            payload["keep_alive"] = self._validate_keep_alive(
+                keep_alive
+            )
+
+        data = self._post_generate(payload)
+        return self._parse_generate_response(data)
+
+    def unload(self, *, model: str) -> None:
+        """Unload one model immediately through keep_alive=0."""
+        cleaned_model = model.strip()
+        if not cleaned_model:
+            raise ValueError("model must not be blank")
+
+        data = self._post_generate(
+            {
+                "model": cleaned_model,
+                "keep_alive": 0,
+                "stream": False,
+            }
+        )
+
+        done = data.get("done")
+        if done is not True:
+            raise OllamaResponseError(
+                "Ollama unload response was not complete"
+            )
+
+    def _post_generate(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        """POST one request to /api/generate and return JSON object."""
         try:
             if self._http_client is None:
                 with httpx.Client() as client:
@@ -149,7 +187,9 @@ class OllamaClient:
                     timeout=self._timeout_seconds,
                 )
         except httpx.HTTPError as error:
-            raise OllamaTransportError("failed to call Ollama generate API") from error
+            raise OllamaTransportError(
+                "failed to call Ollama generate API"
+            ) from error
 
         try:
             response.raise_for_status()
@@ -164,50 +204,114 @@ class OllamaClient:
             raise OllamaResponseError(
                 "Ollama generate API returned invalid JSON"
             ) from error
+
         if not isinstance(data, dict):
-            raise OllamaResponseError("Ollama generate API response must be an object")
-        return self._parse_generate_response(data)
+            raise OllamaResponseError(
+                "Ollama generate API response must be an object"
+            )
+        return data
 
     @staticmethod
-    def _parse_generate_response(data: dict[str, Any]) -> OllamaGenerateResponse:
+    def _validate_keep_alive(value: str | int) -> str | int:
+        if isinstance(value, bool):
+            raise TypeError("keep_alive must be a string or integer")
+        if isinstance(value, int):
+            return value
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                "keep_alive must be a nonblank string or integer"
+            )
+        return value.strip()
+
+    @staticmethod
+    def _parse_generate_response(
+        data: dict[str, Any],
+    ) -> OllamaGenerateResponse:
         """Validate and normalize one non-streaming generate response."""
         model = OllamaClient._require_text(data, "model")
-        response_text = OllamaClient._optional_text(data, "response", default="")
-        thinking = OllamaClient._optional_text(data, "thinking", default="")
+        response_text = OllamaClient._optional_text(
+            data,
+            "response",
+            default="",
+        )
+        thinking = OllamaClient._optional_text(
+            data,
+            "thinking",
+            default="",
+        )
         done = OllamaClient._require_bool(data, "done")
         done_reason = OllamaClient._nullable_text(data, "done_reason")
+
         if not done:
-            raise OllamaResponseError("non-streaming Ollama response was not complete")
+            raise OllamaResponseError(
+                "non-streaming Ollama response was not complete"
+            )
+
         return OllamaGenerateResponse(
             model=model,
             response=response_text,
             thinking=thinking,
             done=done,
             done_reason=done_reason,
-            total_duration_ns=OllamaClient._require_nonnegative_int(data, "total_duration"),
-            load_duration_ns=OllamaClient._require_nonnegative_int(data, "load_duration"),
-            prompt_eval_count=OllamaClient._require_nonnegative_int(data, "prompt_eval_count"),
-            prompt_eval_duration_ns=OllamaClient._require_nonnegative_int(data, "prompt_eval_duration"),
-            eval_count=OllamaClient._require_nonnegative_int(data, "eval_count"),
-            eval_duration_ns=OllamaClient._require_nonnegative_int(data, "eval_duration"),
+            total_duration_ns=OllamaClient._require_nonnegative_int(
+                data,
+                "total_duration",
+            ),
+            load_duration_ns=OllamaClient._require_nonnegative_int(
+                data,
+                "load_duration",
+            ),
+            prompt_eval_count=OllamaClient._require_nonnegative_int(
+                data,
+                "prompt_eval_count",
+            ),
+            prompt_eval_duration_ns=(
+                OllamaClient._require_nonnegative_int(
+                    data,
+                    "prompt_eval_duration",
+                )
+            ),
+            eval_count=OllamaClient._require_nonnegative_int(
+                data,
+                "eval_count",
+            ),
+            eval_duration_ns=OllamaClient._require_nonnegative_int(
+                data,
+                "eval_duration",
+            ),
         )
 
     @staticmethod
-    def _require_text(data: dict[str, Any], field_name: str) -> str:
+    def _require_text(
+        data: dict[str, Any],
+        field_name: str,
+    ) -> str:
         value = data.get(field_name)
         if not isinstance(value, str) or not value.strip():
-            raise OllamaResponseError(f"{field_name} must be a nonblank string")
+            raise OllamaResponseError(
+                f"{field_name} must be a nonblank string"
+            )
         return value
 
     @staticmethod
-    def _optional_text(data: dict[str, Any], field_name: str, *, default: str) -> str:
+    def _optional_text(
+        data: dict[str, Any],
+        field_name: str,
+        *,
+        default: str,
+    ) -> str:
         value = data.get(field_name, default)
         if not isinstance(value, str):
-            raise OllamaResponseError(f"{field_name} must be a string")
+            raise OllamaResponseError(
+                f"{field_name} must be a string"
+            )
         return value
 
     @staticmethod
-    def _nullable_text(data: dict[str, Any], field_name: str) -> str | None:
+    def _nullable_text(
+        data: dict[str, Any],
+        field_name: str,
+    ) -> str | None:
         value = data.get(field_name)
         if value is None:
             return None
@@ -218,16 +322,28 @@ class OllamaClient:
         return value
 
     @staticmethod
-    def _require_bool(data: dict[str, Any], field_name: str) -> bool:
+    def _require_bool(
+        data: dict[str, Any],
+        field_name: str,
+    ) -> bool:
         value = data.get(field_name)
         if not isinstance(value, bool):
-            raise OllamaResponseError(f"{field_name} must be a boolean")
+            raise OllamaResponseError(
+                f"{field_name} must be a boolean"
+            )
         return value
 
     @staticmethod
-    def _require_nonnegative_int(data: dict[str, Any], field_name: str) -> int:
+    def _require_nonnegative_int(
+        data: dict[str, Any],
+        field_name: str,
+    ) -> int:
         value = data.get(field_name)
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        if (
+            not isinstance(value, int)
+            or isinstance(value, bool)
+            or value < 0
+        ):
             raise OllamaResponseError(
                 f"{field_name} must be a nonnegative integer"
             )

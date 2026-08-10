@@ -13,7 +13,7 @@ from app.services.ollama_client import OllamaGenerateResponse
 
 
 class LocalLLMGenerateClient(Protocol):
-    """Generation client contract required by the benchmark runner."""
+    """Provider subset required by LocalLLMBenchmarkRunner."""
 
     def generate(
         self,
@@ -22,24 +22,34 @@ class LocalLLMGenerateClient(Protocol):
         prompt: str,
         think: bool,
         stream: bool = False,
+        keep_alive: str | int | None = None,
     ) -> OllamaGenerateResponse:
-        """Generate one normalized completion."""
+        """Generate one normalized local-model response."""
 
 
 class LocalLLMBenchmarkRunner:
-    """Run one benchmark request through an injected generation client."""
+    """Run one benchmark request through an injected local LLM client."""
 
-    def __init__(self, *, client: LocalLLMGenerateClient) -> None:
+    def __init__(
+        self,
+        *,
+        client: LocalLLMGenerateClient,
+    ) -> None:
         self._client = client
 
-    def run(self, request: LocalLLMBenchmarkRequest) -> LocalLLMBenchmarkResult:
+    def run(
+        self,
+        request: LocalLLMBenchmarkRequest,
+    ) -> LocalLLMBenchmarkResult:
         """Execute one benchmark and normalize runtime metrics."""
         generated = self._client.generate(
             model=request.model,
             prompt=request.prompt,
             think=request.think,
             stream=False,
+            keep_alive=request.keep_alive,
         )
+
         return LocalLLMBenchmarkResult(
             benchmark_id=request.benchmark_id,
             run_label=request.run_label,
@@ -52,11 +62,20 @@ class LocalLLMBenchmarkRunner:
                 total_duration_ns=generated.total_duration_ns,
                 load_duration_ns=generated.load_duration_ns,
                 prompt_eval_count=generated.prompt_eval_count,
-                prompt_eval_duration_ns=generated.prompt_eval_duration_ns,
+                prompt_eval_duration_ns=(
+                    generated.prompt_eval_duration_ns
+                ),
                 eval_count=generated.eval_count,
                 eval_duration_ns=generated.eval_duration_ns,
-                prompt_tokens_per_second=generated.prompt_tokens_per_second,
-                generation_tokens_per_second=generated.generation_tokens_per_second,
+                prompt_tokens_per_second=(
+                    generated.prompt_tokens_per_second
+                ),
+                generation_tokens_per_second=(
+                    generated.generation_tokens_per_second
+                ),
             ),
-            metadata={**request.metadata, "provider": "ollama"},
+            metadata={
+                **request.metadata,
+                "provider": "ollama",
+            },
         )
