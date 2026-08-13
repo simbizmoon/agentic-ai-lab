@@ -2532,7 +2532,7 @@ Phase 8  Local Multi-Agent Minimum               COMPLETE
 Phase 9  Single vs Multi-Agent Evaluation        COMPLETE
 Phase 10 Heterogeneous / Hybrid Architecture     COMPLETE
 Phase 11 Parallelism / Runtime Scaling           COMPLETE
-Phase 12 Hardware Upgrade Decision               CURRENT
+Phase 12 Hardware Upgrade Decision               COMPLETE
 ```
 
 Phase 11 완료 커밋:
@@ -2690,9 +2690,9 @@ Ruff = All checks passed
 git diff --check = clean
 ```
 
-## 32.8 Phase 12 — Hardware Upgrade Decision
+## 32.8 Phase 12 — Hardware Upgrade Decision — Evaluation Plan
 
-현재 공식 다음 단계는 Hardware Upgrade Decision이다.
+Phase 12에서 평가한 대상은 다음과 같다. 최종 결과는 32.9에 기록한다.
 
 평가 대상:
 
@@ -2702,4 +2702,79 @@ git diff --check = clean
 - CPU/RAM platform 병목 여부
 - Local 확대와 OpenAI/Hybrid 유지의 비용·품질 trade-off
 
-Phase 12 완료 전에는 특정 GPU/플랫폼 구매를 확정하지 않는다.
+Phase 12 평가 중에는 특정 GPU/플랫폼 구매를 선결론으로 확정하지 않았다.
+
+## 32.9 Phase 12 — Hardware Upgrade Decision — COMPLETE
+
+Phase 12는 실제 AIRA workload를 기준으로 현재 하드웨어 유지 여부를 검증했다.
+
+현재 baseline:
+
+```text
+CPU  Intel Core i5-9600KF
+RAM  약 31 GiB
+GPU  NVIDIA GeForce RTX 3060 Ti 8 GiB
+Local bounded worker  qwen3.5:4b Q4_K_M
+```
+
+Larger-model capacity 결과:
+
+```text
+qwen3.5:4b
+→ 100% GPU
+
+llama3.1:8b
+→ 100% GPU
+→ capacity probe only; production bounded-role quality 비교 대상 아님
+
+qwen3.5:9b
+→ 13% CPU / 87% GPU
+→ 8 GiB VRAM 경계 확인
+
+ministral-3:8b
+→ 22% CPU / 78% GPU
+→ 8 GiB VRAM에서 부분 CPU offload
+```
+
+동일한 세 production-aligned bounded-role benchmark에서 Qwen3.5-4B가 전체적인
+quality / latency / safety trade-off에서 가장 적합했다.
+
+```text
+Total wall time, three role benchmarks
+Qwen3.5-4B      302.21 s
+Qwen3.5-9B      545.39 s  (~1.80x 4B)
+Ministral 3 8B  501.90 s  (~1.66x 4B)
+```
+
+Qwen3.5-9B는 semantic-citation holdout 한 항목에서 개선을 보였지만 claim relevance와
+answer coverage에서 전반적 우위를 확보하지 못했고, false-direct / false-full 오류도
+관찰되었다. Ministral 3 8B 역시 4B를 대체할 품질 우위를 보이지 못했다.
+
+Current-worker headroom 측정:
+
+```text
+Qwen3.5-4B = 100% GPU
+VRAM peak = 4755 MiB
+VRAM minimum free = 3117 MiB
+RAM minimum available = 23975 MiB
+GPU temperature max = 74 C
+GPU power max = 199.49 W
+```
+
+최종 결정:
+
+```text
+KEEP current hardware
+DEFER GPU upgrade
+NO current evidence for RAM upgrade
+NO current evidence for CPU/platform upgrade
+KEEP Qwen3.5-4B bounded local worker
+KEEP Hybrid architecture
+```
+
+Hardware upgrade는 영구 배제가 아니라 조건부 재평가 대상으로 남긴다. 더 큰 Local
+model이 실제 AIRA role에서 명확한 품질 우위를 보이면서 VRAM에 의해 제한되거나,
+실제 parallel Local-worker workload, context/KV-cache pressure, OpenAI 비용 구조 또는
+profiler evidence가 현재 hardware를 병목으로 확인할 때 다시 평가한다.
+
+**Phase 12 status: COMPLETE.**

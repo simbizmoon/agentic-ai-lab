@@ -2582,3 +2582,61 @@ Phase 12 완료 전 특정 GPU, VRAM tier 또는 전체 platform upgrade를 확�
 `PipelineSourceReaderAdapter.maximum_concurrency`의 production env 경로는 integer로
 파싱되므로 현재 안전하지만, Python API 자체는 향후 모든 non-int 값(예: `1.5`)을
 생성 시점에 명시적으로 거부하도록 강화할 수 있다. Phase 11 blocker는 아니다.
+
+---
+
+## D-048 — 현재 Hardware를 유지하고 Upgrade를 조건부 재평가로 유보
+
+- 상태: 확정
+- 날짜: 2026-08-13
+
+결정:
+
+```text
+Current hardware
+→ KEEP
+
+GPU upgrade
+→ DEFER
+
+CPU / RAM / motherboard platform upgrade
+→ NO CURRENT EVIDENCE
+
+Qwen3.5-4B bounded local worker
+→ KEEP
+
+OpenAI + Local Hybrid architecture
+→ KEEP
+```
+
+근거:
+
+1. 현재 production-aligned Qwen3.5-4B bounded worker는 100% GPU로 실행된다.
+2. Phase 12C에서 Qwen3.5-4B 세 역할 연속 workload의 VRAM peak는 4755 MiB였고,
+   최소 free VRAM은 3117 MiB였다.
+3. 같은 workload에서 system RAM 최소 available은 23975 MiB였으며 meaningful swap
+   pressure는 관찰되지 않았다.
+4. Qwen3.5-9B는 13% CPU / 87% GPU로 partial offload되었지만, 동일 role benchmark에서
+   4B 대비 전반적 품질 우위를 보이지 않았고 세 역할 총 wall time은 545.39 s로
+   4B의 302.21 s 대비 약 1.80배였다.
+5. Ministral 3 8B는 22% CPU / 78% GPU로 partial offload되었고, 동일 benchmark에서
+   4B 대비 전반적 품질 우위를 보이지 않았으며 총 wall time은 501.90 s로 약 1.66배였다.
+6. Llama 3.1 8B Q4는 현재 GPU에서 100% GPU execution이 가능했으나 이는 hardware
+   capacity probe였으며 production bounded-role quality 채택 근거로 사용하지 않는다.
+
+따라서 더 큰 VRAM GPU가 larger model을 더 많이 GPU에 적재할 수 있다는 사실만으로
+현재 AIRA의 품질 향상이 입증되지 않는다. 현재 workload에서 GPU, CPU, RAM 또는 전체
+platform 교체 비용을 정당화할 evidence가 없다.
+
+### Hardware 재평가 Trigger
+
+다음 중 하나가 실제 evidence로 발생할 때 hardware 결정을 다시 연다.
+
+- 현재 4B보다 명확한 role-specific quality 우위를 보이는 Local model이 VRAM에 의해 제한됨
+- 실제 AIRA workload에서 concurrent Local worker / parallel agent 필요가 확정됨
+- production context/KV-cache 사용 때문에 8 GiB VRAM pressure가 재현됨
+- OpenAI/Hybrid operating cost 증가로 Local 확대의 경제성이 실질적으로 변함
+- profiler가 CPU/GPU/storage를 end-to-end 병목으로 확인함
+
+Phase 12 결과의 상세 evidence는 `local-llm/HARDWARE_UPGRADE_DECISION.md`와
+`local-llm/BENCHMARK_RESULTS.md`에 기록한다.

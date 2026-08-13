@@ -1983,6 +1983,142 @@ Decision:
 **PHASE 11 COMPLETE — BOUNDED PARALLEL SOURCE READING ACCEPTED; BROADER
 PIPELINE PARALLELISM REMAINS DEFERRED.**
 
-Next official phase:
+Historical checkpoint after Phase 11:
 
 **Phase 12 — Hardware Upgrade Decision.**
+
+---
+
+## Phase 12 — Hardware Upgrade Decision Evidence
+
+### Phase 12A — Current Hardware / Runtime Baseline
+
+Measured environment:
+
+```text
+CPU     Intel Core i5-9600KF
+RAM     ~31 GiB
+GPU     NVIDIA GeForce RTX 3060 Ti 8 GiB
+Ollama  0.32.6
+```
+
+`qwen3.5:4b` metadata and runtime:
+
+```text
+parameters      4.7B
+quantization    Q4_K_M
+context length  262144 model metadata
+runtime context 4096
+processor       100% GPU
+```
+
+The initial live AIRA baseline completed successfully with quality `0.8845` and wall time
+`1:55.23`. That wall time included the broader live research workflow and was not treated
+as a pure-model throughput measurement.
+
+### Phase 12B — Larger-model feasibility and role comparison
+
+Hardware capacity probes:
+
+| model | Ollama runtime placement | observed total GPU usage | interpretation |
+|---|---|---:|---|
+| qwen3.5:4b | 100% GPU | ~4.7 GiB | current bounded-worker baseline |
+| llama3.1:8b | 100% GPU | ~6.1 GiB | capacity probe only |
+| qwen3.5:9b | 13% CPU / 87% GPU | ~7.1 GiB | 8 GiB VRAM boundary / partial offload |
+| ministral-3:8b | 22% CPU / 78% GPU | ~6.9 GiB | partial CPU offload |
+
+The production-aligned comparison reused the existing Phase-5 datasets and evaluator
+contracts with `think=false`, `temperature=0.0`, `seed=42`.
+
+Budgets:
+
+```text
+semantic citation  num_predict=256
+claim relevance    num_predict=512
+answer coverage    num_predict=384
+```
+
+Quality comparison:
+
+| role | Qwen3.5-4B DEV | Qwen3.5-4B HOLDOUT | Qwen3.5-9B DEV | Qwen3.5-9B HOLDOUT | Ministral 3 8B DEV | Ministral 3 8B HOLDOUT |
+|---|---:|---:|---:|---:|---:|---:|
+| Semantic Citation | 0.850 | 0.850 | 0.850 | 0.900 | 0.850 | 0.800 |
+| Claim Relevance | 0.889 | 1.000 | 0.722 | 0.944 | 0.889 | 0.944 |
+| Answer Coverage | 1.000 | 0.950 | 0.833 | 0.950 | 0.833 | 0.900 |
+
+Safety-sensitive errors:
+
+```text
+Claim Relevance false_direct, DEV/HOLDOUT
+Qwen3.5-4B      0 / 0
+Qwen3.5-9B      3 / 1
+Ministral 3 8B  2 / 1
+
+Answer Coverage false_full, DEV/HOLDOUT
+Qwen3.5-4B      0 / 0
+Qwen3.5-9B      1 / 0
+Ministral 3 8B  0 / 0
+```
+
+Wall time across the three benchmarks:
+
+| model | semantic | claim | coverage | total | relative to 4B |
+|---|---:|---:|---:|---:|---:|
+| Qwen3.5-4B | 95.27 s | 100.63 s | 106.31 s | 302.21 s | 1.00x |
+| Qwen3.5-9B | 162.62 s | 169.80 s | 212.97 s | 545.39 s | 1.80x |
+| Ministral 3 8B | 127.10 s | 168.86 s | 205.94 s | 501.90 s | 1.66x |
+
+Interpretation:
+
+- Qwen3.5-9B improved semantic-citation holdout by one case but did not establish an
+  overall quality advantage across the accepted bounded roles.
+- Qwen3.5-9B produced more optimistic claim-relevance and coverage errors on these
+  fixtures.
+- Ministral 3 8B did not establish an overall quality advantage over Qwen3.5-4B.
+- Larger-model CPU offload therefore did not correspond to a demonstrated AIRA quality
+  gain that would justify a VRAM upgrade.
+
+Raw Phase 12B comparison artifacts:
+
+```text
+/mnt/ai-data/experiments/phase12b3/4b/
+/mnt/ai-data/experiments/phase12b3/9b/
+/mnt/ai-data/experiments/phase12b3/ministral8b/
+```
+
+### Phase 12C — Current-worker resource headroom
+
+Qwen3.5-4B was run through the three production-aligned bounded-role benchmarks while
+GPU and system resources were sampled once per second.
+
+```text
+samples                    2042
+gpu utilization max        91.0%
+gpu utilization mean       12.575%  (includes idle gaps between calls)
+VRAM used max              4755 MiB
+VRAM free min              3117 MiB
+power max                  199.49 W
+temperature max            74 C
+RAM available min          23975 MiB
+RAM available max          26160 MiB
+```
+
+The repeated quality results matched the Phase 12B 4B baseline. Repository status remained
+clean because Phase 12 experiments wrote artifacts outside the repository.
+
+Raw Phase 12C artifacts:
+
+```text
+/mnt/ai-data/experiments/phase12c1/
+```
+
+### Phase 12 Final Decision
+
+**KEEP CURRENT HARDWARE; DEFER HARDWARE UPGRADE.**
+
+The RTX 3060 Ti 8 GiB is a real capacity boundary for some 9B-class Q4 models, but the
+larger candidates tested here did not provide the role-specific quality improvement needed
+to justify buying more VRAM. Qwen3.5-4B remains the accepted bounded local worker, and the
+OpenAI + Local hybrid architecture remains the preferred architecture.
+
+Phase 12 is complete.

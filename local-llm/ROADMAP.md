@@ -927,7 +927,7 @@ Next:
 [x] Phase 9  Single vs Multi-Agent Evaluation
 [x] Phase 10 Heterogeneous / Hybrid Experiment
 [x] Phase 11 Parallelism and Runtime Scaling
-[ ] Phase 12 Hardware Upgrade Decision
+[x] Phase 12 Hardware Upgrade Decision
 ```
 
 ## Phase 8 Result
@@ -1006,12 +1006,12 @@ Status:
 
 **COMPLETE.**
 
-# 22. Current Immediate Next Step
+# 22. Phase 12 Evaluation Plan — Historical Checkpoint
 
 **Phase 12 — Hardware Upgrade Decision**
 
-Phase 12 will determine whether the current hardware is an actual AIRA bottleneck and,
-if so, which resource should be upgraded.
+This checkpoint defined the evaluation that has now been completed. Phase 12 tested whether
+the current hardware is an actual AIRA bottleneck and, if so, which resource should be upgraded.
 
 Required evidence includes:
 
@@ -1022,4 +1022,71 @@ Required evidence includes:
 - parallel-agent requirements
 - Local versus OpenAI/Hybrid quality and operating trade-offs
 
-No hardware purchase conclusion is made before this evaluation.
+No hardware purchase conclusion was made before this evaluation.
+
+# 23. Phase 12 Result — Hardware Upgrade Decision
+
+Phase 12 completed the evidence-based hardware review.
+
+```text
+[x] Phase 12A Current Hardware / Runtime Baseline
+[x] Phase 12B Larger Local Model Feasibility
+[x] Phase 12C Current-worker Hardware Headroom
+[x] Phase 12D Hardware Upgrade Decision
+```
+
+Model/runtime findings:
+
+```text
+Qwen3.5-4B
+→ 100% GPU
+→ accepted bounded worker remains preferred
+
+Llama 3.1 8B
+→ 100% GPU
+→ capacity probe only
+
+Qwen3.5-9B
+→ 13% CPU / 87% GPU
+→ no overall bounded-role quality advantage over 4B
+
+Ministral 3 8B
+→ 22% CPU / 78% GPU
+→ no overall bounded-role quality advantage over 4B
+```
+
+Qwen3.5-4B current-worker headroom:
+
+```text
+VRAM peak           4755 MiB
+VRAM minimum free   3117 MiB
+RAM minimum available 23975 MiB
+GPU temperature max 74 C
+```
+
+Final decision:
+
+```text
+CURRENT HARDWARE
+→ KEEP
+
+HARDWARE UPGRADE
+→ DEFER
+
+QWEN3.5-4B BOUNDED WORKER
+→ KEEP
+
+HYBRID ARCHITECTURE
+→ KEEP
+```
+
+Hardware will be reconsidered only when actual AIRA evidence shows a larger-model quality
+benefit blocked by VRAM, a real concurrent Local-worker requirement, production context
+pressure, a materially different Local-vs-OpenAI cost trade-off, or profiler-confirmed
+hardware bottlenecks.
+
+**Phase 12 status: COMPLETE.**
+
+The Local LLM experimental track is no longer waiting on a hardware purchase decision.
+Future Local-model or hardware work should be triggered by workload evidence rather than
+model size alone.
