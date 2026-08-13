@@ -1095,3 +1095,127 @@ Single-Agent micro-optimization
 Next focus
 → Multi-Agent System
 ```
+
+# 31. 2026-08-13 현재 시스템 갱신 — Local / Multi-Agent / Hybrid / Parallel Runtime
+
+> 이 섹션은 2026-08-13 현재 사용자 운영 기준이다. 앞선 2026-08-09 기준 요약의
+> "Next focus → Multi-Agent"는 역사적 checkpoint이며, 현재는 Phase 11까지 완료했다.
+
+## 31.1 현재 공식 상태
+
+```text
+Local bounded worker integration       COMPLETE
+OpenAI vs Local evaluation             COMPLETE
+Local Multi-Agent minimum              COMPLETE
+Single vs Multi-Agent evaluation       COMPLETE
+Hybrid role routing                    COMPLETE
+Parallelism / Runtime Scaling          COMPLETE
+Hardware Upgrade Decision              CURRENT
+```
+
+## 31.2 현재 권장 Architecture
+
+```text
+Single-Agent default
++ workload-dependent Multi-Agent escalation
++ deterministic control/planning
++ OpenAI/stronger-model high-judgment escalation
++ Qwen3.5-4B bounded local workers
++ bounded-parallel HTTP source reading
+```
+
+Qwen3.5-4B 권장 역할:
+
+- semantic citation first-pass verification
+- claim relevance classification
+- answer coverage review/critique
+
+주의:
+
+- Local `fully_covered`만으로 completeness를 확정하지 않는다.
+- Qwen3.5-4B를 autonomous planner나 authoritative final factual verifier로 사용하지 않는다.
+
+## 31.3 Source Reading Concurrency
+
+현재 live runtime 기본값은 2이다.
+
+```bash
+unset AIRA_SOURCE_READ_CONCURRENCY
+# resolved default = 2
+```
+
+명시적 fallback:
+
+```bash
+export AIRA_SOURCE_READ_CONCURRENCY=1
+```
+
+공격적 benchmark 옵션:
+
+```bash
+export AIRA_SOURCE_READ_CONCURRENCY=4
+```
+
+허용 범위는 1..8이며 잘못된 값은 runtime composition에서 거부한다.
+
+실측 결과:
+
+```text
+Real HTTP fixed-source benchmark
+c=1 mean 2.277s
+c=2 mean 0.921s
+c=4 mean 0.851s
+```
+
+1/2/4 모두 동일한 source별 READ/FAILED semantics를 유지했다. 따라서 현재 production
+기본은 추가 압력을 크게 늘리지 않으면서 대부분의 이득을 얻은 2로 한다.
+
+## 31.4 Local Worker 실행 예
+
+```bash
+export AIRA_RESEARCH_WORKER_PROVIDER=local
+export AIRA_LOCAL_WORKER_MODEL=qwen3.5:4b
+unset AIRA_SOURCE_READ_CONCURRENCY
+```
+
+기본 Ollama 설정:
+
+```text
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_TIMEOUT_SECONDS=120.0
+```
+
+## 31.5 Multi-Agent 사용 원칙
+
+Multi-Agent는 기본값이 아니다. 다음과 같은 workload에서만 escalation 후보로 본다.
+
+- specialist 분리가 실제 품질을 높일 가능성이 큼
+- context isolation이 필요함
+- failure isolation 편익이 있음
+- reviewer/critic 추가 비용이 정당화됨
+
+단순히 agent 수를 늘리기 위해 사용하지 않는다.
+
+## 31.6 현재 검증 기준선
+
+Phase 11 final checkpoint:
+
+```text
+Live smoke quality = 0.9345
+selected documents = 2 / 2 read
+ollama-local provenance observed
+pytest = 4635 passed in 16.70s
+Ruff = All checks passed
+git diff --check = clean
+commit = 5c30358
+```
+
+## 31.7 현재 다음 단계
+
+```text
+Phase 12 — Hardware Upgrade Decision
+```
+
+현재 장비에서 더 큰 Local model 또는 더 많은 parallel agent를 실행하는 것이
+실제 AIRA 품질·비용·latency에 의미 있는 편익을 주는지 측정한 뒤 hardware 결정을
+내린다. Phase 12 전에는 특정 업그레이드를 확정하지 않는다.

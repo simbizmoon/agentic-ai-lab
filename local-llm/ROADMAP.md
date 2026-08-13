@@ -908,3 +908,118 @@ The end-to-end smoke completed with `quality_score=0.8845` and persisted
 Next:
 
 **Phase 8 — Local Multi-Agent Minimum Experiment**
+
+# 21. 2026-08-13 Authoritative Progress Snapshot
+
+> 이 섹션은 현재 Local LLM Experimental Track의 최신 상태이다. 위의 2026-08-10
+> Progress Snapshot과 Immediate Next Step은 역사적 기록으로 유지한다.
+
+```text
+[x] Phase 0  Repository and Baseline Audit
+[x] Phase 1  Hardware and Storage Baseline
+[x] Phase 2  Local LLM Candidate Research
+[x] Phase 3  Runtime Evaluation and Selection
+[x] Phase 4  First Local Model Execution
+[x] Phase 5  Local Model Benchmark
+[x] Phase 6  Local LLM Adapter Integration
+[x] Phase 7  OpenAI vs Local Single-Agent
+[x] Phase 8  Local Multi-Agent Minimum
+[x] Phase 9  Single vs Multi-Agent Evaluation
+[x] Phase 10 Heterogeneous / Hybrid Experiment
+[x] Phase 11 Parallelism and Runtime Scaling
+[ ] Phase 12 Hardware Upgrade Decision
+```
+
+## Phase 8 Result
+
+Existing deterministic Multi-Agent orchestration was reused. Qwen3.5-4B was connected
+as a bounded advisory reviewer, not as an autonomous manager or final authority.
+
+Status:
+
+**COMPLETE.**
+
+## Phase 9 Result
+
+Final architecture decision:
+
+```text
+Single-Agent = default
+Multi-Agent = workload-dependent escalation
+Qwen3.5-4B = bounded advisory reviewer
+```
+
+Status:
+
+**COMPLETE.**
+
+## Phase 10 Result
+
+Hybrid role routing was accepted.
+
+```text
+Deterministic control/planning where sufficient
++ OpenAI/stronger-model high-judgment roles
++ Local qwen3.5:4b bounded semantic workers
+```
+
+Frozen benchmark showed 6/6 successful pairs and approximately 64.2% lower worker wall
+ time for Hybrid versus OpenAI-heavy in that benchmark. This is not a universal live E2E
+performance claim.
+
+Status:
+
+**COMPLETE.**
+
+## Phase 11 Result
+
+Source reading became the first production bounded-parallel stage.
+
+```text
+AIRA_SOURCE_READ_CONCURRENCY
+live default = 2
+allowed = 1..8
+safe fallback = 1
+```
+
+Search and Local worker execution remain serial under their current safety constraints.
+
+Real HTTP benchmark:
+
+```text
+c=1 2.277s
+c=2 0.921s  2.472x
+c=4 0.851s  2.676x
+```
+
+Per-source read/failure semantics were identical across 1/2/4.
+
+Final regression:
+
+```text
+4635 passed in 16.70s
+Ruff clean
+commit 5c30358
+```
+
+Status:
+
+**COMPLETE.**
+
+# 22. Current Immediate Next Step
+
+**Phase 12 — Hardware Upgrade Decision**
+
+Phase 12 will determine whether the current hardware is an actual AIRA bottleneck and,
+if so, which resource should be upgraded.
+
+Required evidence includes:
+
+- current RTX 3060 Ti 8GB workload limits
+- larger-model VRAM/runtime behavior
+- Qwen3.5-9B / Ministral 3 8B / larger comparator quality gain
+- CPU/RAM bottlenecks
+- parallel-agent requirements
+- Local versus OpenAI/Hybrid quality and operating trade-offs
+
+No hardware purchase conclusion is made before this evaluation.

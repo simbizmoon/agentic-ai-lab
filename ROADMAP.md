@@ -2510,3 +2510,196 @@ Batch Optimization
 - [~] 지금까지의 프로젝트 작업 문서 최신화
 - [ ] 현재 구현된 AIRA 기능·사용법·한계·개선방향 사용자 문서화
 - [ ] Multi-Agent 학습·구현 Roadmap 별도 정리
+
+# 32. 2026-08-13 Local/Hybrid Architecture Track — Phase 6~11 완료 기준
+
+> 이 섹션은 2026-08-13 현재 Local LLM / Multi-Agent / Hybrid / Runtime Scaling
+> 트랙의 최신 authoritative status이다. 앞선 역사적 Phase/Stage 기록의 "다음 단계"가
+> 이 섹션과 충돌하면 이 섹션을 현재 상태로 우선한다.
+
+## 32.1 현재 공식 위치
+
+```text
+Phase 0  Repository / Baseline Audit             COMPLETE
+Phase 1  Hardware / Storage Baseline             COMPLETE
+Phase 2  Local LLM Candidate Research            COMPLETE
+Phase 3  Runtime Evaluation and Selection        COMPLETE
+Phase 4  First Local Model Execution             COMPLETE
+Phase 5  Local Model Benchmark                   COMPLETE
+Phase 6  Local LLM Adapter Integration           COMPLETE
+Phase 7  OpenAI vs Local Single-Agent            COMPLETE
+Phase 8  Local Multi-Agent Minimum               COMPLETE
+Phase 9  Single vs Multi-Agent Evaluation        COMPLETE
+Phase 10 Heterogeneous / Hybrid Architecture     COMPLETE
+Phase 11 Parallelism / Runtime Scaling           COMPLETE
+Phase 12 Hardware Upgrade Decision               CURRENT
+```
+
+Phase 11 완료 커밋:
+
+```text
+5c30358 feat: add bounded parallel source reading
+```
+
+## 32.2 Phase 6 — Local LLM Adapter Integration
+
+Qwen3.5-4B를 범용 Main Agent로 채택하지 않고, 검증된 bounded small-worker 역할에
+생산 경로로 통합하였다.
+
+현재 Local worker 역할:
+
+- Semantic Citation Verification — bounded first-pass verifier
+- Claim Relevance — bounded classifier
+- Answer Coverage — reviewer / critic
+
+Deterministic planning과 high-judgment 역할을 무리하게 Local로 이전하지 않는다.
+
+## 32.3 Phase 7 — OpenAI vs Local Single-Agent
+
+동일 AIRA Single-Agent 구조에서 bounded worker backend만 OpenAI와 Local로 비교하였다.
+
+Frozen comparison 핵심 결과:
+
+```text
+Citation exact agreement       100%
+Claim relevance exact agreement 83.3%
+Coverage level agreement        50%
+OpenAI worker mean             ~67.22s
+Local worker mean              ~19.10s
+Observed local wall reduction  ~71.6%
+Observed speedup               ~3.52x
+```
+
+Local answer coverage는 낙관 편향이 관찰되어 `fully_covered` 단독 판정을 최종
+completeness gate로 사용하지 않는다.
+
+## 32.4 Phase 8 — Local Multi-Agent Minimum
+
+기존 deterministic Multi-Agent orchestrator를 재사용하고 Qwen3.5-4B를 bounded
+advisory quality reviewer로 연결하였다. Multi-Agent 자체를 기본 실행 경로로
+승격하지 않았다.
+
+## 32.5 Phase 9 — Single vs Multi-Agent
+
+Frozen workload 비교 결과에 따라 현재 기본 정책을 다음과 같이 확정하였다.
+
+```text
+Single-Agent
+→ default
+
+Multi-Agent
+→ workload-dependent escalation
+
+Qwen3.5-4B
+→ bounded advisory reviewer
+```
+
+작은 in-memory fixture에서 orchestration 자체의 추가 비용은 작았으나, Local
+reviewer 호출이 대부분의 추가 latency를 차지하였다. 절대 latency는 일반화하지
+않는다.
+
+## 32.6 Phase 10 — Hybrid Role-Routed Architecture
+
+현재 역할 정책의 핵심:
+
+```text
+Deterministic
+- task decomposition
+- query planning
+- source quality
+- document selection
+- synthesis/control paths where deterministic logic is sufficient
+
+OpenAI / stronger model escalation
+- evidence relevance / claim generation 등 high-judgment 역할
+- 필요 시 authoritative review
+
+Local qwen3.5:4b
+- semantic citation
+- claim relevance
+- answer coverage reviewer
+```
+
+OpenAI-heavy vs Hybrid frozen comparison에서는 모든 6 pair가 성공했고, Hybrid가
+bounded local worker 세 역할을 대체하면서 worker wall time을 약 64.2% 줄였다.
+이는 해당 benchmark 범위에 한정된 수치이다.
+
+## 32.7 Phase 11 — Parallelism / Runtime Scaling
+
+안전 감사 결과 전체 pipeline과 dependency stage를 무조건 병렬화하지 않았다.
+
+현재 정책:
+
+```text
+Source Search
+→ SERIAL 유지
+  shared usage/budget 상태 때문에 병렬화 보류
+
+Source Reading
+→ BOUNDED PARALLEL 허용
+
+Local Qwen workers
+→ concurrency = 1 유지
+
+Whole pipeline / Multi-Agent dependency chain
+→ dependency-sequential 유지
+```
+
+Source Reading 실측:
+
+```text
+Synthetic, 8 candidates × 50ms
+c=1  0.4013s
+c=2  0.2011s  1.996x
+c=4  0.1009s  3.977x
+
+Real HTTP, 8 fixed URLs
+c=1  mean 2.277s
+c=2  mean 0.921s  2.472x
+c=4  mean 0.851s  2.676x
+```
+
+1/2/4 모두 source별 성공/실패 상태가 동일했고, 성공 문서 character count도
+동일하였다. 실제 8개 URL 중 6개 READ, 2개 `DocumentHttpError` 패턴이 모든
+concurrency에서 동일했다.
+
+Production contract:
+
+```text
+AIRA_SOURCE_READ_CONCURRENCY
+adapter default = 1
+live runtime default = 2
+allowed = 1..8
+safe fallback = 1
+4 = aggressive benchmark option
+```
+
+Live smoke:
+
+```text
+quality = 0.9345
+2 / 2 selected documents = read
+ollama-local provenance observed
+```
+
+최종 regression:
+
+```text
+4635 passed in 16.70s
+Ruff = All checks passed
+git diff --check = clean
+```
+
+## 32.8 Phase 12 — Hardware Upgrade Decision
+
+현재 공식 다음 단계는 Hardware Upgrade Decision이다.
+
+평가 대상:
+
+- 현재 RTX 3060 Ti 8GB / i5-9600KF / 약 31GiB RAM 유지 여부
+- VRAM 증가의 실제 AIRA workload 편익
+- Qwen3.5-9B, Ministral 3 8B 및 더 큰 comparator의 실행 가능성
+- CPU/RAM platform 병목 여부
+- Local 확대와 OpenAI/Hybrid 유지의 비용·품질 trade-off
+
+Phase 12 완료 전에는 특정 GPU/플랫폼 구매를 확정하지 않는다.

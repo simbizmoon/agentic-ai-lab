@@ -1771,3 +1771,218 @@ Phase 7 is complete.
 Next official phase:
 
 **Phase 8 — Local Multi-Agent Minimum Experiment**
+
+## Phase 8 — Local Multi-Agent Minimum
+
+Phase 8 reused the existing deterministic multi-agent orchestration framework and
+introduced Qwen3.5-4B only as a bounded advisory quality reviewer.
+
+Verified characteristics:
+
+```text
+Search → Reader → Evidence → Claim
+→ Synthesis / Review loop
+```
+
+The dependency chain remained sequential. A live local multi-agent smoke completed
+technically; a `revision_limit_reached` terminal state with `max_revisions=0` was an
+expected workflow outcome rather than a runtime failure.
+
+Decision:
+
+**LOCAL MULTI-AGENT MINIMUM — COMPLETE.**
+
+The experiment did not justify making Multi-Agent the default architecture.
+
+---
+
+## Phase 9 — Single vs Multi-Agent Evaluation
+
+The frozen benchmark separated three paths:
+
+1. Single deterministic
+2. Multi deterministic with approved reviewer
+3. Multi + Qwen3.5-4B advisory reviewer
+
+Across 3 fixtures × 3 repeats = 9 triplets:
+
+```text
+artifact equivalence                  100%
+deterministic/local workflow integrity 100%
+runtime success                       100%
+
+single mean                           ~0.684 ms
+multi deterministic mean              ~1.255 ms
+pure orchestration extra              ~0.571 ms
+multi + local reviewer mean           ~3.00025 s
+Qwen reviewer incremental overhead    ~2.999 s
+semantic repair local success         100%
+```
+
+These were tiny in-memory fixtures. Absolute latency must not be generalized to live
+research workloads.
+
+Decision:
+
+```text
+Single-Agent default
++ workload-dependent Multi-Agent escalation
++ Qwen3.5-4B bounded advisory reviewer
+```
+
+Phase 9 is complete.
+
+---
+
+## Phase 10 — Heterogeneous / Hybrid Architecture
+
+Two bounded-worker backend policies were compared on frozen inputs.
+
+OpenAI-heavy:
+
+- evidence relevance OpenAI
+- claim generation OpenAI
+- semantic citation OpenAI
+- claim relevance OpenAI
+- answer coverage OpenAI
+
+Hybrid:
+
+- evidence relevance OpenAI
+- claim generation OpenAI
+- semantic citation Local
+- claim relevance Local
+- answer coverage Local
+
+2 fixtures × 3 repeats = 6 pairs:
+
+```text
+successful pairs                    6 / 6
+citation exact agreement            100%
+claim relevance exact agreement     83.3%
+answer coverage level agreement     50%
+coverage score delta Hybrid-OpenAI  +0.313333
+OpenAI worker mean                  52.20274 s
+Hybrid local worker mean            18.68276 s
+worker wall delta                  -33.51998 s
+observed wall reduction             64.211%
+observed speedup                    2.794x
+```
+
+Limitations:
+
+- frozen bounded substitution, not full live E2E comparison
+- inherited OpenAI → Local execution order can warm the Local runtime
+- embeddings were excluded from the worker comparison
+- no distinct safe Local-heavy baseline was established
+
+Decision:
+
+**HYBRID ROLE-ROUTED ARCHITECTURE ACCEPTED WITH BOUNDED LOCAL WORKERS AND
+OPENAI HIGH-JUDGMENT ESCALATION.**
+
+Phase 10 is complete.
+
+---
+
+## Phase 11 — Parallelism / Runtime Scaling
+
+### Phase 11A — Safety Audit
+
+The whole pipeline was not parallelized blindly.
+
+Safe/current boundaries:
+
+```text
+Source Search             serial
+Source Reading            bounded parallel candidate
+Local Qwen workers        concurrency 1
+Pipeline dependency chain sequential
+Multi-Agent stage chain   sequential by dependency
+Review/revision loop      sequential
+```
+
+Search concurrency was deferred because provider calls share usage/budget accounting.
+
+### Phase 11B — Synthetic Source Reading
+
+8 candidates, 50ms deterministic delayed reader, 5 repeats:
+
+| concurrency | mean seconds | speedup vs 1 |
+|---:|---:|---:|
+| 1 | 0.401318 | 1.000x |
+| 2 | 0.201090 | 1.996x |
+| 4 | 0.100909 | 3.977x |
+
+Candidate output order was preserved.
+
+### Phase 11C — Real HTTP Source Reading
+
+8 fixed web URLs, 3 repeats per concurrency:
+
+| concurrency | mean seconds | median seconds | speedup vs 1 |
+|---:|---:|---:|---:|
+| 1 | 2.277 | 1.707 | 1.000x |
+| 2 | 0.921 | 0.921 | 2.472x |
+| 4 | 0.851 | 0.864 | 2.676x |
+
+Every concurrency produced the same per-source semantics:
+
+```text
+6 sources → read
+2 sources → failed / DocumentHttpError
+```
+
+Successful documents also had the same character counts across 1/2/4. The experiment
+therefore found no correctness loss from bounded source-read parallelism on this fixture.
+
+### Phase 11D — Production Wiring
+
+Production contract:
+
+```text
+AIRA_SOURCE_READ_CONCURRENCY
+live default = 2
+allowed = 1..8
+safe fallback = 1
+aggressive benchmark option = 4
+adapter default = 1
+```
+
+Why default 2 rather than 4:
+
+- 1 → 2 captured the large performance improvement
+- 2 → 4 added only a relatively small additional gain in the real HTTP benchmark
+- lower default concurrency reduces unnecessary remote/network pressure
+- explicit fallback to 1 remains available without code changes
+
+Live smoke with default 2:
+
+```text
+quality = 0.9345
+selected documents = 2 / 2 read
+ollama-local provenance occurrences = 13
+```
+
+Final validation:
+
+```text
+4635 passed in 16.70s
+Ruff = All checks passed
+git diff --check = clean
+```
+
+Commit:
+
+```text
+5c30358 feat: add bounded parallel source reading
+```
+
+Decision:
+
+**PHASE 11 COMPLETE — BOUNDED PARALLEL SOURCE READING ACCEPTED; BROADER
+PIPELINE PARALLELISM REMAINS DEFERRED.**
+
+Next official phase:
+
+**Phase 12 — Hardware Upgrade Decision.**

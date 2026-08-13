@@ -2458,3 +2458,127 @@ AIRA 프로젝트의 목표는 특정 Single-Agent benchmark를 끝없이 최적
 - 실제 채택은 동일 또는 유사한 평가 과제에서 품질, 비용, latency,
   context management, failure isolation 중 의미 있는 개선이 확인될 때만 한다.
 - 구체적인 Multi-Agent 구현 Roadmap은 별도 문서화 작업에서 확정한다.
+
+## D-043 — Qwen3.5-4B는 Bounded Small Worker로 채택하고 범용 Main Agent로 승격하지 않음
+
+- 상태: 확정
+- 날짜: 2026-08-13
+
+결정:
+
+- Qwen3.5-4B는 bounded small worker로 유지한다.
+- Semantic Citation은 bounded first-pass verifier로 사용한다.
+- Claim Relevance는 bounded classifier로 사용한다.
+- Answer Coverage는 reviewer/critic으로 사용하되 authoritative final completeness
+  judge로 사용하지 않는다.
+- Local `fully_covered` 결과만으로 완전성을 확정하지 않는다.
+- autonomous research planning, unconstrained long planning, policy-sensitive
+  orchestration 및 final authoritative factual verification을 Qwen3.5-4B에 맡기지 않는다.
+
+근거:
+
+- Phase 5 role-specific benchmark
+- Phase 7 OpenAI/local frozen comparison
+- Local coverage optimistic bias 관찰
+
+---
+
+## D-044 — Single-Agent를 기본으로 유지하고 Multi-Agent는 Workload-dependent Escalation으로 사용
+
+- 상태: 확정
+- 날짜: 2026-08-13
+
+결정:
+
+```text
+Single-Agent = default
+Multi-Agent = workload-dependent escalation
+```
+
+Multi-Agent는 agent 수 증가 자체를 목표로 하지 않는다. 기존 deterministic
+orchestrator와 bounded advisory reviewer를 재사용할 수 있으나, 동일 작업에서
+품질·failure isolation·context management 또는 다른 명확한 편익이 있을 때만
+승격한다.
+
+Phase 9 frozen comparison에서 deterministic orchestration 자체의 추가 비용은 작은
+fixture 기준으로 작았고, Qwen reviewer가 추가 latency의 대부분을 차지하였다.
+절대 latency는 일반화하지 않는다.
+
+---
+
+## D-045 — Heterogeneous Hybrid Role Routing을 기본 확장 방향으로 채택
+
+- 상태: 확정
+- 날짜: 2026-08-13
+
+AIRA는 하나의 universal LLM provider로 모든 역할을 처리하지 않는다.
+
+현재 원칙:
+
+- deterministic logic이 충분한 control/planning/selection은 deterministic으로 유지
+- high-judgment 역할은 OpenAI/stronger model로 유지 또는 escalation
+- 검증된 bounded semantic worker는 Local qwen3.5:4b 사용 가능
+
+Phase 10 frozen comparison에서 OpenAI-heavy와 Hybrid 모두 6/6 pair가 성공했고,
+Hybrid는 해당 benchmark에서 worker wall time을 약 64.2% 줄였다. 이 수치는
+bounded substitution benchmark에 한정하며 live E2E 전체 latency로 일반화하지 않는다.
+
+---
+
+## D-046 — Source Reading만 Bounded Parallelism을 Production에 도입
+
+- 상태: 확정
+- 날짜: 2026-08-13
+
+Phase 11 safety audit 결과:
+
+- Source Search는 shared mutable usage/budget accounting 때문에 serial 유지
+- Whole pipeline dependency chain은 serial 유지
+- Multi-Agent dependency stages와 review loop는 dependency-sequential 유지
+- Local qwen3.5 worker는 concurrency 1 유지
+- 독립적인 I/O-bound Source Reading만 bounded parallelism을 허용
+
+`PipelineSourceReaderAdapter`는 `maximum_concurrency`를 지원한다.
+
+Production runtime contract:
+
+```text
+AIRA_SOURCE_READ_CONCURRENCY
+live default = 2
+allowed = 1..8
+safe fallback = 1
+aggressive benchmark option = 4
+adapter-level default = 1
+```
+
+선택 이유:
+
+- real HTTP에서 c=1 → c=2의 개선 폭이 큼
+- c=2 → c=4의 추가 개선은 상대적으로 작음
+- 1/2/4의 source별 성공/실패 semantics가 동일했음
+- 안전한 fallback을 환경변수로 즉시 선택 가능
+
+---
+
+## D-047 — Phase 12 전까지 Hardware Upgrade 결론을 유보하고 실제 AIRA Workload를 기준으로 결정
+
+- 상태: 확정
+- 날짜: 2026-08-13
+
+현재 하드웨어를 단순 사양 비교만으로 교체하지 않는다.
+
+Phase 12에서 다음을 근거로 결정한다.
+
+- 현재 8GB VRAM에서의 실제 worker/model 제약
+- 8B/9B/20B급 후보의 품질 대비 runtime/VRAM 요구
+- CPU/RAM 병목
+- parallel agent requirement
+- Local 확대와 OpenAI/Hybrid 유지의 비용·품질 차이
+
+Phase 12 완료 전 특정 GPU, VRAM tier 또는 전체 platform upgrade를 확정하지 않는다.
+
+### Deferred hardening
+
+`PipelineSourceReaderAdapter.maximum_concurrency`의 production env 경로는 integer로
+파싱되므로 현재 안전하지만, Python API 자체는 향후 모든 non-int 값(예: `1.5`)을
+생성 시점에 명시적으로 거부하도록 강화할 수 있다. Phase 11 blocker는 아니다.

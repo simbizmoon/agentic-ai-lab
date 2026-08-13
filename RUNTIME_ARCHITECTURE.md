@@ -176,3 +176,111 @@ SQLite는 다음 요구가 발생할 때만 추가한다.
 * Multi-Agent와 Background Job은 기본 경로에서 제외한다.
 * 고급 Report Archive와 Transparency 기능은 사용하지 않는다.
 * Phase 13의 신규 Production 구성은 최소 세 개로 제한한다.
+
+## 11. 2026-08-13 Current Production Runtime Snapshot
+
+> 이 섹션은 현재 실제 AIRA runtime의 최신 authoritative snapshot이다. 위의
+> Phase 13 초기 설계 기록은 역사적 설계 근거로 유지하되, 현재 실행 구조와
+> 충돌할 경우 이 섹션을 우선한다.
+
+### 11.1 기본 실행 정책
+
+```text
+Single-Agent
+→ 기본 runtime
+
+Multi-Agent
+→ workload-dependent escalation
+
+Hybrid role routing
+→ deterministic + OpenAI/stronger model + Local bounded worker
+```
+
+### 11.2 Live Single-Agent 주요 흐름
+
+```text
+Research Request
+→ deterministic task decomposition / query planning
+→ Tavily web search
+→ bounded-parallel HTTP/HTML source reading
+→ source type / source quality
+→ evidence-aware selection / supplemental search
+→ paragraph evidence extraction
+→ hybrid retrieval / semantic evidence relevance
+→ claim generation
+→ semantic citation verification
+→ claim relevance
+→ answer coverage
+→ bounded coverage replanning if triggered
+→ synthesis / report / quality artifact
+```
+
+### 11.3 Provider / Role 경계
+
+Local qwen3.5:4b의 production-safe bounded 역할:
+
+- semantic citation
+- claim relevance
+- answer coverage reviewer
+
+High-judgment 또는 authoritative 역할은 deterministic control 또는 OpenAI/stronger
+model에 남긴다. Local worker를 autonomous planner나 final factual authority로
+사용하지 않는다.
+
+### 11.4 Multi-Agent
+
+기존 Multi-Agent orchestrator는 사용할 수 있으나 기본 경로가 아니다.
+Dependency stage는 순차적으로 유지한다. Qwen3.5-4B quality reviewer는 advisory
+bounded 역할이다.
+
+### 11.5 Runtime Parallelism
+
+현재 production에 허용된 병렬화는 Source Reading이다.
+
+```text
+PipelineSourceReaderAdapter
+  maximum_concurrency
+
+adapter default = 1
+live runtime default = 2
+```
+
+환경변수:
+
+```text
+AIRA_SOURCE_READ_CONCURRENCY
+```
+
+정책:
+
+```text
+1 = safe fallback
+2 = production default
+3..8 = explicit bounded override
+4 = validated aggressive benchmark option
+```
+
+Search는 provider usage/budget 상태가 공유되므로 serial 유지한다. Local Qwen worker도
+concurrency 1을 유지한다.
+
+### 11.6 Local Worker Runtime
+
+기본 Local worker 환경:
+
+```text
+AIRA_RESEARCH_WORKER_PROVIDER=local
+AIRA_LOCAL_WORKER_MODEL=qwen3.5:4b
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_TIMEOUT_SECONDS=120.0
+```
+
+Phase 11 live smoke에서 default source read concurrency 2로 두 개의 선택 문서를 모두
+정상 READ했고 `ollama-local` provenance가 persisted artifact에서 확인되었다.
+
+### 11.7 현재 설계 원칙
+
+- universal provider를 만들지 않는다.
+- deterministic logic이 가능한 곳에 LLM을 사용하지 않는다.
+- small local model은 role-specific eval을 통과한 bounded 역할에만 사용한다.
+- parallelism은 dependency와 shared state가 안전한 경계에서만 사용한다.
+- benchmark 수치는 해당 fixture/workload 범위 밖으로 무리하게 일반화하지 않는다.

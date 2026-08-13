@@ -244,3 +244,77 @@ git diff --cached --check = passed
 - Local Document + Internet 통합 Runtime 연결
 - Integrated RAG 통합
 - 실제 사용자 Research Dataset 반복 평가
+
+## 7. 2026-08-13 Capability Matrix 갱신
+
+### 현재 Production / Evaluated Capability
+
+| Capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Live Web Search | Production path | Tavily, budgeted, serial |
+| HTTP/HTML Source Reading | Production path | bounded parallel 가능, live default concurrency 2 |
+| Source Quality / Selection | Production path | deterministic/quality-aware |
+| Hybrid Retrieval | Production path | lexical + embedding/RRF 계열 |
+| Semantic Evidence Relevance | Production/evaluated | high-judgment path, Local 4B로 무리하게 이전하지 않음 |
+| Generative Claim Construction | Production path | high-judgment generation |
+| Semantic Citation Verification | Production/evaluated | Qwen3.5-4B bounded first-pass 가능 |
+| Claim Relevance | Production/evaluated | Qwen3.5-4B bounded classifier 가능 |
+| Answer Coverage | Production/evaluated | Qwen3.5-4B reviewer/critic 가능, authoritative final gate 아님 |
+| Bounded Coverage Replanning | Production path | 제한된 replanning |
+| Local Worker Backend | Production path | qwen3.5:4b bounded roles |
+| Multi-Agent Orchestrator | Available / conditional | default 아님, workload-dependent escalation |
+| Hybrid Role Routing | Production architecture | deterministic + OpenAI/stronger + Local bounded worker |
+| Source Read Parallelism | Production path | bounded, env-configurable 1..8, default 2 |
+| Search Parallelism | Deferred | shared usage/budget safety 문제 |
+| Local Worker Parallelism | Deferred | 현재 concurrency 1 유지 |
+
+### Architecture Capability 판정
+
+```text
+Single-Agent default
+→ ACCEPTED
+
+Multi-Agent escalation
+→ ACCEPTED WITH WORKLOAD CONDITION
+
+Hybrid heterogeneous routing
+→ ACCEPTED
+
+Qwen3.5-4B universal Main Agent
+→ NOT ACCEPTED
+
+Bounded local worker
+→ ACCEPTED
+
+Bounded parallel source reading
+→ ACCEPTED
+```
+
+### Phase 11 검증 Checkpoint
+
+```text
+Real HTTP source-reading semantics
+→ identical across concurrency 1 / 2 / 4
+
+Live runtime default
+→ AIRA_SOURCE_READ_CONCURRENCY=2
+
+Live smoke
+→ quality 0.9345
+→ 2/2 selected documents read
+→ ollama-local provenance confirmed
+
+Full regression
+→ 4635 passed in 16.70s
+→ Ruff clean
+```
+
+### 다음 Matrix 갱신 조건
+
+다음 갱신은 Phase 12에서 hardware/model capacity 판단이 확정되거나 다음 중 하나가
+실제 구현될 때 수행한다.
+
+- larger local model production role 채택
+- local worker parallelism 정책 변경
+- search concurrency 안전 구조 도입
+- integrated local-document + web RAG production path 확대
