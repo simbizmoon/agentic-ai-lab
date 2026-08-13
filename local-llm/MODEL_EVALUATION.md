@@ -605,3 +605,24 @@ Phase 2에서 더 많은 모델을 무한히 조사하지 않는다.
 - vision/coding 등 새로운 필수 capability가 추가됨
 
 === RUNTIME EVALUATION ===
+
+## Phase 6 Runtime Integration Result
+
+Qwen3.5-4B has now moved beyond isolated benchmark execution into the actual
+`research-live` production pipeline for the roles accepted in Phase 5.
+
+Accepted runtime roles:
+
+- claim relevance evaluation
+- semantic citation first-pass verification
+- answer coverage review
+
+The live smoke produced persisted `ollama-local` provenance for all three worker
+types and ran qwen3.5:4b on the local GPU.
+
+This does not change the model's role boundary. Qwen3.5-4B remains a bounded
+Small Worker rather than the AIRA Main Agent.
+
+Phase 6 status:
+
+**COMPLETE**

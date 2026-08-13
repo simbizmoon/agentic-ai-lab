@@ -4,23 +4,16 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
 
 from app.research.openai_answer_coverage_evaluator import (
     ANSWER_COVERAGE_INSTRUCTIONS,
+    AnswerCoverageEvaluationResult,
 )
 from app.schemas.answer_coverage_judgment import (
     AnswerCoverageJudgment,
 )
 from app.services.ollama_client import OllamaClient
-
-
-@dataclass(frozen=True)
-class LocalAnswerCoverageEvaluationResult:
-    """Minimal result required by AnswerCoverageEvaluationRunner."""
-
-    judgment: AnswerCoverageJudgment
-    elapsed_seconds: float
+from app.services.text_generation import TokenUsage
 
 
 class LocalAnswerCoverageEvaluator:
@@ -59,7 +52,7 @@ class LocalAnswerCoverageEvaluator:
         question: str,
         objective: str,
         claims: list[str],
-    ) -> LocalAnswerCoverageEvaluationResult:
+    ) -> AnswerCoverageEvaluationResult:
         """Evaluate semantic coverage for one complete claim set."""
         cleaned_question = question.strip()
         cleaned_objective = objective.strip()
@@ -114,7 +107,20 @@ class LocalAnswerCoverageEvaluator:
             generated.response
         )
 
-        return LocalAnswerCoverageEvaluationResult(
+        return AnswerCoverageEvaluationResult(
             judgment=judgment,
+            response_id="ollama-local",
+            request_id=None,
+            usage=TokenUsage(
+                input_tokens=generated.prompt_eval_count,
+                cached_input_tokens=0,
+                output_tokens=generated.eval_count,
+                reasoning_tokens=0,
+                total_tokens=(
+                    generated.prompt_eval_count
+                    + generated.eval_count
+                ),
+            ),
             elapsed_seconds=elapsed,
+            attempts=1,
         )

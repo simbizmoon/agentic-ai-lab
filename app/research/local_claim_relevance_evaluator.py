@@ -13,6 +13,7 @@ from app.schemas.claim_relevance_judgment import (
     ClaimRelevanceJudgment,
 )
 from app.services.ollama_client import OllamaClient
+from app.services.text_generation import TokenUsage
 
 
 class LocalClaimRelevanceEvaluator:
@@ -104,6 +105,15 @@ class LocalClaimRelevanceEvaluator:
             judgment=judgment,
             response_id="ollama-local",
             request_id=None,
-            usage=None,
+            usage=TokenUsage(
+                input_tokens=generated.prompt_eval_count,
+                cached_input_tokens=0,
+                output_tokens=generated.eval_count,
+                reasoning_tokens=0,
+                total_tokens=(
+                    generated.prompt_eval_count
+                    + generated.eval_count
+                ),
+            ),
             elapsed_seconds=elapsed,
         )

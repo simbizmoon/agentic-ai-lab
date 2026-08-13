@@ -1420,3 +1420,119 @@ Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think pol
 - concurrency 필요
 - 새로운 tool/schema requirement
 - stronger model과의 비교에서 정책 재검토 필요
+
+## Phase 6 — Local LLM Adapter Integration
+
+Status:
+
+**COMPLETE — BOUNDED LOCAL WORKER RUNTIME INTEGRATION ACCEPTED**
+
+Implementation scope:
+
+```text
+AIRA research-live
+│
+├─ deterministic planning
+├─ Tavily search
+├─ HTTP source reading
+│
+├─ OpenAI
+│   ├─ evidence embeddings
+│   ├─ evidence relevance
+│   └─ claim generation
+│
+└─ Ollama / qwen3.5:4b
+    ├─ claim relevance
+    ├─ semantic citation verification
+    └─ answer coverage review
+```
+
+The integration deliberately does not move autonomous planning, claim generation,
+embedding, or final authoritative factual verification to qwen3.5:4b.
+
+Production provider selection:
+
+```text
+AIRA_RESEARCH_WORKER_PROVIDER=openai
+→ existing OpenAI worker behavior
+
+AIRA_RESEARCH_WORKER_PROVIDER=local
+AIRA_LOCAL_WORKER_MODEL=qwen3.5:4b
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+→ bounded research workers use Ollama
+```
+
+Default provider remains `openai`, preserving the previous production behavior
+unless local workers are explicitly enabled.
+
+Local evaluator production contracts were upgraded to preserve:
+
+```text
+response metadata
+token usage
+citation decision mapping
+answer coverage attempt metadata
+```
+
+Semantic citation decision mapping remains code-owned:
+
+```text
+fully_supported     → verified
+partially_supported → needs_revision
+unsupported         → rejected
+contradicted        → rejected
+```
+
+Production Claim Relevance uses `num_predict=512`.
+The benchmark evaluator default remains unchanged; the larger limit applies only
+to the production local-worker composition after the first live smoke reached
+the 256-token generation limit.
+
+Validation:
+
+```text
+targeted integration tests: 59 passed
+full regression:             4598 passed
+ruff:                        All checks passed
+git diff --check:            clean
+```
+
+End-to-end live smoke:
+
+```text
+command: aira research-live
+worker provider: local
+local model: qwen3.5:4b
+maximum sources: 1
+quality score: 0.8845
+```
+
+Artifact provenance:
+
+```text
+ollama-local occurrences: 7
+relevance_level:          3
+support_level:            3
+coverage_level:           3
+decision:                 3
+```
+
+Ollama runtime observation during the smoke:
+
+```text
+qwen3.5:4b
+processor: 100% GPU
+context:   4096
+```
+
+Acceptance conclusion:
+
+The actual production research pipeline successfully executed the three
+Phase-5-accepted bounded workers through Ollama/qwen3.5:4b while preserving
+the rest of the live research stack.
+
+Phase 6 is therefore complete for the defined adapter-integration scope.
+
+Next official phase:
+
+**Phase 7 — OpenAI vs Local Single-Agent**

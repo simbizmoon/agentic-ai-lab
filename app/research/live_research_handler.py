@@ -37,6 +37,11 @@ from app.research.generative_pipeline_claim_builder import (
 from app.research.live_runtime import (
     build_live_research_pipeline,
 )
+from app.research.local_worker_runtime import (
+    LocalWorkerSettings,
+    build_local_research_workers,
+    load_local_worker_settings,
+)
 from app.research.openai_answer_coverage_evaluator import (
     OpenAIAnswerCoverageEvaluator,
 )
@@ -118,6 +123,9 @@ class LiveResearchHandler:
         openai_client_factory: (
             Callable[[Settings], OpenAI] | None
         ) = None,
+        local_worker_settings_loader: (
+            Callable[[], LocalWorkerSettings] | None
+        ) = None,
     ) -> None:
         self._id_factory = id_factory or self._default_id
         self._config_loader = (
@@ -131,6 +139,10 @@ class LiveResearchHandler:
         self._openai_client_factory = (
             openai_client_factory
             or create_openai_client
+        )
+        self._local_worker_settings_loader = (
+            local_worker_settings_loader
+            or load_local_worker_settings
         )
 
     def __call__(
@@ -163,31 +175,49 @@ class LiveResearchHandler:
             ),
             budget=LIVE_CLAIM_GENERATION_BUDGET,
         )
-        semantic_citation_verifier = (
-            SemanticCitationVerificationService(
-                evaluator=OpenAISemanticCitationEvaluator(
-                    client=openai_client,
-                    model=settings.openai_model,
+        local_worker_settings = (
+            self._local_worker_settings_loader()
+        )
+
+        if local_worker_settings.enabled:
+            local_workers = build_local_research_workers(
+                settings=local_worker_settings
+            )
+            semantic_citation_verifier = (
+                local_workers.semantic_citation_verifier
+            )
+            claim_relevance_evaluator = (
+                local_workers.claim_relevance_evaluator
+            )
+            answer_coverage_evaluator = (
+                local_workers.answer_coverage_evaluator
+            )
+        else:
+            semantic_citation_verifier = (
+                SemanticCitationVerificationService(
+                    evaluator=OpenAISemanticCitationEvaluator(
+                        client=openai_client,
+                        model=settings.openai_model,
+                    )
                 )
             )
-        )
-        claim_relevance_evaluator = (
-            ClaimRelevanceEvaluationService(
-                evaluator=OpenAIClaimRelevanceEvaluator(
-                    client=openai_client,
-                    model=settings.openai_model,
-                ),
-                budget=LIVE_CLAIM_RELEVANCE_BUDGET,
-            )
-        )
-        answer_coverage_evaluator = (
-            AnswerCoverageEvaluationService(
-                evaluator=OpenAIAnswerCoverageEvaluator(
-                    client=openai_client,
-                    model=settings.openai_model,
+            claim_relevance_evaluator = (
+                ClaimRelevanceEvaluationService(
+                    evaluator=OpenAIClaimRelevanceEvaluator(
+                        client=openai_client,
+                        model=settings.openai_model,
+                    ),
+                    budget=LIVE_CLAIM_RELEVANCE_BUDGET,
                 )
             )
-        )
+            answer_coverage_evaluator = (
+                AnswerCoverageEvaluationService(
+                    evaluator=OpenAIAnswerCoverageEvaluator(
+                        client=openai_client,
+                        model=settings.openai_model,
+                    )
+                )
+            )
         evidence_extractor = PipelineEvidenceExtractorAdapter(
             SemanticResearchEvidenceExtractor(
                 question=question,

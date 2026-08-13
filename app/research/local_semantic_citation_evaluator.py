@@ -4,23 +4,17 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
 
 from app.research.openai_semantic_citation_evaluator import (
     SEMANTIC_CITATION_INSTRUCTIONS,
+    OpenAISemanticCitationEvaluator,
+    SemanticCitationEvaluationResult,
 )
 from app.schemas.semantic_citation_judgment import (
     SemanticCitationJudgment,
 )
 from app.services.ollama_client import OllamaClient
-
-
-@dataclass(frozen=True)
-class LocalSemanticCitationEvaluationResult:
-    """Minimal result required by SemanticCitationEvaluationRunner."""
-
-    judgment: SemanticCitationJudgment
-    elapsed_seconds: float
+from app.services.text_generation import TokenUsage
 
 
 class LocalSemanticCitationEvaluator:
@@ -58,7 +52,7 @@ class LocalSemanticCitationEvaluator:
         *,
         claim_text: str,
         evidence_excerpt: str,
-    ) -> LocalSemanticCitationEvaluationResult:
+    ) -> SemanticCitationEvaluationResult:
         """Evaluate semantic support for one claim/evidence pair."""
         cleaned_claim = claim_text.strip()
         cleaned_evidence = evidence_excerpt.strip()
@@ -107,7 +101,24 @@ class LocalSemanticCitationEvaluator:
             generated.response
         )
 
-        return LocalSemanticCitationEvaluationResult(
+        return SemanticCitationEvaluationResult(
             judgment=judgment,
+            decision=(
+                OpenAISemanticCitationEvaluator.decision_for_judgment(
+                    judgment
+                )
+            ),
+            response_id="ollama-local",
+            request_id=None,
+            usage=TokenUsage(
+                input_tokens=generated.prompt_eval_count,
+                cached_input_tokens=0,
+                output_tokens=generated.eval_count,
+                reasoning_tokens=0,
+                total_tokens=(
+                    generated.prompt_eval_count
+                    + generated.eval_count
+                ),
+            ),
             elapsed_seconds=elapsed,
         )
