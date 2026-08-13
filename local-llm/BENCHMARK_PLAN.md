@@ -409,6 +409,26 @@ benchmark scripts와 evaluator code는 repository의 기존 `scripts/`, `app/eva
 
 ## 19. Phase 5 Acceptance Criteria
 
+Qwen3.5-4B Small Worker final benchmark decision:
+
+```text
+ACCEPTED AS BOUNDED SMALL WORKER
+```
+
+Accepted:
+- structured output
+- bounded tool calling
+- claim relevance
+- first-pass factual triage
+- answer coverage review
+- short deterministic reasoning
+
+Rejected / escalated:
+- autonomous research planning
+- final authoritative factual verification
+- unconstrained orchestration
+
+
 - [x] benchmark harness 또는 재현 가능한 command/script 확보
 - [x] raw result 저장
 - [x] Korean instruction benchmark

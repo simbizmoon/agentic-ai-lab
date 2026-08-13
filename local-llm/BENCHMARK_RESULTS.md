@@ -1208,7 +1208,177 @@ or full report-level factual correctness.
 
 ---
 
-## 20. Remaining Phase 5 Benchmarks
+## 20. Phase 5B-7 — AIRA-native Complex Reasoning / Answer Coverage
+
+Configuration:
+
+```text
+model: qwen3.5:4b
+think: false
+temperature: 0.0
+seed: 42
+num_predict: 384
+response schema: AnswerCoverageJudgment
+
+DEV:
+answer-coverage-golden-v2 / 2.0.0 / 18 cases
+
+HOLDOUT:
+answer-coverage-blind-holdout-v1 / 1.0.0 / 20 cases
+```
+
+Repository validation before live execution:
+
+```text
+pytest: 4590 passed
+ruff: All checks passed
+```
+
+The benchmark reused the actual AIRA answer-coverage components:
+
+```text
+AnswerCoverageJudgment
+AnswerCoverageEvaluationRunner
+ANSWER_COVERAGE_INSTRUCTIONS
+build_answer_coverage_golden_dataset()
+build_answer_coverage_blind_holdout_dataset()
+```
+
+Coverage classes:
+
+```text
+fully_covered
+partially_covered
+insufficient
+```
+
+### DEV result
+
+```text
+18/18 = 100.0%
+false fully covered: 0
+false insufficient: 0
+```
+
+Per class:
+
+```text
+fully_covered:      6/6 = 100%
+partially_covered:  6/6 = 100%
+insufficient:       6/6 = 100%
+```
+
+### Blind HOLDOUT result
+
+```text
+19/20 = 95.0%
+false fully covered: 0
+false insufficient: 0
+```
+
+Per class:
+
+```text
+fully_covered:      6/7 = 85.7%
+partially_covered:  7/7 = 100%
+insufficient:       6/6 = 100%
+```
+
+The only HOLDOUT failure was:
+
+```text
+schema-validation-full-short
+expected: fully_covered
+actual: partially_covered
+```
+
+This is a conservative under-approval rather than an unsafe over-approval.
+
+### Phase 5B-7 decision
+
+Status:
+
+**COMPLETE — AIRA-NATIVE BOUNDED REVIEWER CAPABILITY ACCEPTED**
+
+Interpretation:
+
+```text
+multi-aspect answer coverage reasoning
+→ strong
+
+partial-vs-full distinction
+→ strong
+
+insufficient-answer detection
+→ strong
+
+false-full risk in this benchmark
+→ 0 on DEV and HOLDOUT
+
+blind generalization
+→ strong: 19/20
+```
+
+The model correctly handled repeated-same-aspect answers, missing enforcement/action
+steps, one-sided comparisons, narrow objectives, and unrelated-but-topical material.
+
+This benchmark is particularly relevant to a reviewer/critic role because the model
+must infer the explicit answer requirements from the question and objective, then
+judge the claim set as a whole rather than classify individual claims independently.
+
+---
+
+## 21. Qwen3.5-4B Small Worker Final Decision
+
+Status:
+
+**FINAL — ACCEPTED AS BOUNDED SMALL WORKER**
+
+Accepted roles:
+
+```text
+- constrained structured-output worker
+- known single-tool caller
+- bounded claim-relevance classifier
+- first-pass semantic citation triage
+- answer-coverage reviewer / critic
+- deterministic short reasoning worker
+```
+
+Not accepted roles:
+
+```text
+- autonomous research planner
+- unconstrained long-form planning
+- final authoritative factual verifier
+- policy-sensitive orchestration without deterministic controls
+```
+
+Required operating controls:
+
+```text
+1. Prefer think=false for normal worker tasks.
+2. Use JSON Schema / typed structured output for known schemas.
+3. Keep planning and orchestration deterministic or assigned to a stronger model.
+4. Escalate ambiguous partial-support factual judgments.
+5. Retain deterministic validation around tool policy and workflow limits.
+6. Do not generalize benchmark acceptance beyond the tested role.
+```
+
+Final role boundary:
+
+```text
+Qwen3.5-4B is not the AIRA Main Agent.
+
+Qwen3.5-4B is accepted as a bounded Small Worker for structured,
+review, classification, triage, and selected deterministic reasoning tasks.
+```
+
+Phase 5 local-model benchmarking for the Qwen3.5-4B Small Worker is complete.
+
+---
+
+## 22. Remaining Phase 5 Benchmarks
 
 - [x] Korean instruction following
 - [x] tool selection
@@ -1224,7 +1394,7 @@ or full report-level factual correctness.
 
 ---
 
-## 21. Next Step
+## 23. Next Step
 
 ```text
 Korean Instruction
@@ -1239,7 +1409,7 @@ Small Worker 적합성이 여기까지 확인되면 Qwen3.5-4B 세부 benchmark�
 
 ---
 
-## 22. Stop Rule
+## 24. Stop Rule
 
 Qwen3.5-4B에 대해 required Worker capability, failure mode, default Think policy, AIRA-native task 품질이 확인되고 더 많은 세부 benchmark가 역할 결정에 실질적인 정보를 추가하지 않으면 Small Worker benchmark를 종료한다.
 

@@ -251,6 +251,47 @@ false-fully-supported 사례도 1건 발생했다.
 이 결과 역시 source authority, freshness, authenticity 또는 report-level factual correctness를
 직접 검증한 것은 아니다.
 
+Phase 5B-7 Answer Coverage에서는 DEV 18/18 (100.0%),
+blind HOLDOUT 19/20 (95.0%)를 기록했다.
+DEV와 HOLDOUT 모두 false fully covered와 false insufficient가 0이었다.
+
+유일한 HOLDOUT 오류는 fully_covered 사례를 partially_covered로 낮게 평가한
+보수적 오류였다. 불완전한 answer set을 fully_covered로 과승인한 사례는 없었다.
+
+이 결과는 Qwen3.5-4B가 여러 answer requirement를 동시에 비교해야 하는
+bounded reviewer/critic 역할에 강한 적합성을 보인다는 근거가 된다.
+
+### Qwen3.5-4B Small Worker Final Decision
+
+**ACCEPTED AS BOUNDED SMALL WORKER**
+
+최종 역할:
+
+- structured-output worker
+- known single-tool caller
+- claim-relevance classifier
+- first-pass semantic citation triage
+- answer-coverage reviewer / critic
+- selected short deterministic reasoning worker
+
+최종 비역할:
+
+- autonomous AIRA research planner
+- final authoritative factual verifier
+- unconstrained long-form planner
+- deterministic policy를 대체하는 orchestration authority
+
+운영 원칙:
+
+- think=false를 기본값으로 유지
+- typed JSON Schema를 가능한 경우 사용
+- planning/orchestration은 deterministic path 또는 stronger model에 유지
+- factual partial/ambiguous cases는 escalation
+- tool/workflow policy는 deterministic validation 유지
+
+따라서 Qwen3.5-4B는 Main Agent 후보가 아니라,
+검증된 bounded Small Worker로 최종 수용한다.
+
 상세 benchmark 수치는 `BENCHMARK_RESULTS.md`를 기준으로 한다.
 
 ---
@@ -464,7 +505,7 @@ MoE로 active parameter 수가 작더라도 전체 model weight와 runtime memor
 
 - [x] Qwen3.5-4B 실제 local runtime benchmark 시작
 - [x] Qwen3.5-4B deterministic reasoning / Thinking baseline
-- [ ] Qwen3.5-4B AIRA-native capability benchmark 완료
+- [x] Qwen3.5-4B AIRA-native capability benchmark 완료
 - [ ] 최종 Main Agent 선정
 
 위 미완료 항목은 다음 runtime/benchmark 단계에서 수행한다.

@@ -447,6 +447,8 @@ Failure Rate
 ✓ Phase 5B-4 Research Planning
 ✓ Phase 5B-5 Claim Relevance
 ✓ Phase 5B-6 Factual Discipline / Semantic Citation Entailment
+✓ Phase 5B-7 AIRA-native Complex Reasoning / Answer Coverage
+✓ Qwen3.5-4B Small Worker Final Decision — ACCEPTED
 ```
 
 Current Phase 5 status remains **IN PROGRESS**.
@@ -766,8 +768,11 @@ Reopen Condition
 다음 순서:
 
 ```text
-AIRA-native complex reasoning
-→ Qwen3.5-4B Small Worker 최종 결정
+Qwen3.5-4B Small Worker final decision
+→ COMPLETE
+
+Next:
+→ Phase 6 — Local LLM Adapter Integration
 ```
 
 이후 동일 핵심 benchmark를 Main Agent 후보인 Qwen3.5-9B와 Ministral 3 8B에 적용한다.
