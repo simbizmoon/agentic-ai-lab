@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from app.research.research_source_reader import (
     ResearchSourceReader,
 )
@@ -20,7 +22,6 @@ from app.schemas.research_source_candidate import (
     ResearchSourceCandidateSet,
 )
 from app.schemas.research_source_document import (
-    ResearchSourceDocument,
     ResearchSourceDocumentSet,
 )
 
@@ -225,8 +226,18 @@ class PipelineSourceReaderAdapter:
     def __init__(
         self,
         reader: ResearchSourceReader,
+        *,
+        maximum_concurrency: int = 1,
     ) -> None:
+        if isinstance(maximum_concurrency, bool):
+            raise TypeError("maximum_concurrency must be an integer")
+        if maximum_concurrency < 1:
+            raise ValueError(
+                "maximum_concurrency must be greater than zero"
+            )
+
         self._reader = reader
+        self._maximum_concurrency = maximum_concurrency
 
     @property
     def reader(self) -> ResearchSourceReader:
@@ -234,16 +245,37 @@ class PipelineSourceReaderAdapter:
 
         return self._reader
 
+    @property
+    def maximum_concurrency(self) -> int:
+        """Return the configured source-read concurrency."""
+
+        return self._maximum_concurrency
+
     def read(
         self,
         candidate_set: ResearchSourceCandidateSet,
     ) -> ResearchSourceDocumentSet:
-        """Read every candidate and return one document set."""
+        """Read every candidate and preserve candidate order."""
 
-        documents: list[ResearchSourceDocument] = [
-            self._reader.read(candidate)
-            for candidate in candidate_set.candidates
-        ]
+        candidates = list(candidate_set.candidates)
+        if self._maximum_concurrency == 1 or len(candidates) <= 1:
+            documents = [
+                self._reader.read(candidate)
+                for candidate in candidates
+            ]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(
+                    self._maximum_concurrency,
+                    len(candidates),
+                )
+            ) as executor:
+                documents = list(
+                    executor.map(
+                        self._reader.read,
+                        candidates,
+                    )
+                )
 
         return ResearchSourceDocumentSet(
             request_id=candidate_set.request_id,

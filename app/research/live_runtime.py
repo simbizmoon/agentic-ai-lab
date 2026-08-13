@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from app.research.coverage_gap_research_query_planner import (
     CoverageGapResearchQueryPlanner,
 )
@@ -55,6 +57,47 @@ from app.schemas.research_search_budget import (
     ResearchSearchBudget,
 )
 from app.schemas.tavily_search_config import TavilySearchConfig
+
+SOURCE_READ_CONCURRENCY_ENV = (
+    "AIRA_SOURCE_READ_CONCURRENCY"
+)
+DEFAULT_SOURCE_READ_CONCURRENCY = 2
+MIN_SOURCE_READ_CONCURRENCY = 1
+MAX_SOURCE_READ_CONCURRENCY = 8
+
+
+def resolve_source_read_concurrency() -> int:
+    """Load and validate live source-reading concurrency."""
+
+    raw = os.getenv(
+        SOURCE_READ_CONCURRENCY_ENV,
+        str(DEFAULT_SOURCE_READ_CONCURRENCY),
+    ).strip()
+
+    if not raw:
+        raise RuntimeError(
+            f"{SOURCE_READ_CONCURRENCY_ENV} must not be blank"
+        )
+
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{SOURCE_READ_CONCURRENCY_ENV} must be an integer"
+        ) from exc
+
+    if not (
+        MIN_SOURCE_READ_CONCURRENCY
+        <= value
+        <= MAX_SOURCE_READ_CONCURRENCY
+    ):
+        raise RuntimeError(
+            f"{SOURCE_READ_CONCURRENCY_ENV} must be between "
+            f"{MIN_SOURCE_READ_CONCURRENCY} and "
+            f"{MAX_SOURCE_READ_CONCURRENCY}"
+        )
+
+    return value
 
 
 def build_live_research_pipeline(
@@ -121,7 +164,10 @@ def build_live_research_pipeline(
             HttpHtmlResearchSourceReader(
                 config=reader_config
                 or HttpHtmlReaderConfig()
-            )
+            ),
+            maximum_concurrency=(
+                resolve_source_read_concurrency()
+            ),
         ),
         evidence_extractor=(
             evidence_extractor

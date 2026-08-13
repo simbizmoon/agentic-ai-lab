@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.research.in_memory_research_source_reader import (
     InMemoryResearchSourceReader,
 )
@@ -496,3 +498,27 @@ def test_search_adapter_without_budget_preserves_existing_behavior() -> None:
         adapter.search_usage.unreported_credit_call_count
         == 2
     )
+
+
+def test_reader_adapter_defaults_to_serial_concurrency() -> None:
+    reader_adapter = PipelineSourceReaderAdapter(
+        InMemoryResearchSourceReader(
+            records=document_records()
+        )
+    )
+
+    assert reader_adapter.maximum_concurrency == 1
+
+
+def test_reader_adapter_rejects_invalid_concurrency() -> None:
+    with pytest.raises(TypeError, match="must be an integer"):
+        PipelineSourceReaderAdapter(
+            InMemoryResearchSourceReader(records=[]),
+            maximum_concurrency=True,
+        )
+
+    with pytest.raises(ValueError, match="greater than zero"):
+        PipelineSourceReaderAdapter(
+            InMemoryResearchSourceReader(records=[]),
+            maximum_concurrency=0,
+        )
