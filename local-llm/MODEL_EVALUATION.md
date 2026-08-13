@@ -626,3 +626,84 @@ Small Worker rather than the AIRA Main Agent.
 Phase 6 status:
 
 **COMPLETE**
+
+## Phase 7 — OpenAI vs Local Single-Agent Result
+
+Phase 7 compared Qwen3.5-4B against the OpenAI-backed bounded-worker path
+inside the same AIRA Single-Agent research architecture.
+
+The initial live pair verified end-to-end execution but produced different
+upstream claim text, so a second frozen-input benchmark isolated only the
+three bounded worker stages.
+
+Frozen benchmark:
+
+```text
+2 fixtures
+3 repeats per fixture
+6 successful paired comparisons
+0 failed pairs
+```
+
+Observed agreement:
+
+```text
+Semantic citation:      100%
+Claim relevance:         83.3%
+Answer coverage level:   50%
+```
+
+Observed performance:
+
+```text
+OpenAI mean worker wall time: approximately 67.2 s
+Local mean worker wall time:  approximately 19.1 s
+
+Local:
+approximately 48.1 s lower mean wall time
+approximately 71.6% wall-time reduction
+approximately 3.5x faster
+```
+
+These measurements apply only to the Phase 7C frozen benchmark.
+
+### Refined Runtime Role Boundary
+
+Qwen3.5-4B remains a bounded Small Worker rather than the Main Agent.
+
+Accepted production roles:
+
+```text
+claim relevance
+→ bounded classifier
+→ stable boundary disagreement observed
+→ escalate ambiguous/high-impact cases
+
+semantic citation
+→ bounded first-pass verifier
+→ 100% agreement in the Phase 7C frozen fixtures
+
+answer coverage
+→ reviewer / critic
+→ NOT authoritative final judge
+→ optimistic bias observed
+```
+
+In particular, the local answer-coverage worker rated one fixture
+`fully_covered / 1.0` on every repeat while the OpenAI path rated the same
+frozen claim set `partially_covered / 0.60–0.65`.
+
+Therefore a local `fully_covered` judgment is advisory and must not be used as
+the sole final-completeness gate.
+
+### Phase 7 Decision
+
+**COMPLETE — Qwen3.5-4B LOCAL BOUNDED WORKER BACKEND ACCEPTED WITH
+ROLE-SPECIFIC LIMITS**
+
+This decision does not select the Main Local Agent. The Main Agent candidates
+remain subject to their later benchmark and architecture phases.
+
+Next official phase:
+
+**Phase 8 — Local Multi-Agent Minimum Experiment**

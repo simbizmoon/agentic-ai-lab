@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from app.budget import ExecutionBudget
 from app.research.answer_coverage_evaluation_service import (
     AnswerCoverageEvaluationService,
 )
@@ -115,6 +116,7 @@ def load_local_worker_settings() -> LocalWorkerSettings:
 def build_local_research_workers(
     *,
     settings: LocalWorkerSettings,
+    claim_relevance_budget: ExecutionBudget | None = None,
 ) -> LocalResearchWorkerBundle:
     """Build the three Phase-5-accepted bounded local workers."""
     if not settings.enabled:
@@ -141,7 +143,8 @@ def build_local_research_workers(
                 client=client,
                 model=settings.model,
                 num_predict=512,
-            )
+            ),
+            budget=claim_relevance_budget,
         ),
         answer_coverage_evaluator=AnswerCoverageEvaluationService(
             evaluator=LocalAnswerCoverageEvaluator(

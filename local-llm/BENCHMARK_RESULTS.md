@@ -1388,7 +1388,7 @@ Phase 5 local-model benchmarking for the Qwen3.5-4B Small Worker is complete.
 - [ ] evidence / claim judgment
 - [x] factual discipline
 - [ ] AIRA-native complex reasoning
-- [ ] Qwen3.5-4B Small Worker 최종 역할 결정
+- [x] Qwen3.5-4B Small Worker 최종 역할 결정
 - [ ] Qwen3.5-9B benchmark
 - [ ] Ministral 3 8B benchmark
 
@@ -1536,3 +1536,238 @@ Phase 6 is therefore complete for the defined adapter-integration scope.
 Next official phase:
 
 **Phase 7 — OpenAI vs Local Single-Agent**
+
+## Phase 7 — OpenAI vs Local Single-Agent
+
+Status:
+
+**COMPLETE — LOCAL BOUNDED WORKER BACKEND ACCEPTED WITH ROLE-SPECIFIC LIMITS**
+
+### Scope
+
+Phase 7 compared the same AIRA Single-Agent research architecture with two
+bounded-worker backends:
+
+```text
+OpenAI:
+- claim relevance
+- semantic citation verification
+- answer coverage
+
+Local:
+- qwen3.5:4b claim relevance
+- qwen3.5:4b semantic citation verification
+- qwen3.5:4b answer coverage
+```
+
+The following remained outside the local-worker substitution:
+
+```text
+- deterministic planning
+- Tavily search
+- HTTP source reading
+- OpenAI embeddings
+- OpenAI evidence relevance
+- OpenAI claim generation
+```
+
+### Phase 7A — Live Pipeline Smoke
+
+The first live pair completed successfully:
+
+```text
+OpenAI quality: 0.8325
+Local quality:  0.8845
+
+OpenAI total elapsed: 281.51 s
+Local total elapsed:  171.12 s
+
+OpenAI worker elapsed: 164.29 s
+Local worker elapsed:   45.06 s
+```
+
+Both runs had:
+
+```text
+sources:   1
+evidence:  3
+claims:    3
+citations: 3
+```
+
+However, the generated claim text differed materially between the two live
+runs. Therefore this result was retained as an end-to-end execution smoke and
+was not used as a pure backend-quality comparison.
+
+An earlier OpenAI live attempt failed with an API timeout under the normal
+30-second request timeout. The Phase 7 benchmark runner therefore used a
+benchmark-only 120-second OpenAI timeout without changing the production
+default.
+
+### Claim-Relevance Budget Parity
+
+Before the controlled comparison, the local runtime was updated so that both
+OpenAI and local claim-relevance services receive the same execution budget:
+
+```text
+max_attempts:          8
+max_recorded_tokens:   8,000
+max_elapsed_seconds:   60
+```
+
+This removed a provider-policy difference from the benchmark.
+
+### Phase 7C — Frozen-Input Backend Comparison
+
+The controlled comparison reused persisted live `ResearchRequest`,
+`ResearchClaimSet`, and embedded `ResearchEvidenceSet` objects.
+
+No upstream retrieval or generation stages ran.
+
+Design:
+
+```text
+fixtures:              2
+repeats per fixture:   3
+paired comparisons:    6
+successful pairs:      6
+failed pairs:          0
+```
+
+Aggregate result:
+
+```text
+mean citation exact agreement:              1.0000
+mean claim relevance exact agreement:       0.8333
+answer coverage level agreement:            0.5000
+mean coverage score delta (Local-OpenAI):   +0.2750
+
+mean wall delta (Local-OpenAI):
+  citation:          -9.37 s
+  claim relevance:  -16.10 s
+  answer coverage:  -22.64 s
+  total:            -48.12 s
+```
+
+Mean total worker wall time from the six pairs:
+
+```text
+OpenAI: approximately 67.2 s
+Local:  approximately 19.1 s
+
+Local wall-time reduction:
+approximately 48.1 s
+approximately 71.6%
+approximately 3.5x faster
+```
+
+### Semantic Citation Result
+
+All six pairs produced exact OpenAI/local agreement for every tested citation:
+
+```text
+citation exact agreement = 100%
+```
+
+All tested citations were judged:
+
+```text
+verified / fully_supported
+```
+
+Decision:
+
+**ACCEPTED for the bounded first-pass semantic-citation role.**
+
+This Phase 7 result does not replace the broader Phase 5 citation benchmark,
+which included unsupported, contradicted, and partial-support cases.
+
+### Claim Relevance Result
+
+Aggregate exact agreement:
+
+```text
+83.3%
+```
+
+Fixture 1 repeatedly disagreed on one boundary claim:
+
+```text
+OpenAI → directly_relevant
+Local  → partially_relevant
+```
+
+The disagreement was stable across all three repeats rather than random
+run-to-run drift.
+
+Fixture 2 reached 100% exact agreement across all three repeats.
+
+Decision:
+
+**ACCEPTED AS A BOUNDED CLASSIFIER.**
+
+Ambiguous and high-impact relevance cases remain escalation candidates.
+
+### Answer Coverage Result
+
+Coverage-level agreement was only:
+
+```text
+50%
+```
+
+Fixture 1:
+
+```text
+OpenAI: partially_covered 0.45 / 0.45 / 0.50
+Local:  partially_covered 0.65 / 0.65 / 0.65
+```
+
+Fixture 2:
+
+```text
+OpenAI: partially_covered 0.65 / 0.65 / 0.60
+Local:  fully_covered     1.00 / 1.00 / 1.00
+```
+
+The local backend therefore showed an optimistic answer-coverage bias in the
+tested fixtures.
+
+Decision:
+
+**ACCEPTED AS A REVIEWER / CRITIC, NOT AS AN AUTHORITATIVE FINAL COVERAGE
+JUDGE.**
+
+A Local `fully_covered` result must not by itself be treated as authoritative
+proof of completeness.
+
+### Phase 7 Final Decision
+
+Qwen3.5-4B remains:
+
+**FINAL — ACCEPTED AS BOUNDED SMALL WORKER**
+
+with the following Phase-7-refined boundaries:
+
+```text
+Semantic citation:
+  accepted bounded first-pass verifier
+
+Claim relevance:
+  accepted bounded classifier
+  escalate ambiguous/high-impact cases
+
+Answer coverage:
+  accepted reviewer / critic
+  do not use as authoritative final judge
+  optimistic bias observed
+```
+
+The local worker backend also demonstrated materially lower and more stable
+latency in this controlled benchmark.
+
+Phase 7 is complete.
+
+Next official phase:
+
+**Phase 8 — Local Multi-Agent Minimum Experiment**

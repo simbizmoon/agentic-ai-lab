@@ -80,3 +80,25 @@ def test_build_local_workers_returns_production_services() -> None:
     assert workers.semantic_citation_verifier is not None
     assert workers.claim_relevance_evaluator is not None
     assert workers.answer_coverage_evaluator is not None
+
+def test_local_worker_bundle_preserves_claim_relevance_budget() -> None:
+    from app.budget import ExecutionBudget
+
+    settings = LocalWorkerSettings(
+        provider="local",
+        model="qwen3.5:4b",
+        ollama_base_url="http://127.0.0.1:11434",
+        ollama_timeout_seconds=120.0,
+    )
+    budget = ExecutionBudget(
+        max_attempts=8,
+        max_recorded_tokens=8_000,
+        max_elapsed_seconds=60.0,
+    )
+
+    workers = build_local_research_workers(
+        settings=settings,
+        claim_relevance_budget=budget,
+    )
+
+    assert workers.claim_relevance_evaluator.budget == budget

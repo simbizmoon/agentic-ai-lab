@@ -181,7 +181,8 @@ class LiveResearchHandler:
 
         if local_worker_settings.enabled:
             local_workers = build_local_research_workers(
-                settings=local_worker_settings
+                settings=local_worker_settings,
+                claim_relevance_budget=LIVE_CLAIM_RELEVANCE_BUDGET,
             )
             semantic_citation_verifier = (
                 local_workers.semantic_citation_verifier

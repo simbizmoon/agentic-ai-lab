@@ -516,7 +516,7 @@ openai_pipeline.py 복사
 
 # 12. Phase 7 — OpenAI vs Local Single-Agent
 
-상태: **PENDING**
+상태: **COMPLETE — LOCAL BOUNDED WORKER BACKEND ACCEPTED WITH ROLE-SPECIFIC LIMITS**
 
 ## Experiments
 
@@ -542,6 +542,116 @@ Failure Rate
 ```
 
 이 단계에서 먼저 backend 차이를 분리해서 측정한다.
+
+---
+
+## Result
+
+Phase 7 first verified both provider paths through the actual live
+Single-Agent research pipeline, then separated backend behavior with a
+frozen-input comparison.
+
+### Live pipeline smoke
+
+The same AIRA `research-live` architecture was executed with:
+
+```text
+A: OpenAI bounded research workers
+B: Ollama / qwen3.5:4b bounded research workers
+```
+
+The live pair completed successfully after using a benchmark-only
+`OPENAI_TIMEOUT_SECONDS=120`.
+
+The two independent live runs produced the same source/evidence/claim counts
+but materially different generated claim text. Therefore their quality-score
+difference was not treated as a pure backend comparison.
+
+### Frozen-input backend comparison
+
+To isolate the worker backend, Phase 7C reused persisted live artifacts as
+frozen inputs and executed only:
+
+```text
+Semantic Citation Verification
+Claim Relevance Evaluation
+Answer Coverage Evaluation
+```
+
+No Tavily search, HTTP reading, embedding, evidence reranking, claim
+generation, or report synthesis ran inside the frozen comparison.
+
+Benchmark design:
+
+```text
+fixtures:              2
+repeats per fixture:   3
+paired comparisons:    6
+successful pairs:      6
+failed pairs:          0
+local model:           qwen3.5:4b
+```
+
+Results:
+
+```text
+mean citation exact agreement:              1.000
+mean claim relevance exact agreement:       0.8333
+answer coverage level agreement:            0.500
+mean local-openai coverage score delta:     +0.275
+mean local-openai total wall-time delta:    -48.12 s
+```
+
+Observed role boundaries:
+
+```text
+Semantic Citation
+→ ACCEPTED
+→ 100% exact agreement in the Phase 7C frozen benchmark
+→ retain its first-pass / bounded-verification role
+
+Claim Relevance
+→ ACCEPTED AS BOUNDED CLASSIFIER
+→ 83.3% exact agreement
+→ one stable boundary disagreement was repeated across one fixture
+→ ambiguous or high-impact cases remain escalation candidates
+
+Answer Coverage
+→ ACCEPTED AS REVIEWER / CRITIC
+→ NOT an authoritative final coverage judge
+→ local judgments were systematically more optimistic in the tested fixtures
+→ stronger or deterministic verification is required before treating
+  FULLY_COVERED as authoritative
+```
+
+Performance observation:
+
+```text
+OpenAI mean total worker wall time: approximately 67.2 s
+Local mean total worker wall time:  approximately 19.1 s
+Local reduction:                    approximately 48.1 s
+Local relative reduction:           approximately 71.6%
+Local speed ratio:                  approximately 3.5x
+```
+
+These performance values apply only to the Phase 7C benchmark
+(2 frozen fixtures × 3 repeats) and are not generalized beyond that scope.
+
+Phase 7 conclusion:
+
+**Qwen3.5-4B remains accepted as a bounded Small Worker, with stronger
+role-specific limits for answer-coverage judgments.**
+
+Raw experiment artifacts remain outside Git under:
+
+```text
+/mnt/ai-data/experiments/phase7/
+/mnt/ai-data/experiments/phase7-frozen/
+```
+
+Next official phase:
+
+**Phase 8 — Local Multi-Agent Minimum Experiment**
 
 ---
 
@@ -797,4 +907,4 @@ The end-to-end smoke completed with `quality_score=0.8845` and persisted
 
 Next:
 
-**Phase 7 — OpenAI vs Local Single-Agent**
+**Phase 8 — Local Multi-Agent Minimum Experiment**
