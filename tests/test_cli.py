@@ -35,8 +35,50 @@ def test_parser_accepts_research_command(
     )
 
     assert namespace.command == "research"
+    assert namespace.mode == "deterministic"
     assert namespace.source == [str(source)]
     assert namespace.output_dir == "reports"
+
+
+def test_parser_accepts_semantic_research_mode(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("Local evidence.", encoding="utf-8")
+
+    namespace = build_parser().parse_args(
+        [
+            "research",
+            "--mode",
+            "semantic",
+            "--question",
+            "How does semantic local research work?",
+            "--source",
+            str(source),
+        ]
+    )
+
+    assert namespace.mode == "semantic"
+
+
+def test_parser_rejects_unsupported_research_mode(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("Local evidence.", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "research",
+                "--mode",
+                "unsupported",
+                "--question",
+                "How does semantic local research work?",
+                "--source",
+                str(source),
+            ]
+        )
 
 
 def test_default_objective_is_distinct_from_question() -> None:
@@ -140,6 +182,39 @@ def test_main_calls_injected_research_handler(
     assert captured["output_dir"] == (
         tmp_path / "reports"
     ).resolve()
+
+
+def test_main_selects_semantic_local_handler(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("Semantic local evidence.", encoding="utf-8")
+    calls: list[str] = []
+
+    def deterministic_handler(*args: object) -> int:
+        calls.append("deterministic")
+        return 0
+
+    def semantic_handler(*args: object) -> int:
+        calls.append("semantic")
+        return 0
+
+    result = main(
+        [
+            "research",
+            "--mode",
+            "semantic",
+            "--question",
+            "How does semantic local research work?",
+            "--source",
+            str(source),
+        ],
+        research_handler=deterministic_handler,
+        semantic_research_handler=semantic_handler,
+    )
+
+    assert result == 0
+    assert calls == ["semantic"]
 
 
 def test_main_returns_error_for_short_question(

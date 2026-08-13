@@ -2,7 +2,7 @@
 
 ## 1. 문서 목적
 
-본 문서는 2026-08-09 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된
+본 문서는 2026-08-14 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된
 AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 방법,
 현재 한계 및 후속 개선 방향을 사용자 관점에서 정리한다.
 
@@ -23,40 +23,52 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 
 # 2. 현재 AIRA의 위치
 
-현재 AIRA에는 두 가지 중요한 연구 경로가 존재한다.
+현재 AIRA에는 세 가지 주요 연구 경로가 존재한다.
 
 ```text
-A. Offline Deterministic Research Baseline
-B. Live Single-Agent Research Runtime
+1. Local Deterministic Research
+2. Local Semantic Research
+3. Live Web Research
 ```
 
-## 2.1 Offline Baseline
+## 2.1 Local Deterministic Research
 
-기존 `aira research` 경로는 외부 인터넷과 실제 LLM 호출에 의존하지 않는
-결정론적 Research Baseline으로 유지한다.
+`aira research`의 기본값이며 `aira research --mode deterministic`과 같다.
+외부 Provider 없이 `WholeDocumentEvidenceExtractor`와
+`DeterministicPipelineClaimBuilder`를 사용하는 역사적 offline regression 계약을
+보존한다. 기존 `report.md`와 `result.json` 생성 동작도 유지한다.
 
-주요 목적:
+## 2.2 Local Semantic Research
 
-- Schema 검증
-- Pipeline Regression Test
-- 외부 API가 없는 테스트
-- 결정론적 비교 기준
-- Live Runtime 실패 시 구조 비교
-- 과거 Phase 13 결과의 보존
+`aira research --mode semantic`은 UTF-8 TXT/Markdown 문서를 실제 local
+in-memory search와 reader로 처리하고 paragraph 단위 semantic evidence와 generated
+claim을 만든다. query text, local path, filename 및 character range provenance를
+보존한다.
 
-이 경로를 현재 최종 AIRA 제품으로 간주하지 않는다.
+```text
+TXT / Markdown
+→ LocalDocumentAdapter
+→ In-memory Local Search / Reader
+→ ParagraphEvidenceExtractor
+→ Embedding + Lexical RRF Shortlist
+→ Semantic Evidence Relevance
+→ Generated Claim
+→ Semantic Citation / Claim Relevance / Answer Coverage
+→ ResearchResult / report.md / result.json
+```
 
-## 2.2 Live Single-Agent Research
+Embedding, evidence relevance, claim generation은 OpenAI를 사용한다. Citation, claim
+relevance, answer coverage만 기존 bounded-worker 정책에 따라 OpenAI 또는 Local을
+사용한다. `provider=local`은 full-local mode가 아니며 semantic 실패를 deterministic으로
+조용히 fallback하지 않는다.
 
-현재 실사용 중심의 핵심 경로는 `aira research-live`이다.
+## 2.3 Live Web Research
 
-이 경로는 실제 Web Search, 웹 문서 읽기, Evidence 추출, Claim 생성,
-Citation 검증, Answer Coverage 평가 및 제한된 Replanning을 포함한다.
+`aira research-live`는 Tavily Search, HTTP/HTML reading, semantic evidence, claim,
+citation, coverage 및 bounded replanning을 포함하는 Web 중심 경로이다.
 
-현재 프로젝트에서 가장 성숙하게 통합·검증된 기능은
-**Single-Agent Live Research Vertical Slice**이다.
-
----
+과거 Offline Baseline과 Live Single-Agent Vertical Slice 설명은 역사적 비교 기준으로
+유효하며, Local Semantic Research가 세 번째 명시적 제품 경로로 추가되었다.
 
 # 3. 현재 구현된 핵심 기능
 
@@ -680,9 +692,25 @@ aira research-live --help
 
 ---
 
-# 19. Offline Baseline 실행
+# 19. Local Research 실행
 
-기존 Offline Deterministic Baseline은 `aira research` 경로로 유지된다.
+기존 Offline Deterministic Baseline은 `aira research` 기본 경로로 유지된다.
+
+```bash
+aira research --mode deterministic \
+  --question "How does grounded research use local evidence?" \
+  --objective "Explain the local evidence with traceable citations." \
+  --source notes.md
+```
+
+Semantic Local Research는 명시적으로 선택한다.
+
+```bash
+aira research --mode semantic \
+  --question "How does AIRA divide work between OpenAI and the local model?" \
+  --objective "Explain hybrid role routing using grounded local evidence." \
+  --source hybrid-routing.md
+```
 
 정확한 현재 입력 옵션은 다음으로 확인한다.
 
@@ -880,19 +908,23 @@ Known Failure가 Citation Judge 평가에서 확인되었다.
 
 일부 결과는 아직 자동 실행 차단이나 자동 Claim 삭제에 직접 사용하지 않는다.
 
-## 24.4 Local Document 통합은 최종 제품 목표 대비 미완성
+## 24.4 Local Document Expansion은 진행 중
 
-프로젝트 전체에는 과거 RAG, Parser, Memory 관련 구현 자산이 존재하지만,
-현재 Live Research의 가장 성숙한 경로는 Web 중심 Single-Agent Vertical Slice이다.
+TXT/Markdown Semantic Local Vertical Slice는 구현되었고 실제 CLI smoke로
+`report.md`와 `result.json` 생성, relevant paragraph 선택, character/query/file
+provenance, generated claim 및 semantic citation/relevance/coverage 연결을 확인했다.
 
-최종 목표인 다음 범위는 아직 현재 Live Baseline과 동일 수준으로
-통합·검증되었다고 간주하면 안 된다.
+그러나 다음 범위는 아직 미완성이다.
 
-- PDF 고도화
-- HWP
-- HWPX
-- 인터넷 + 로컬 문서 통합 Research
+- PDF 및 scanned PDF/OCR
+- HWP/HWPX/DOCX
+- page/line number와 table-specialized parsing
+- persistent vector index/cache
+- Web + Local unified Integrated RAG
 - 선행특허 전문 Research
+
+따라서 초기 TXT/Markdown vertical slice 완료를 전체 Local Document Expansion
+완료로 해석하지 않는다.
 
 ## 24.5 실제 Dollar Cost 계측
 
@@ -1044,11 +1076,14 @@ AIRA는 조사 보조 시스템이며,
 
 # 30. 현재 기준 요약
 
-2026-08-09 현재 AIRA의 핵심 상태:
+2026-08-14 현재 AIRA의 핵심 상태:
 
 ```text
-Offline Deterministic Baseline
-→ 유지
+Local Deterministic Research
+→ 기본 offline 계약 유지
+
+Local Semantic Research
+→ TXT/Markdown 구현 및 실제 smoke 검증
 
 Live Web Research
 → 구현 및 실제 검증
@@ -1092,8 +1127,8 @@ Batch Performance Optimization
 Single-Agent micro-optimization
 → Deferred
 
-Next focus
-→ Multi-Agent System
+Current product focus
+→ Stage 4 Local Document Expansion
 ```
 
 # 31. 2026-08-13 현재 시스템 갱신 — Local / Multi-Agent / Hybrid / Parallel Runtime
@@ -1219,3 +1254,59 @@ Phase 12 — Hardware Upgrade Decision
 현재 장비에서 더 큰 Local model 또는 더 많은 parallel agent를 실행하는 것이
 실제 AIRA 품질·비용·latency에 의미 있는 편익을 주는지 측정한 뒤 hardware 결정을
 내린다. Phase 12 전에는 특정 업그레이드를 확정하지 않는다.
+
+
+# 32. 2026-08-14 Local TXT/Markdown Semantic Research 갱신
+
+> 이 섹션은 Local Document Research에 관한 최신 사용자 기준이다. 앞선 Local
+> 미완성 설명은 역사적 checkpoint로 보존하되 이 섹션을 현재 상태로 우선한다.
+
+현재 실행 경로:
+
+```text
+aira research
+→ Local Deterministic Research (default, offline)
+
+aira research --mode deterministic
+→ 위 기본 경로와 동일
+
+aira research --mode semantic
+→ Local Semantic Research (explicit opt-in)
+
+aira research-live
+→ Live Web Research
+```
+
+실제 deterministic 및 semantic CLI smoke 모두 `report.md`와 `result.json`을
+생성했다. Semantic smoke는 whole document가 아니라 relevant paragraph만 선택했다.
+
+관측된 Semantic smoke 결과:
+
+```text
+evidence character range = 76..265
+evidence relevance = directly_relevant / 0.95
+local_path, filename, search_query_text = preserved
+generated claims = 1
+citations = 1
+citation verification = verified / fully_supported
+entailment / traceability / accuracy = 1.0 / 1.0 / 1.0
+claim relevance = partially_relevant / 0.74
+answer coverage = partially_covered / 0.60
+report quality = 0.94 / excellent / passed
+```
+
+Partial relevance와 coverage는 runtime failure가 아니다. Fixture가 role routing은
+설명하지만 grounded local evidence가 routing에 미치는 영향까지 완전히 설명하지
+않는다는 한계를 올바르게 기록한 결과이다.
+
+현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`이다. PDF, scanned PDF/OCR,
+HWP, HWPX, DOCX, table-specialized parsing, persistent vector index 및 Web+Local
+unified Integrated RAG는 아직 완료되지 않았다.
+
+현재 검증 기준:
+
+```text
+full regression = 4643 passed
+Ruff = All checks passed
+git diff --check = passed
+```

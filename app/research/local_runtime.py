@@ -28,6 +28,11 @@ from app.research.research_request_validator import (
     ResearchRequestValidator,
 )
 from app.research.single_research_agent_pipeline import (
+    AnswerCoverageEvaluationServiceProtocol,
+    ClaimRelevanceEvaluationServiceProtocol,
+    ResearchClaimBuilderProtocol,
+    ResearchEvidenceExtractorProtocol,
+    SemanticCitationVerifierProtocol,
     SingleResearchAgentPipeline,
 )
 from app.schemas.research_evidence import (
@@ -124,6 +129,18 @@ class LocalDocumentSourceQualityEvaluator:
 
 def build_local_research_pipeline(
     bundle: LocalDocumentBundle,
+    *,
+    evidence_extractor: ResearchEvidenceExtractorProtocol | None = None,
+    claim_builder: ResearchClaimBuilderProtocol | None = None,
+    semantic_citation_verifier: (
+        SemanticCitationVerifierProtocol | None
+    ) = None,
+    claim_relevance_evaluator: (
+        ClaimRelevanceEvaluationServiceProtocol | None
+    ) = None,
+    answer_coverage_evaluator: (
+        AnswerCoverageEvaluationServiceProtocol | None
+    ) = None,
 ) -> SingleResearchAgentPipeline:
     """Compose the single-agent pipeline for local documents."""
 
@@ -144,11 +161,28 @@ def build_local_research_pipeline(
         source_reader=PipelineSourceReaderAdapter(
             source_reader
         ),
-        evidence_extractor=PipelineEvidenceExtractorAdapter(
-            WholeDocumentEvidenceExtractor()
+        evidence_extractor=(
+            evidence_extractor
+            if evidence_extractor is not None
+            else PipelineEvidenceExtractorAdapter(
+                WholeDocumentEvidenceExtractor()
+            )
         ),
-        claim_builder=DeterministicPipelineClaimBuilder(),
+        claim_builder=(
+            claim_builder
+            if claim_builder is not None
+            else DeterministicPipelineClaimBuilder()
+        ),
         source_quality_evaluator=(
             LocalDocumentSourceQualityEvaluator()
+        ),
+        semantic_citation_verifier=(
+            semantic_citation_verifier
+        ),
+        claim_relevance_evaluator=(
+            claim_relevance_evaluator
+        ),
+        answer_coverage_evaluator=(
+            answer_coverage_evaluator
         ),
     )

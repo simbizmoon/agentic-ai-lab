@@ -13,6 +13,7 @@ from app.research.live_research_handler import (
 )
 from app.research.local_research_handler import (
     LocalResearchHandler,
+    SemanticLocalResearchHandler,
 )
 
 ResearchHandler = Callable[
@@ -57,6 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    research_parser.add_argument(
+        "--mode",
+        choices=("deterministic", "semantic"),
+        default="deterministic",
+        help="Local research analysis mode.",
+    )
     research_parser.add_argument(
         "--question",
         required=True,
@@ -315,6 +322,7 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     research_handler: ResearchHandler | None = None,
+    semantic_research_handler: ResearchHandler | None = None,
     live_research_handler: (
         LiveResearchHandlerType | None
     ) = None,
@@ -329,8 +337,15 @@ def main(
             return run_research_command(
                 namespace,
                 research_handler=(
-                    research_handler
-                    or LocalResearchHandler()
+                    (
+                        semantic_research_handler
+                        or SemanticLocalResearchHandler()
+                    )
+                    if namespace.mode == "semantic"
+                    else (
+                        research_handler
+                        or LocalResearchHandler()
+                    )
                 ),
             )
 

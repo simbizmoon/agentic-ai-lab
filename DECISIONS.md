@@ -2640,3 +2640,63 @@ platform 교체 비용을 정당화할 evidence가 없다.
 
 Phase 12 결과의 상세 evidence는 `local-llm/HARDWARE_UPGRADE_DECISION.md`와
 `local-llm/BENCHMARK_RESULTS.md`에 기록한다.
+
+
+---
+
+## D-049 — Local Research는 deterministic 기본과 semantic 명시 모드로 운영
+
+- 상태: 확정
+- 날짜: 2026-08-14
+- 적용 범위: `aira research` Local TXT/Markdown 실행 계약
+
+### 배경
+
+기존 `aira research`는 외부 Provider 없이 실행되는 offline deterministic 계약이며
+CLI unit 및 subprocess E2E regression이 이 동작을 보호한다. Local semantic composition을
+기본값으로 바꾸면 유효하지 않은 OpenAI 설정 때문에 기존 offline 사용이 실패한다.
+
+CLI 의미는 다음과 같이 구분한다.
+
+```text
+research = 어떤 capability를 실행하는가 (Local Document Research)
+mode     = Local 문서를 어떻게 분석하는가
+```
+
+### 결정
+
+- `aira research`는 deterministic/offline 기본값을 유지한다.
+- `aira research --mode deterministic`은 위 기본 명령과 동일하다.
+- deterministic mode는 whole-document evidence와 deterministic claim builder를 유지할 수 있다.
+- `aira research --mode semantic`은 명시적 opt-in Local Semantic Research이다.
+- semantic mode는 paragraph semantic evidence와 generated claim을 사용한다.
+- semantic mode 실패를 deterministic mode로 조용히 fallback하지 않는다.
+- semantic Local의 embedding, evidence relevance, claim generation은 OpenAI high-judgment 역할로 유지한다.
+- 기존 bounded-worker provider routing은 semantic citation, claim relevance, answer coverage에만 적용한다.
+- `AIRA_RESEARCH_WORKER_PROVIDER=local`은 full-local research mode가 아니다.
+- 첫 semantic Local 지원 형식은 UTF-8 TXT/Markdown (`.txt`, `.md`, `.markdown`)이다.
+- PDF, scanned PDF/OCR, HWP, HWPX는 후속 Local Document Expansion 범위로 유지한다.
+
+### 이유
+
+- 기존 CLI와 artifact 동작의 backwards compatibility
+- offline regression 계약 보존
+- 기본 Local 실행에서 외부 Provider를 요구하지 않음
+- Provider 사용과 실패를 silent behavior가 아니라 명시적 mode로 표현
+
+### 역사적 결정과의 관계
+
+과거 Local-document 경로가 whole-document evidence를 사용한다고 기록한 설명은
+deterministic mode의 역사와 현재 계약으로 계속 유효하다. 다만 그 설명을 모든 Local
+Research에 일반화하지 않는다. 새 semantic mode에서는 paragraph semantic evidence를
+사용하며, 이 범위에서 기존 whole-document 설명을 명시적으로 한정한다.
+
+### 검증
+
+- deterministic CLI smoke: `report.md`, `result.json` 생성
+- semantic CLI smoke: `report.md`, `result.json` 생성 및 relevant paragraph 선택
+- semantic provenance: query text, local path, filename, character range 보존
+- semantic integration: generated claim, citation verification, claim relevance, answer coverage
+- full regression: `4643 passed`
+- Ruff: `All checks passed`
+- `git diff --check`: 통과

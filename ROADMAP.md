@@ -36,12 +36,11 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 최적화 완료 → 다음 학습 초점은 Multi-Agent Experiment
-- 현재 상태: Live Research Vertical Slice, Generative Claim, Semantic Citation,
-  Claim/Evidence Relevance, RRF Hybrid Retrieval, Semantic Answer Coverage,
-  Coverage-guided Bounded Replanning, Research Run Observability 및
-  Step 6.6 Performance Optimization까지 통합·검증 완료
-- 현재 기준일: 2026-08-09
+- 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
+- 현재 상태: Live Research 기준선을 유지하면서 Local TXT/Markdown Semantic Research
+  Vertical Slice를 통합·검증 완료했다. Stage 4의 PDF/HWP/HWPX 확장과
+  Integrated Web+Local RAG는 아직 진행 전이다.
+- 현재 기준일: 2026-08-14
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -694,22 +693,31 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [ ] 시작 전
+- [~] 진행 중
+- [x] 초기 TXT/Markdown Semantic Research Vertical Slice 완료
+- [ ] PDF/HWP/HWPX 및 Integrated Web+Local 범위는 미완료
 
 ## Work Items
 
-- [ ] TXT
-- [ ] Markdown
+- [x] TXT
+- [x] Markdown
 - [ ] PDF Text
 - [ ] Scanned PDF 처리 전략
 - [ ] HWP
 - [ ] HWPX
-- [ ] 파일 Metadata
+- [x] 파일 Metadata (`local_path`, `filename`)
+- [x] Query provenance (`search_query_text`)
 - [ ] Heading 또는 Section
 - [ ] 페이지 번호
-- [ ] 줄 또는 문단 위치
+- [x] 문단 및 character range 위치 보존
+- [ ] 줄 번호
 - [ ] 표 처리
-- [ ] Citation 위치 보존
+- [x] Citation character 위치 보존
+- [x] Paragraph semantic evidence selection
+- [x] Generated claim integration
+- [x] Semantic citation/claim relevance/answer coverage integration
+- [x] Deterministic mode backward compatibility
+- [x] Deterministic + Semantic 실제 CLI smoke
 - [ ] 허용된 경로
 - [ ] 파일 크기 제한
 - [ ] 민감문서 외부 전송 승인
@@ -2778,3 +2786,52 @@ model이 실제 AIRA role에서 명확한 품질 우위를 보이면서 VRAM에 
 profiler evidence가 현재 hardware를 병목으로 확인할 때 다시 평가한다.
 
 **Phase 12 status: COMPLETE.**
+
+
+# 33. 2026-08-14 Local TXT/Markdown Semantic Research Vertical Slice
+
+> 이 섹션은 Stage 4 Local Document Expansion의 최신 authoritative status이다.
+> Stage 4 전체 완료가 아니라 첫 TXT/Markdown vertical slice 완료를 기록한다.
+
+## 33.1 상태
+
+```text
+Stage 4 Local Document Expansion
+→ IN PROGRESS
+
+Initial TXT/Markdown Semantic Vertical Slice
+→ COMPLETE
+```
+
+완료된 범위:
+
+- UTF-8 `.txt`, `.md`, `.markdown`
+- 실제 Local in-memory source search와 reader
+- `search_query_text` query provenance
+- `local_path`와 `filename` provenance
+- paragraph 및 exact character range 보존
+- embedding + lexical RRF shortlist와 semantic evidence selection
+- generated claim integration
+- semantic citation, claim relevance, answer coverage integration
+- `aira research` deterministic/offline 기본 계약 보존
+- `--mode semantic` 명시적 opt-in
+- deterministic 및 semantic 실제 CLI smoke에서 `report.md`/`result.json` 생성
+- semantic smoke에서 whole document가 아닌 relevant paragraph 선택
+- full regression `4643 passed`
+- Ruff `All checks passed`, `git diff --check` 통과
+
+미완료 범위:
+
+- PDF, scanned PDF/OCR, HWP, HWPX, DOCX
+- page number 및 line number provenance
+- table-specialized parsing
+- persistent indexing/embedding cache
+- Web + Local unified Integrated RAG
+
+현재 다음 제품 순서:
+
+```text
+Local Document expansion
+→ Integrated Web+Local RAG
+→ Patent Research Vertical Slice
+```

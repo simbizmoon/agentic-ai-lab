@@ -295,6 +295,7 @@ class InMemoryResearchSourceSearchTool(
                 **record.metadata,
                 "provider": self.provider,
                 "relevance_score": str(score),
+                "search_query_text": query.query_text,
             },
         )
 

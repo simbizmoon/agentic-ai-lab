@@ -33,6 +33,7 @@ def record(
     snippet: str = "",
     keywords: list[str] | None = None,
     published_at: date | None = None,
+    metadata: dict[str, str] | None = None,
 ) -> InMemoryResearchSourceRecord:
     """Return one source record."""
 
@@ -44,6 +45,7 @@ def record(
         snippet=snippet,
         keywords=keywords or [],
         published_at=published_at,
+        metadata=metadata or {},
     )
 
 
@@ -225,17 +227,44 @@ def test_tool_assigns_sequential_ranks() -> None:
 
 
 def test_tool_adds_search_metadata() -> None:
-    result = tool().search(query())
+    value = InMemoryResearchSourceSearchTool(
+        records=[
+            record(
+                source_id="source-memory",
+                title="Agent working memory",
+                url="https://example.com/memory",
+                source_type=ResearchSourceType.ACADEMIC,
+                metadata={"document_path": "memory.md"},
+            )
+        ]
+    )
 
-    candidate = result.candidates[0]
+    first_query = query(query_text="agent memory")
+    second_query = query(query_text="working memory")
 
-    assert candidate.metadata["provider"] == (
+    first_candidate = value.search(
+        first_query
+    ).candidates[0]
+    second_candidate = value.search(
+        second_query
+    ).candidates[0]
+
+    assert first_candidate.metadata["provider"] == (
         "in-memory"
     )
     assert int(
-        candidate.metadata["relevance_score"]
+        first_candidate.metadata["relevance_score"]
     ) > 0
-    assert result.metadata["tool"] == (
+    assert first_candidate.metadata["document_path"] == (
+        "memory.md"
+    )
+    assert first_candidate.metadata[
+        "search_query_text"
+    ] == first_query.query_text
+    assert second_candidate.metadata[
+        "search_query_text"
+    ] == second_query.query_text
+    assert value.search(first_query).metadata["tool"] == (
         "in_memory_source_search"
     )
 
