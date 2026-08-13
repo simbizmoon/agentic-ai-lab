@@ -19,12 +19,6 @@ from app.config import Settings, load_settings
 from app.rag.openai_embedding_provider import (
     OpenAIEmbeddingProvider,
 )
-from app.research.answer_coverage_evaluation_service import (
-    AnswerCoverageEvaluationService,
-)
-from app.research.claim_relevance_evaluation_service import (
-    ClaimRelevanceEvaluationService,
-)
 from app.research.concrete_aira_research_runner import (
     ConcreteAiraResearchRunner,
 )
@@ -34,28 +28,22 @@ from app.research.embedding_semantic_evidence_shortlister import (
 from app.research.generative_pipeline_claim_builder import (
     GenerativePipelineClaimBuilder,
 )
+from app.research.hybrid_runtime import (
+    build_hybrid_bounded_research_workers,
+    legacy_compatible_role_policy,
+)
 from app.research.live_runtime import (
     build_live_research_pipeline,
 )
 from app.research.local_worker_runtime import (
     LocalWorkerSettings,
-    build_local_research_workers,
     load_local_worker_settings,
-)
-from app.research.openai_answer_coverage_evaluator import (
-    OpenAIAnswerCoverageEvaluator,
-)
-from app.research.openai_claim_relevance_evaluator import (
-    OpenAIClaimRelevanceEvaluator,
 )
 from app.research.openai_evidence_claim_generator import (
     OpenAIEvidenceClaimGenerator,
 )
 from app.research.openai_evidence_relevance_evaluator import (
     OpenAIEvidenceRelevanceEvaluator,
-)
-from app.research.openai_semantic_citation_evaluator import (
-    OpenAISemanticCitationEvaluator,
 )
 from app.research.paragraph_evidence_extractor import (
     ParagraphEvidenceExtractor,
@@ -65,9 +53,6 @@ from app.research.pipeline_analysis_adapters import (
 )
 from app.research.research_result_writer import (
     ResearchResultWriter,
-)
-from app.research.semantic_citation_verification_service import (
-    SemanticCitationVerificationService,
 )
 from app.research.semantic_evidence_reranker import (
     SemanticEvidenceReranker,
@@ -178,47 +163,25 @@ class LiveResearchHandler:
         local_worker_settings = (
             self._local_worker_settings_loader()
         )
-
-        if local_worker_settings.enabled:
-            local_workers = build_local_research_workers(
-                settings=local_worker_settings,
-                claim_relevance_budget=LIVE_CLAIM_RELEVANCE_BUDGET,
-            )
-            semantic_citation_verifier = (
-                local_workers.semantic_citation_verifier
-            )
-            claim_relevance_evaluator = (
-                local_workers.claim_relevance_evaluator
-            )
-            answer_coverage_evaluator = (
-                local_workers.answer_coverage_evaluator
-            )
-        else:
-            semantic_citation_verifier = (
-                SemanticCitationVerificationService(
-                    evaluator=OpenAISemanticCitationEvaluator(
-                        client=openai_client,
-                        model=settings.openai_model,
-                    )
-                )
-            )
-            claim_relevance_evaluator = (
-                ClaimRelevanceEvaluationService(
-                    evaluator=OpenAIClaimRelevanceEvaluator(
-                        client=openai_client,
-                        model=settings.openai_model,
-                    ),
-                    budget=LIVE_CLAIM_RELEVANCE_BUDGET,
-                )
-            )
-            answer_coverage_evaluator = (
-                AnswerCoverageEvaluationService(
-                    evaluator=OpenAIAnswerCoverageEvaluator(
-                        client=openai_client,
-                        model=settings.openai_model,
-                    )
-                )
-            )
+        role_policy = legacy_compatible_role_policy(
+            local_worker_settings=local_worker_settings
+        )
+        bounded_workers = build_hybrid_bounded_research_workers(
+            role_policy=role_policy,
+            local_worker_settings=local_worker_settings,
+            openai_client=openai_client,
+            openai_model=settings.openai_model,
+            claim_relevance_budget=LIVE_CLAIM_RELEVANCE_BUDGET,
+        )
+        semantic_citation_verifier = (
+            bounded_workers.semantic_citation_verifier
+        )
+        claim_relevance_evaluator = (
+            bounded_workers.claim_relevance_evaluator
+        )
+        answer_coverage_evaluator = (
+            bounded_workers.answer_coverage_evaluator
+        )
         evidence_extractor = PipelineEvidenceExtractorAdapter(
             SemanticResearchEvidenceExtractor(
                 question=question,
