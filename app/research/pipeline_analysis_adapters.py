@@ -22,6 +22,7 @@ from app.schemas.research_evidence import (
     ResearchEvidenceStance,
 )
 from app.schemas.research_source_document import (
+    ResearchSourceDocument,
     ResearchSourceDocumentSet,
 )
 
@@ -75,7 +76,13 @@ class PipelineEvidenceExtractorAdapter:
                 document=document,
                 result=result,
             )
-            evidence.extend(result.ordered_evidence())
+            evidence.extend(
+                self._with_section_metadata(
+                    document=document,
+                    evidence=item,
+                )
+                for item in result.ordered_evidence()
+            )
 
             metadata = result.metadata
             attempts += int(metadata.get("semantic_budget_attempts", "0"))
@@ -98,6 +105,34 @@ class PipelineEvidenceExtractorAdapter:
             request_id=document_set.request_id,
             document_set=document_set,
             evidence=evidence,
+        )
+
+    @staticmethod
+    def _with_section_metadata(
+        *,
+        document: ResearchSourceDocument,
+        evidence: ResearchEvidence,
+    ) -> ResearchEvidence:
+        """Inherit metadata from one containing document section."""
+
+        containing_sections = [
+            item
+            for item in document.sections
+            if item.start_character <= evidence.start_character
+            and evidence.end_character <= item.end_character
+        ]
+        if len(containing_sections) != 1:
+            return evidence
+
+        section = containing_sections[0]
+
+        return evidence.model_copy(
+            update={
+                "metadata": {
+                    **section.metadata,
+                    **evidence.metadata,
+                }
+            }
         )
 
 

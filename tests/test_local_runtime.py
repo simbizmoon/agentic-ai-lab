@@ -6,6 +6,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
+import pytest
+
 from app.budget import ExecutionBudget
 from app.rag.embedding_provider import EmbeddingProvider
 from app.research.embedding_semantic_evidence_shortlister import (
@@ -62,8 +64,12 @@ from app.schemas.research_request import (
     ResearchRequest,
     ResearchSourceType,
 )
-from app.schemas.research_source_document import ResearchSourceDocumentSet
+from app.schemas.research_source_document import (
+    ResearchSourceContentType,
+    ResearchSourceDocumentSet,
+)
 from app.services.text_generation import TokenUsage
+from tests.test_local_pdf_text_extractor import write_pdf
 
 
 class RecordingEvidenceExtractor:
@@ -135,6 +141,39 @@ def test_local_runtime_runs_end_to_end(
     assert result.report.claim_count == 1
     assert result.report.citation_count == 1
     assert result.quality.passed is True
+
+
+
+def test_local_runtime_runs_pdf_deterministically(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "deterministic.pdf"
+    first = "First PDF page evidence."
+    second = "Second PDF page evidence."
+    write_pdf(source, [first, second])
+    bundle = LocalDocumentAdapter().load((source,))
+    request = ResearchRequest(
+        request_id="local-runtime-pdf-deterministic",
+        question="What evidence is in the local PDF document?",
+        objective="Create an offline grounded claim from the PDF evidence.",
+        include_topics=["local PDF evidence"],
+        preferred_source_types=[ResearchSourceType.OTHER],
+        maximum_sources=1,
+    )
+
+    result = build_local_research_pipeline(bundle).run(request)
+
+    document = result.workspace.document_set.documents[0]
+    evidence = result.workspace.evidence_set.evidence[0]
+    assert document.content_type is ResearchSourceContentType.PDF_TEXT
+    assert [section.metadata["page_number"] for section in document.sections] == [
+        "1",
+        "2",
+    ]
+    assert evidence.excerpt == document.content
+    assert "page_number" not in evidence.metadata
+    assert result.workspace.progress().claim_count == 1
+    assert result.report.citation_count == 1
 
 
 def test_local_runtime_uses_injected_analysis_components(
@@ -343,8 +382,11 @@ class RecordingAnswerCoverageEvaluator:
         )
 
 
+
+@pytest.mark.parametrize("source_format", ["markdown", "pdf"])
 def test_local_runtime_runs_semantic_pipeline_offline(
     tmp_path: Path,
+    source_format: str,
 ) -> None:
     docker = (
         "Docker bridge networking assigns private addresses and forwards "
@@ -360,8 +402,15 @@ def test_local_runtime_runs_semantic_pipeline_offline(
         "to support point-in-time database recovery."
     )
     content = f"{docker}\n\n{routing}\n\n{postgres}"
-    source = tmp_path / "hybrid-routing.md"
-    source.write_text(content, encoding="utf-8")
+    source = tmp_path / (
+        "hybrid-routing.pdf"
+        if source_format == "pdf"
+        else "hybrid-routing.md"
+    )
+    if source_format == "pdf":
+        write_pdf(source, [docker, routing, postgres])
+    else:
+        source.write_text(content, encoding="utf-8")
     bundle = LocalDocumentAdapter().load((source,))
     evidence_extractor = PipelineEvidenceExtractorAdapter(
         SemanticResearchEvidenceExtractor(
@@ -429,6 +478,13 @@ def test_local_runtime_runs_semantic_pipeline_offline(
     }
 
     assert evidence.excerpt == routing
+    if source_format == "pdf":
+        assert document.content_type is ResearchSourceContentType.PDF_TEXT
+        assert evidence.metadata["page_number"] == "2"
+        assert [
+            section.metadata["page_number"]
+            for section in document.sections
+        ] == ["1", "2", "3"]
     assert evidence.excerpt != document.content
     assert document.content[
         evidence.start_character:evidence.end_character
@@ -438,7 +494,12 @@ def test_local_runtime_runs_semantic_pipeline_offline(
     assert candidate.metadata["search_query_text"] == (
         query_by_id[candidate.query_id]
     )
-    assert result.workspace.claim_set.claims[0].text == routing
+    claim = result.workspace.claim_set.claims[0]
+    citation = claim.citations[0]
+    assert claim.text == routing
+    assert citation.excerpt == evidence.excerpt
+    assert citation.start_character == evidence.start_character
+    assert citation.end_character == evidence.end_character
     assert citation_verifier.calls == 1
     assert relevance_evaluator.calls == 1
     assert coverage_evaluator.calls == 1

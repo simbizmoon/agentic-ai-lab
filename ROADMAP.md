@@ -37,8 +37,8 @@
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
 - 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
-- 현재 상태: Live Research 기준선을 유지하면서 Local TXT/Markdown Semantic Research
-  Vertical Slice를 통합·검증 완료했다. Stage 4의 PDF/HWP/HWPX 확장과
+- 현재 상태: Live Research 기준선을 유지하면서 Local TXT/Markdown 및 text-based PDF
+  Semantic Research Vertical Slice를 통합·검증 완료했다. Stage 4의 HWP/HWPX 확장과
   Integrated Web+Local RAG는 아직 진행 전이다.
 - 현재 기준일: 2026-08-14
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
@@ -695,20 +695,21 @@ Rewrite가 아니라 Integration-first
 
 - [~] 진행 중
 - [x] 초기 TXT/Markdown Semantic Research Vertical Slice 완료
-- [ ] PDF/HWP/HWPX 및 Integrated Web+Local 범위는 미완료
+- [x] text-based PDF vertical slice 완료
+- [ ] scanned PDF/OCR, HWP/HWPX 및 Integrated Web+Local 범위는 미완료
 
 ## Work Items
 
 - [x] TXT
 - [x] Markdown
-- [ ] PDF Text
+- [x] PDF Text (`pypdf`)
 - [ ] Scanned PDF 처리 전략
 - [ ] HWP
 - [ ] HWPX
 - [x] 파일 Metadata (`local_path`, `filename`)
 - [x] Query provenance (`search_query_text`)
 - [ ] Heading 또는 Section
-- [ ] 페이지 번호
+- [x] PDF physical page number (single-section-contained evidence)
 - [x] 문단 및 character range 위치 보존
 - [ ] 줄 번호
 - [ ] 표 처리
@@ -721,7 +722,7 @@ Rewrite가 아니라 Integration-first
 - [ ] 허용된 경로
 - [ ] 파일 크기 제한
 - [ ] 민감문서 외부 전송 승인
-- [ ] Parser 실패 처리
+- [x] PDF parser/encrypted/no-text 실패 처리
 - [ ] 동일 문서 Hash와 Cache
 
 ## 완료 결과
@@ -2788,10 +2789,10 @@ profiler evidence가 현재 hardware를 병목으로 확인할 때 다시 평가
 **Phase 12 status: COMPLETE.**
 
 
-# 33. 2026-08-14 Local TXT/Markdown Semantic Research Vertical Slice
+# 33. 2026-08-14 Local Document Semantic Research Vertical Slices
 
 > 이 섹션은 Stage 4 Local Document Expansion의 최신 authoritative status이다.
-> Stage 4 전체 완료가 아니라 첫 TXT/Markdown vertical slice 완료를 기록한다.
+> Stage 4 전체 완료가 아니라 TXT/Markdown 및 text-based PDF vertical slice 완료를 기록한다.
 
 ## 33.1 상태
 
@@ -2801,11 +2802,16 @@ Stage 4 Local Document Expansion
 
 Initial TXT/Markdown Semantic Vertical Slice
 → COMPLETE
+
+Text-based PDF Vertical Slice
+→ COMPLETE
 ```
 
 완료된 범위:
 
 - UTF-8 `.txt`, `.md`, `.markdown`
+- text-based `.pdf` (`pypdf` page-by-page extraction)
+- nonblank physical page sections and `page_number` evidence provenance
 - 실제 Local in-memory source search와 reader
 - `search_query_text` query provenance
 - `local_path`와 `filename` provenance
@@ -2817,13 +2823,15 @@ Initial TXT/Markdown Semantic Vertical Slice
 - `--mode semantic` 명시적 opt-in
 - deterministic 및 semantic 실제 CLI smoke에서 `report.md`/`result.json` 생성
 - semantic smoke에서 whole document가 아닌 relevant paragraph 선택
-- full regression `4643 passed`
+- deterministic + semantic PDF CLI smoke and exact citation range verification
+- malformed/encrypted/no-text PDF clear failure
+- full regression `4678 passed`
 - Ruff `All checks passed`, `git diff --check` 통과
 
 미완료 범위:
 
-- PDF, scanned PDF/OCR, HWP, HWPX, DOCX
-- page number 및 line number provenance
+- scanned PDF/OCR, HWP, HWPX, DOCX
+- line number provenance
 - table-specialized parsing
 - persistent indexing/embedding cache
 - Web + Local unified Integrated RAG

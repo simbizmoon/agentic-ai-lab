@@ -1,4 +1,4 @@
-"""Convert local Markdown and text files into research records."""
+"""Convert supported local files into research records."""
 
 from __future__ import annotations
 
@@ -10,6 +10,10 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.research.local_pdf_text_extractor import (
+    LocalPdfTextExtractionError,
+    LocalPdfTextExtractor,
+)
 from app.schemas.in_memory_research_document import (
     InMemoryResearchDocumentRecord,
 )
@@ -19,12 +23,14 @@ from app.schemas.in_memory_research_source import (
 from app.schemas.research_request import ResearchSourceType
 from app.schemas.research_source_document import (
     ResearchSourceContentType,
+    ResearchSourceDocumentSection,
 )
 
 _SUPPORTED_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
         ".md",
         ".markdown",
+        ".pdf",
         ".txt",
     }
 )
@@ -60,7 +66,7 @@ class LocalDocumentBundle(BaseModel):
 
 
 class LocalDocumentAdapter:
-    """Load local Markdown and text files for research."""
+    """Load supported local files for research."""
 
     def load(
         self,
@@ -89,7 +95,9 @@ class LocalDocumentAdapter:
 
             seen_paths.add(resolved)
 
-            content = self._read_content(resolved)
+            content, sections, pdf_metadata = (
+                self._read_document(resolved)
+            )
             source_id = self._source_id(
                 path=resolved,
                 position=position,
@@ -103,6 +111,7 @@ class LocalDocumentAdapter:
                 "local_path": str(resolved),
                 "filename": resolved.name,
                 "adapter": "local-document",
+                **pdf_metadata,
             }
 
             source_records.append(
@@ -129,6 +138,7 @@ class LocalDocumentAdapter:
                     url=location,
                     content_type=self._content_type(resolved),
                     content=content,
+                    sections=sections,
                     language=self._language(content),
                     metadata=metadata,
                 )
@@ -160,11 +170,59 @@ class LocalDocumentAdapter:
 
         if resolved.suffix.casefold() not in _SUPPORTED_SUFFIXES:
             raise ValueError(
-                "local document must be Markdown or text: "
+                "local document must be Markdown, text, or PDF: "
                 f"{resolved}"
             )
 
         return resolved
+
+    @classmethod
+    def _read_document(
+        cls,
+        path: Path,
+    ) -> tuple[
+        str,
+        list[ResearchSourceDocumentSection],
+        dict[str, str],
+    ]:
+        """Read content and optional format-specific structure."""
+
+        if path.suffix.casefold() != ".pdf":
+            return cls._read_content(path), [], {}
+
+        try:
+            result = LocalPdfTextExtractor().extract(path)
+        except LocalPdfTextExtractionError as error:
+            raise ValueError(
+                f"local PDF could not be read: {path}: {error}"
+            ) from error
+
+        text_pages = [page for page in result.pages if page.content]
+        sections = [
+            ResearchSourceDocumentSection(
+                section_id=f"page-{page.page_number:03d}",
+                heading=None,
+                content=page.content,
+                order=order,
+                start_character=page.start_character,
+                end_character=page.end_character,
+                metadata={
+                    "page_number": str(page.page_number),
+                },
+            )
+            for order, page in enumerate(text_pages, start=1)
+        ]
+        page_count = result.total_page_count
+        text_page_count = len(text_pages)
+        metadata = {
+            "pdf_page_count": str(page_count),
+            "pdf_text_page_count": str(text_page_count),
+            "pdf_blank_page_count": str(
+                page_count - text_page_count
+            ),
+        }
+
+        return result.content, sections, metadata
 
     @staticmethod
     def _read_content(path: Path) -> str:
@@ -229,6 +287,9 @@ class LocalDocumentAdapter:
                 if title:
                     return title
 
+        if path.suffix.casefold() == ".pdf":
+            return path.stem
+
         return (
             path.stem
             .replace("_", " ")
@@ -291,6 +352,9 @@ class LocalDocumentAdapter:
 
         if path.suffix.casefold() in {".md", ".markdown"}:
             return ResearchSourceContentType.MARKDOWN
+
+        if path.suffix.casefold() == ".pdf":
+            return ResearchSourceContentType.PDF_TEXT
 
         return ResearchSourceContentType.TEXT
 

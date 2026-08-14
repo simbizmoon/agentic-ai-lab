@@ -14,6 +14,7 @@ from pydantic import (
 
 from app.schemas.research_source_document import (
     ResearchSourceContentType,
+    ResearchSourceDocumentSection,
 )
 
 
@@ -39,6 +40,9 @@ class InMemoryResearchDocumentRecord(BaseModel):
         ResearchSourceContentType.TEXT
     )
     content: str = ""
+    sections: list[ResearchSourceDocumentSection] = Field(
+        default_factory=list
+    )
     language: str | None = None
     read_mode: InMemoryResearchDocumentReadMode = (
         InMemoryResearchDocumentReadMode.READABLE
@@ -90,6 +94,8 @@ class InMemoryResearchDocumentRecord(BaseModel):
                     "failure_message"
                 )
 
+            self._validate_sections()
+
         elif (
             self.read_mode
             is InMemoryResearchDocumentReadMode.FAIL
@@ -97,6 +103,11 @@ class InMemoryResearchDocumentRecord(BaseModel):
             if self.content:
                 raise ValueError(
                     "failing record must not contain content"
+                )
+
+            if self.sections:
+                raise ValueError(
+                    "failing record must not contain sections"
                 )
 
             if (
@@ -128,3 +139,37 @@ class InMemoryResearchDocumentRecord(BaseModel):
                 )
 
         return self
+
+    def _validate_sections(self) -> None:
+        """Validate optional prebuilt sections against record content."""
+
+        section_ids = [
+            section.section_id.strip().casefold()
+            for section in self.sections
+        ]
+        if len(set(section_ids)) != len(section_ids):
+            raise ValueError(
+                "record section IDs must be unique"
+            )
+
+        orders = [section.order for section in self.sections]
+        if len(set(orders)) != len(orders):
+            raise ValueError(
+                "record section orders must be unique"
+            )
+        if orders != sorted(orders):
+            raise ValueError(
+                "record sections must be ordered by order"
+            )
+
+        for section in self.sections:
+            if section.end_character > len(self.content):
+                raise ValueError(
+                    "record section range must be within content"
+                )
+            if self.content[
+                section.start_character:section.end_character
+            ] != section.content:
+                raise ValueError(
+                    "record section content must match its range"
+                )

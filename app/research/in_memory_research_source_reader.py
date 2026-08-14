@@ -104,7 +104,14 @@ class InMemoryResearchSourceReader(
             )
 
         content = record.content
-        sections = self._build_sections(content)
+        sections = (
+            [
+                section.model_copy(deep=True)
+                for section in record.sections
+            ]
+            if record.sections
+            else self._build_sections(content)
+        )
 
         return ResearchSourceDocument(
             document_id=self._document_id(candidate),

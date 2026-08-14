@@ -118,7 +118,10 @@ def test_handler_validates_sources_before_loading_providers(
         ),
     )
 
-    with pytest.raises(ValueError, match="Markdown or text"):
+    with pytest.raises(
+        ValueError,
+        match="could not be opened or parsed",
+    ):
         handler(
             "Question",
             "Objective",

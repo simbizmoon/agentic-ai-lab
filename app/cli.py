@@ -29,6 +29,7 @@ _SUPPORTED_SOURCE_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
         ".md",
         ".markdown",
+        ".pdf",
         ".txt",
     }
 )
@@ -54,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create a grounded report from local documents.",
         description=(
             "Run grounded research using one or more local "
-            "Markdown or text documents."
+            "Markdown, text, or PDF documents."
         ),
     )
 
@@ -82,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         metavar="PATH",
         help=(
-            "Local Markdown or text source path. "
+            "Local Markdown, text, or PDF source path. "
             "Repeat this option to provide multiple sources."
         ),
     )
@@ -214,7 +215,7 @@ def validate_sources(
             _SUPPORTED_SOURCE_SUFFIXES
         ):
             raise ValueError(
-                "source must be a Markdown or text file: "
+                "source must be a Markdown, text, or PDF file: "
                 f"{source}"
             )
 

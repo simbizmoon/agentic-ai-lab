@@ -12,6 +12,7 @@ from app.cli import (
     main,
     validate_sources,
 )
+from tests.test_local_pdf_text_extractor import write_pdf
 
 
 def test_parser_accepts_research_command(
@@ -125,17 +126,63 @@ def test_validate_sources_rejects_missing_file(
         validate_sources([str(missing)])
 
 
-def test_validate_sources_rejects_unsupported_file(
+def test_validate_sources_accepts_pdf(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "source.pdf"
-    source.write_bytes(b"not a real PDF")
+    source.write_bytes(b"CLI validation does not parse content")
+
+    assert validate_sources([str(source)]) == (source.resolve(),)
+
+
+def test_validate_sources_rejects_unsupported_file(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.docx"
+    source.write_bytes(b"unsupported")
 
     with pytest.raises(
         ValueError,
-        match="Markdown or text file",
+        match="Markdown, text, or PDF file",
     ):
         validate_sources([str(source)])
+
+
+
+@pytest.mark.parametrize(
+    ("fixture", "message"),
+    [
+        ("malformed", "could not be opened or parsed"),
+        ("encrypted", "encrypted PDF requires credentials"),
+        ("no-text", "no extractable nonblank text"),
+    ],
+)
+def test_main_reports_invalid_pdf_through_local_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    fixture: str,
+    message: str,
+) -> None:
+    source = tmp_path / f"{fixture}.pdf"
+    if fixture == "malformed":
+        source.write_bytes(b"not a PDF")
+    elif fixture == "encrypted":
+        write_pdf(source, ["Protected text."], password="secret")
+    else:
+        write_pdf(source, [None])
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does local PDF research handle errors?",
+            "--source",
+            str(source),
+        ]
+    )
+
+    assert result == 2
+    assert message in capsys.readouterr().err
 
 
 def test_main_calls_injected_research_handler(
@@ -215,6 +262,53 @@ def test_main_selects_semantic_local_handler(
 
     assert result == 0
     assert calls == ["semantic"]
+
+
+@pytest.mark.parametrize("mode", ["deterministic", "semantic"])
+def test_main_passes_resolved_pdf_to_selected_local_handler(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"handler test PDF")
+    calls: list[tuple[str, tuple[Path, ...]]] = []
+
+    def deterministic_handler(
+        _question: str,
+        _objective: str,
+        sources: tuple[Path, ...],
+        _output_dir: Path,
+    ) -> int:
+        calls.append(("deterministic", sources))
+        return 0
+
+    def semantic_handler(
+        _question: str,
+        _objective: str,
+        sources: tuple[Path, ...],
+        _output_dir: Path,
+    ) -> int:
+        calls.append(("semantic", sources))
+        return 0
+
+    arguments = [
+        "research",
+        "--question",
+        "How does local PDF research work?",
+        "--source",
+        str(source),
+    ]
+    if mode == "semantic":
+        arguments[1:1] = ["--mode", "semantic"]
+
+    result = main(
+        arguments,
+        research_handler=deterministic_handler,
+        semantic_research_handler=semantic_handler,
+    )
+
+    assert result == 0
+    assert calls == [(mode, (source.resolve(),))]
 
 
 def test_main_returns_error_for_short_question(

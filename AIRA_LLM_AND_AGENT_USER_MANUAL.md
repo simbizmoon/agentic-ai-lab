@@ -22,7 +22,7 @@
 5. Local/OpenAI Hybrid 구조 이해
 6. Single-Agent / Multi-Agent 사용 원칙 이해
 7. OpenAI Agents SDK로 별도 Agent 실행
-8. Local TXT/Markdown Research 실행과 모드 선택
+8. Local Document Research 실행과 모드 선택
 9. 상태 확인, 종료, 문제 해결
 
 중요한 원칙:
@@ -370,7 +370,7 @@ export AIRA_SOURCE_READ_CONCURRENCY=4
 ## 8.3 Local Document Research 모드
 
 `research`는 로컬 문서를 조사하는 capability이고, `--mode`는 그 문서를
-어떻게 분석할지 선택한다. 현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`이다.
+어떻게 분석할지 선택한다. 현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`과 text-based `.pdf`이다.
 
 ### 기본 deterministic/offline 모드
 
@@ -394,6 +394,15 @@ aira research --mode deterministic \
   --source notes.md
 ```
 
+Text-based PDF도 같은 offline 경로를 사용할 수 있다.
+
+```bash
+aira research --mode deterministic \
+  --question "What evidence does this PDF provide?" \
+  --objective "Create a grounded offline report from the local PDF." \
+  --source evidence.pdf
+```
+
 이 경로는 `WholeDocumentEvidenceExtractor`와
 `DeterministicPipelineClaimBuilder`를 사용하며 기존 `report.md`와
 `result.json` 출력을 보존한다.
@@ -408,12 +417,12 @@ export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 aira research --mode semantic \
   --question "How does AIRA divide work between OpenAI and the local model?" \
   --objective "Explain hybrid role routing using grounded local evidence." \
-  --source hybrid-routing.md \
+  --source hybrid-routing.pdf \
   --output-dir reports/local-semantic
 ```
 
 Semantic 모드는 local search/reader와 query, local path, filename provenance를
-보존하면서 paragraph candidate, lexical + embedding RRF shortlist, semantic
+보존하며, PDF에서는 physical page number와 exact character range를 함께 보존하면서 paragraph candidate, lexical + embedding RRF shortlist, semantic
 evidence relevance, generated claim 및 semantic citation/relevance/coverage를
 실행한다.
 
@@ -433,8 +442,7 @@ AIRA_RESEARCH_WORKER_PROVIDER 정책에 따라 OpenAI 또는 Local
 
 `AIRA_RESEARCH_WORKER_PROVIDER=local`은 full-local research를 뜻하지 않는다.
 Semantic 모드는 여전히 유효한 OpenAI 설정이 필요하다. 실패 시 deterministic으로
-조용히 fallback하지 않고 오류를 보고한다. PDF, scanned PDF/OCR, HWP, HWPX,
-DOCX는 이 Local semantic slice에서 아직 지원하지 않는다.
+조용히 fallback하지 않고 오류를 보고한다. Text-based PDF는 지원하지만 scanned/image-only PDF와 OCR은 지원하지 않는다. HWP, HWPX, DOCX도 아직 지원하지 않는다.
 
 ### Live Web Research
 

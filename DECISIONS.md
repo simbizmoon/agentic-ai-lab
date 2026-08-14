@@ -2700,3 +2700,44 @@ Research에 일반화하지 않는다. 새 semantic mode에서는 paragraph sema
 - full regression: `4643 passed`
 - Ruff: `All checks passed`
 - `git diff --check`: 통과
+
+---
+
+## D-050 — Local text-based PDF는 기존 Local Research 모드와 generic section provenance를 재사용
+
+- 상태: 확정
+- 날짜: 2026-08-14
+- 적용 범위: Stage 4 Local PDF Text Vertical Slice
+
+### 결정
+
+- `aira research`와 `aira research --mode deterministic`은 text-based `.pdf`를 offline으로 처리한다.
+- `aira research --mode semantic`도 text-based `.pdf`를 명시적 semantic 경로로 처리한다.
+- PDF text extraction은 direct runtime dependency인 BSD-licensed `pypdf`를 사용한다.
+- PDF는 physical page별 text를 추출하고 nonblank page를 prebuilt document section으로 보존한다.
+- physical page number는 section `metadata["page_number"]`에 문자열로 기록한다.
+- evidence range가 하나의 section에 완전히 포함될 때만 해당 section metadata를 evidence metadata로 병합한다.
+- evidence가 여러 section/page에 걸치면 page를 추측하거나 첫 page를 선택하지 않는다.
+- 기존 evidence metadata는 section metadata와 충돌할 때 우선한다.
+- deterministic whole-document evidence는 여러 page를 포함할 수 있으므로 page number가 없을 수 있다.
+- semantic PDF evidence와 citation은 동일한 exact character range를 유지한다.
+- malformed, encrypted, no-text/image-only PDF는 명확히 실패하며 silent fallback이나 OCR을 수행하지 않는다.
+- HTTP/Web PDF reading은 계속 지원하지 않는다.
+- scanned PDF/OCR, HWP/HWPX 및 Integrated Web+Local RAG는 후속 범위이다.
+
+### D-049와의 관계
+
+D-049의 deterministic 기본, semantic opt-in, provider routing 및 no-silent-fallback 계약은
+그대로 유지한다. D-049의 첫 지원 형식이 TXT/Markdown이라는 기록은 당시 vertical slice의
+역사적 사실로 보존하며, D-050이 현재 Local 형식 범위를 text-based PDF까지 확장한다.
+
+### 검증
+
+- deterministic PDF CLI smoke: `pdf_text`, 3 page sections, exact whole-document citation
+- semantic PDF CLI smoke: page 2 evidence만 선택, range `114..303`, `page_number="2"`
+- semantic citation: evidence와 동일한 excerpt 및 `114..303` range
+- scanned-like/no-text, encrypted, malformed PDF CLI/handler failure 검증
+- targeted regression: `93 passed`
+- full regression: `4678 passed`
+- Ruff: `All checks passed`
+- `git diff --check`: 통과

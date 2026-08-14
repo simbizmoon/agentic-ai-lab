@@ -20,6 +20,7 @@ from app.schemas.research_source_candidate import (
 )
 from app.schemas.research_source_document import (
     ResearchSourceContentType,
+    ResearchSourceDocumentSection,
     ResearchSourceDocumentStatus,
 )
 
@@ -52,6 +53,7 @@ def readable_record(
     *,
     source_id: str = "source-001",
     url: str = "https://example.com/source",
+    sections: list[ResearchSourceDocumentSection] | None = None,
 ) -> InMemoryResearchDocumentRecord:
     """Return one readable document record."""
 
@@ -61,10 +63,37 @@ def readable_record(
         content_type=ResearchSourceContentType.TEXT,
         content=CONTENT,
         language="en",
+        sections=sections or [],
         metadata={
             "collection": "test",
         },
     )
+
+
+def prebuilt_sections() -> list[ResearchSourceDocumentSection]:
+    """Return ordered non-contiguous prebuilt sections."""
+
+    second_start = CONTENT.index("Episodic")
+    return [
+        ResearchSourceDocumentSection(
+            section_id="page-alpha",
+            heading="First page",
+            content=CONTENT[:12],
+            order=1,
+            start_character=0,
+            end_character=12,
+            metadata={"page_number": "1"},
+        ),
+        ResearchSourceDocumentSection(
+            section_id="page-charlie",
+            heading=None,
+            content=CONTENT[second_start:],
+            order=2,
+            start_character=second_start,
+            end_character=len(CONTENT),
+            metadata={"page_number": "3"},
+        ),
+    ]
 
 
 def reader() -> InMemoryResearchSourceReader:
@@ -107,6 +136,51 @@ def test_reader_builds_ordered_sections() -> None:
         "Agent memory stores contextual information.",
         "Episodic memory records prior experiences.",
     ]
+
+
+def test_reader_preserves_prebuilt_sections() -> None:
+    sections = prebuilt_sections()
+    value = InMemoryResearchSourceReader(
+        records=[readable_record(sections=sections)]
+    )
+
+    document = value.read(candidate())
+
+    assert [item.section_id for item in document.sections] == [
+        "page-alpha",
+        "page-charlie",
+    ]
+    assert [item.heading for item in document.sections] == [
+        "First page",
+        None,
+    ]
+    assert [item.order for item in document.sections] == [1, 2]
+    assert [
+        (item.start_character, item.end_character)
+        for item in document.sections
+    ] == [
+        (0, 12),
+        (CONTENT.index("Episodic"), len(CONTENT)),
+    ]
+    assert [item.metadata["page_number"] for item in document.sections] == [
+        "1",
+        "3",
+    ]
+    assert "section-001" not in {
+        item.section_id for item in document.sections
+    }
+
+
+def test_reader_defensively_copies_prebuilt_sections() -> None:
+    value = InMemoryResearchSourceReader(
+        records=[readable_record(sections=prebuilt_sections())]
+    )
+
+    first = value.read(candidate())
+    first.sections[0].metadata["page_number"] = "changed"
+    second = value.read(candidate())
+
+    assert second.sections[0].metadata["page_number"] == "1"
 
 
 def test_reader_section_ranges_match_content() -> None:

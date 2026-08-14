@@ -40,14 +40,14 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 
 ## 2.2 Local Semantic Research
 
-`aira research --mode semantic`은 UTF-8 TXT/Markdown 문서를 실제 local
+`aira research --mode semantic`은 UTF-8 TXT/Markdown 및 text-based PDF 문서를 실제 local
 in-memory search와 reader로 처리하고 paragraph 단위 semantic evidence와 generated
-claim을 만든다. query text, local path, filename 및 character range provenance를
+claim을 만든다. query text, local path, filename, character range 및 PDF physical page provenance를
 보존한다.
 
 ```text
-TXT / Markdown
-→ LocalDocumentAdapter
+TXT / Markdown / Text PDF
+→ LocalDocumentAdapter (PDF: pypdf page extraction)
 → In-memory Local Search / Reader
 → ParagraphEvidenceExtractor
 → Embedding + Lexical RRF Shortlist
@@ -910,20 +910,20 @@ Known Failure가 Citation Judge 평가에서 확인되었다.
 
 ## 24.4 Local Document Expansion은 진행 중
 
-TXT/Markdown Semantic Local Vertical Slice는 구현되었고 실제 CLI smoke로
+TXT/Markdown 및 text-based PDF Semantic Local Vertical Slice는 구현되었고 실제 CLI smoke로
 `report.md`와 `result.json` 생성, relevant paragraph 선택, character/query/file
 provenance, generated claim 및 semantic citation/relevance/coverage 연결을 확인했다.
 
 그러나 다음 범위는 아직 미완성이다.
 
-- PDF 및 scanned PDF/OCR
+- scanned PDF/OCR (text extraction이 없는 PDF는 명확히 실패)
 - HWP/HWPX/DOCX
-- page/line number와 table-specialized parsing
+- line number와 table-specialized parsing
 - persistent vector index/cache
 - Web + Local unified Integrated RAG
 - 선행특허 전문 Research
 
-따라서 초기 TXT/Markdown vertical slice 완료를 전체 Local Document Expansion
+따라서 TXT/Markdown 및 text-based PDF vertical slice 완료를 전체 Local Document Expansion
 완료로 해석하지 않는다.
 
 ## 24.5 실제 Dollar Cost 계측
@@ -1083,7 +1083,7 @@ Local Deterministic Research
 → 기본 offline 계약 유지
 
 Local Semantic Research
-→ TXT/Markdown 구현 및 실제 smoke 검증
+→ TXT/Markdown 및 text-based PDF 구현·실제 smoke 검증
 
 Live Web Research
 → 구현 및 실제 검증
@@ -1256,7 +1256,7 @@ Phase 12 — Hardware Upgrade Decision
 내린다. Phase 12 전에는 특정 업그레이드를 확정하지 않는다.
 
 
-# 32. 2026-08-14 Local TXT/Markdown Semantic Research 갱신
+# 32. 2026-08-14 Local Document Semantic Research 갱신
 
 > 이 섹션은 Local Document Research에 관한 최신 사용자 기준이다. 앞선 Local
 > 미완성 설명은 역사적 checkpoint로 보존하되 이 섹션을 현재 상태로 우선한다.
@@ -1299,14 +1299,18 @@ Partial relevance와 coverage는 runtime failure가 아니다. Fixture가 role r
 설명하지만 grounded local evidence가 routing에 미치는 영향까지 완전히 설명하지
 않는다는 한계를 올바르게 기록한 결과이다.
 
-현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`이다. PDF, scanned PDF/OCR,
-HWP, HWPX, DOCX, table-specialized parsing, persistent vector index 및 Web+Local
+Text-based PDF smoke에서는 3-page fixture의 page 2 paragraph만 선택했다. Evidence는
+`start_character=114`, `end_character=303`, `metadata["page_number"]="2"`를 보존했고,
+citation은 동일한 excerpt와 character range를 가리켰다. Deterministic PDF smoke는
+whole-document evidence이므로 여러 page를 span하며 page number를 추측하지 않았다.
+
+현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`과 text-based `.pdf`이다. PDF는 `pypdf`로 page별 text를 추출하며, 한 page section 안에 완전히 포함된 evidence는 `metadata["page_number"]`를 보존한다. Scanned PDF/OCR, HWP, HWPX, DOCX, table-specialized parsing, persistent vector index 및 Web+Local
 unified Integrated RAG는 아직 완료되지 않았다.
 
 현재 검증 기준:
 
 ```text
-full regression = 4643 passed
+full regression = 4678 passed
 Ruff = All checks passed
 git diff --check = passed
 ```

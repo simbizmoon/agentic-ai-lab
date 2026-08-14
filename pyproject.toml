@@ -11,6 +11,7 @@ dependencies = [
     "cryptography",
     "httpx>=0.28,<1",
     "openai",
+    "pypdf",
     "python-dotenv",
     "pydantic",
 ]

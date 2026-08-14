@@ -10,6 +10,10 @@ from app.research.local_document_adapter import (
     LocalDocumentAdapter,
 )
 from app.schemas.research_request import ResearchSourceType
+from app.schemas.research_source_document import (
+    ResearchSourceContentType,
+)
+from tests.test_local_pdf_text_extractor import write_pdf
 
 
 def test_adapter_loads_markdown_document(
@@ -184,14 +188,110 @@ def test_adapter_rejects_duplicate_paths(
 def test_adapter_rejects_unsupported_suffix(
     tmp_path: Path,
 ) -> None:
-    path = tmp_path / "source.pdf"
-    path.write_bytes(b"PDF")
+    path = tmp_path / "source.docx"
+    path.write_bytes(b"document")
 
     with pytest.raises(
         ValueError,
-        match="Markdown or text",
+        match="Markdown, text, or PDF",
     ):
         LocalDocumentAdapter().load((path,))
+
+
+def test_adapter_loads_one_page_pdf(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "hybrid-routing.pdf"
+    content = (
+        "AIRA uses OpenAI evidence relevance and local bounded "
+        "workers."
+    )
+    write_pdf(path, [content])
+
+    bundle = LocalDocumentAdapter().load((path,))
+
+    source = bundle.source_records[0]
+    document = bundle.document_records[0]
+    section = document.sections[0]
+
+    assert source.title == "hybrid-routing"
+    assert source.snippet == content
+    assert "openai" in source.keywords
+    assert source.metadata["local_path"] == str(path.resolve())
+    assert source.metadata["filename"] == path.name
+    assert source.metadata["adapter"] == "local-document"
+    assert source.metadata["pdf_page_count"] == "1"
+    assert source.metadata["pdf_text_page_count"] == "1"
+    assert source.metadata["pdf_blank_page_count"] == "0"
+    assert document.content_type is ResearchSourceContentType.PDF_TEXT
+    assert document.content == content
+    assert document.language == "en"
+    assert document.metadata == source.metadata
+    assert section.section_id == "page-001"
+    assert section.heading is None
+    assert section.order == 1
+    assert section.metadata == {"page_number": "1"}
+    assert document.content[
+        section.start_character:section.end_character
+    ] == section.content
+
+
+def test_adapter_preserves_pdf_page_provenance(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "physical-pages.pdf"
+    first = "First readable page."
+    third = "Third readable page."
+    write_pdf(path, [first, None, third])
+
+    document = LocalDocumentAdapter().load(
+        (path,)
+    ).document_records[0]
+
+    assert document.metadata["pdf_page_count"] == "3"
+    assert document.metadata["pdf_text_page_count"] == "2"
+    assert document.metadata["pdf_blank_page_count"] == "1"
+    assert document.content == f"{first}\n\n{third}"
+    assert [section.section_id for section in document.sections] == [
+        "page-001",
+        "page-003",
+    ]
+    assert [section.order for section in document.sections] == [1, 2]
+    assert [
+        section.metadata["page_number"]
+        for section in document.sections
+    ] == ["1", "3"]
+    for section in document.sections:
+        assert document.content[
+            section.start_character:section.end_character
+        ] == section.content
+
+
+@pytest.mark.parametrize(
+    ("fixture", "message"),
+    [
+        ("malformed", "could not be opened or parsed"),
+        ("blank", "no extractable nonblank text"),
+        ("encrypted", "encrypted PDF requires credentials"),
+    ],
+)
+def test_adapter_translates_pdf_extraction_failures(
+    tmp_path: Path,
+    fixture: str,
+    message: str,
+) -> None:
+    path = tmp_path / f"{fixture}.pdf"
+    if fixture == "malformed":
+        path.write_bytes(b"not a PDF")
+    elif fixture == "encrypted":
+        write_pdf(path, ["Protected text."], password="secret")
+    else:
+        write_pdf(path, [None])
+
+    with pytest.raises(ValueError, match=message) as error_info:
+        LocalDocumentAdapter().load((path,))
+
+    assert "local PDF could not be read" in str(error_info.value)
 
 
 def test_adapter_requires_at_least_one_document() -> None:

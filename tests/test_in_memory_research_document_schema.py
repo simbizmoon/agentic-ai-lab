@@ -9,6 +9,7 @@ from app.schemas.in_memory_research_document import (
 )
 from app.schemas.research_source_document import (
     ResearchSourceContentType,
+    ResearchSourceDocumentSection,
 )
 
 
@@ -36,6 +37,27 @@ def record(
 
     return InMemoryResearchDocumentRecord.model_validate(
         values
+    )
+
+
+def section(
+    *,
+    section_id: str = "section-custom",
+    order: int = 1,
+    start_character: int = 0,
+    end_character: int = 12,
+    content: str = "Agent memory",
+) -> ResearchSourceDocumentSection:
+    """Return one valid prebuilt document section."""
+
+    return ResearchSourceDocumentSection(
+        section_id=section_id,
+        heading="Memory",
+        content=content,
+        order=order,
+        start_character=start_character,
+        end_character=end_character,
+        metadata={"origin": "prebuilt"},
     )
 
 
@@ -71,6 +93,78 @@ def test_readable_record_rejects_failure_details() -> None:
         )
 
 
+def test_readable_record_rejects_section_outside_content() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="section range must be within content",
+    ):
+        record(sections=[section(end_character=100)])
+
+
+def test_readable_record_rejects_section_content_mismatch() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="section content must match its range",
+    ):
+        record(sections=[section(content="Wrong text")])
+
+
+def test_readable_record_rejects_duplicate_section_ids() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="section IDs must be unique",
+    ):
+        record(
+            sections=[
+                section(section_id="Page-A"),
+                section(
+                    section_id=" page-a ",
+                    order=2,
+                    start_character=13,
+                    end_character=19,
+                    content="stores",
+                ),
+            ]
+        )
+
+
+def test_readable_record_rejects_duplicate_section_orders() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="section orders must be unique",
+    ):
+        record(
+            sections=[
+                section(),
+                section(
+                    section_id="section-two",
+                    start_character=13,
+                    end_character=19,
+                    content="stores",
+                ),
+            ]
+        )
+
+
+def test_readable_record_rejects_unordered_sections() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="sections must be ordered by order",
+    ):
+        record(
+            sections=[
+                section(section_id="section-two", order=2),
+                section(
+                    section_id="section-one",
+                    order=1,
+                    start_character=13,
+                    end_character=19,
+                    content="stores",
+                ),
+            ]
+        )
+
+
 def test_failing_record_accepts_failure_details() -> None:
     value = record(
         read_mode=InMemoryResearchDocumentReadMode.FAIL,
@@ -81,6 +175,20 @@ def test_failing_record_accepts_failure_details() -> None:
     )
 
     assert value.failure_type == "AccessDenied"
+
+
+def test_failing_record_rejects_sections() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="failing record must not contain sections",
+    ):
+        record(
+            read_mode=InMemoryResearchDocumentReadMode.FAIL,
+            content="",
+            sections=[section()],
+            failure_type="AccessDenied",
+            failure_message="The source denied access.",
+        )
 
 
 def test_failing_record_requires_failure_type() -> None:
