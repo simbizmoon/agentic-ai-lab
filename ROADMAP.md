@@ -37,9 +37,9 @@
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
 - 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
-- 현재 상태: Live Research 기준선을 유지하면서 Local TXT/Markdown 및 text-based PDF
-  Semantic Research Vertical Slice를 통합·검증 완료했다. Stage 4의 HWP/HWPX 확장과
-  Integrated Web+Local RAG는 아직 진행 전이다.
+- 현재 상태: Live Research 기준선을 유지하면서 Local TXT/Markdown, text-based PDF 및 text-bearing HWPX
+  Semantic Research Vertical Slices를 통합·검증 완료했다. Stage 4의 HWP binary 확장,
+  scanned PDF/OCR 및 Integrated Web+Local RAG는 아직 진행 전이다.
 - 현재 기준일: 2026-08-14
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -696,7 +696,8 @@ Rewrite가 아니라 Integration-first
 - [~] 진행 중
 - [x] 초기 TXT/Markdown Semantic Research Vertical Slice 완료
 - [x] text-based PDF vertical slice 완료
-- [ ] scanned PDF/OCR, HWP/HWPX 및 Integrated Web+Local 범위는 미완료
+- [x] text-bearing HWPX vertical slice 완료
+- [ ] scanned PDF/OCR, HWP binary 및 Integrated Web+Local 범위는 미완료
 
 ## Work Items
 
@@ -705,7 +706,7 @@ Rewrite가 아니라 Integration-first
 - [x] PDF Text (`pypdf`)
 - [ ] Scanned PDF 처리 전략
 - [ ] HWP
-- [ ] HWPX
+- [x] HWPX (safe ZIP + defusedxml)
 - [x] 파일 Metadata (`local_path`, `filename`)
 - [x] Query provenance (`search_query_text`)
 - [ ] Heading 또는 Section
@@ -727,7 +728,7 @@ Rewrite가 아니라 Integration-first
 
 ## 완료 결과
 
-- TXT/MD/PDF/HWP/HWPX를 공통 Research Document로 변환
+- TXT/MD/PDF/HWPX를 공통 Research Document로 변환
 - 원문 위치를 추적할 수 있는 Evidence
 - 인터넷 Source와 통합 가능한 로컬 Source Adapter
 
@@ -2792,7 +2793,7 @@ profiler evidence가 현재 hardware를 병목으로 확인할 때 다시 평가
 # 33. 2026-08-14 Local Document Semantic Research Vertical Slices
 
 > 이 섹션은 Stage 4 Local Document Expansion의 최신 authoritative status이다.
-> Stage 4 전체 완료가 아니라 TXT/Markdown 및 text-based PDF vertical slice 완료를 기록한다.
+> Stage 4 전체 완료가 아니라 TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice 완료를 기록한다.
 
 ## 33.1 상태
 
@@ -2805,13 +2806,18 @@ Initial TXT/Markdown Semantic Vertical Slice
 
 Text-based PDF Vertical Slice
 → COMPLETE
+
+Text-bearing HWPX Vertical Slice
+→ COMPLETE
 ```
 
 완료된 범위:
 
 - UTF-8 `.txt`, `.md`, `.markdown`
 - text-based `.pdf` (`pypdf` page-by-page extraction)
+- text-bearing `.hwpx` (safe ZIP direct-read + `defusedxml`)
 - nonblank physical page sections and `page_number` evidence provenance
+- HWPX body-section provenance (`hwpx_section_index`, `hwpx_package_path`)
 - 실제 Local in-memory source search와 reader
 - `search_query_text` query provenance
 - `local_path`와 `filename` provenance
@@ -2825,12 +2831,14 @@ Text-based PDF Vertical Slice
 - semantic smoke에서 whole document가 아닌 relevant paragraph 선택
 - deterministic + semantic PDF CLI smoke and exact citation range verification
 - malformed/encrypted/no-text PDF clear failure
-- full regression `4678 passed`
+- real Hancom HWPX adapter + deterministic CLI smoke (`0..96`)
+- semantic HWPX section-2 evidence + exact citation (`114..303`)
+- full regression `4722 passed`
 - Ruff `All checks passed`, `git diff --check` 통과
 
 미완료 범위:
 
-- scanned PDF/OCR, HWP, HWPX, DOCX
+- scanned PDF/OCR, HWP binary, DOCX
 - line number provenance
 - table-specialized parsing
 - persistent indexing/embedding cache

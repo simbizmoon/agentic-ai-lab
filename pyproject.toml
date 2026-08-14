@@ -9,6 +9,7 @@ description = "Project-based Agentic AI learning lab"
 requires-python = ">=3.12"
 dependencies = [
     "cryptography",
+    "defusedxml",
     "httpx>=0.28,<1",
     "openai",
     "pypdf",

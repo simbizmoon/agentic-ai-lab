@@ -294,6 +294,37 @@ def test_evidence_inherits_containing_section_metadata() -> None:
     assert evidence.metadata["shared"] == "evidence"
 
 
+
+def test_evidence_inherits_hwpx_shaped_section_metadata() -> None:
+    source_document = structured_document()
+    first_section = source_document.sections[0].model_copy(
+        update={
+            "metadata": {
+                "hwpx_section_index": "2",
+                "hwpx_package_path": "Contents/section1.xml",
+            }
+        }
+    )
+    source_document = source_document.model_copy(
+        update={
+            "sections": [
+                first_section,
+                *source_document.sections[1:],
+            ]
+        }
+    )
+
+    evidence = extract_range(source_document, start=0, end=5)
+
+    assert evidence.metadata["hwpx_section_index"] == "2"
+    assert evidence.metadata["hwpx_package_path"] == (
+        "Contents/section1.xml"
+    )
+    assert evidence.metadata["extractor"] == (
+        "range-evidence-extractor"
+    )
+
+
 def test_evidence_outside_structured_section_is_unchanged() -> None:
     source_document = structured_document().model_copy(
         update={"sections": structured_document().sections[:1]}

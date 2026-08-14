@@ -40,14 +40,14 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 
 ## 2.2 Local Semantic Research
 
-`aira research --mode semantic`은 UTF-8 TXT/Markdown 및 text-based PDF 문서를 실제 local
+`aira research --mode semantic`은 UTF-8 TXT/Markdown, text-based PDF 및 text-bearing HWPX 문서를 실제 local
 in-memory search와 reader로 처리하고 paragraph 단위 semantic evidence와 generated
-claim을 만든다. query text, local path, filename, character range 및 PDF physical page provenance를
+claim을 만든다. query text, local path, filename, character range, PDF physical page 및 HWPX body-section provenance를
 보존한다.
 
 ```text
-TXT / Markdown / Text PDF
-→ LocalDocumentAdapter (PDF: pypdf page extraction)
+TXT / Markdown / Text PDF / Text-bearing HWPX
+→ LocalDocumentAdapter (PDF: pypdf; HWPX: safe ZIP + defusedxml)
 → In-memory Local Search / Reader
 → ParagraphEvidenceExtractor
 → Embedding + Lexical RRF Shortlist
@@ -910,20 +910,20 @@ Known Failure가 Citation Judge 평가에서 확인되었다.
 
 ## 24.4 Local Document Expansion은 진행 중
 
-TXT/Markdown 및 text-based PDF Semantic Local Vertical Slice는 구현되었고 실제 CLI smoke로
+TXT/Markdown, text-based PDF 및 text-bearing HWPX Semantic Local Vertical Slice는 구현되었고 실제 CLI smoke로
 `report.md`와 `result.json` 생성, relevant paragraph 선택, character/query/file
 provenance, generated claim 및 semantic citation/relevance/coverage 연결을 확인했다.
 
 그러나 다음 범위는 아직 미완성이다.
 
 - scanned PDF/OCR (text extraction이 없는 PDF는 명확히 실패)
-- HWP/HWPX/DOCX
+- HWP binary/DOCX
 - line number와 table-specialized parsing
 - persistent vector index/cache
 - Web + Local unified Integrated RAG
 - 선행특허 전문 Research
 
-따라서 TXT/Markdown 및 text-based PDF vertical slice 완료를 전체 Local Document Expansion
+따라서 TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice 완료를 전체 Local Document Expansion
 완료로 해석하지 않는다.
 
 ## 24.5 실제 Dollar Cost 계측
@@ -1083,7 +1083,7 @@ Local Deterministic Research
 → 기본 offline 계약 유지
 
 Local Semantic Research
-→ TXT/Markdown 및 text-based PDF 구현·실제 smoke 검증
+→ TXT/Markdown, text-based PDF 및 text-bearing HWPX 구현·실제 smoke 검증
 
 Live Web Research
 → 구현 및 실제 검증
@@ -1304,13 +1304,17 @@ Text-based PDF smoke에서는 3-page fixture의 page 2 paragraph만 선택했다
 citation은 동일한 excerpt와 character range를 가리켰다. Deterministic PDF smoke는
 whole-document evidence이므로 여러 page를 span하며 page number를 추측하지 않았다.
 
-현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`과 text-based `.pdf`이다. PDF는 `pypdf`로 page별 text를 추출하며, 한 page section 안에 완전히 포함된 evidence는 `metadata["page_number"]`를 보존한다. Scanned PDF/OCR, HWP, HWPX, DOCX, table-specialized parsing, persistent vector index 및 Web+Local
+HWPX real-Hancom adapter/deterministic smoke는 `Contents/section0.xml`, range `0..96`과
+`hwpx_section_index="1"`을 보존했다. Semantic three-section smoke는 section 2의 relevant
+paragraph만 `114..303`으로 선택했고 citation verification은 fully supported였다.
+
+현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`, text-based `.pdf`, text-bearing `.hwpx`이다. PDF는 `pypdf`로 page별 text를 추출하며, 한 page section 안에 완전히 포함된 evidence는 `metadata["page_number"]`를 보존한다. HWPX는 safe ZIP direct-read와 `defusedxml`, manifest/spine 및 `sec` body classification을 사용한다. Scanned PDF/OCR, HWP binary, DOCX, table-specialized parsing, persistent vector index 및 Web+Local
 unified Integrated RAG는 아직 완료되지 않았다.
 
 현재 검증 기준:
 
 ```text
-full regression = 4678 passed
+full regression = 4722 passed
 Ruff = All checks passed
 git diff --check = passed
 ```

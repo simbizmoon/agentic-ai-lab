@@ -2741,3 +2741,50 @@ D-049의 deterministic 기본, semantic opt-in, provider routing 및 no-silent-f
 - full regression: `4678 passed`
 - Ruff: `All checks passed`
 - `git diff --check`: 통과
+
+
+---
+
+## D-051 — Local HWPX는 safe ZIP/XML extraction과 generic section provenance를 재사용
+
+- 상태: 확정
+- 날짜: 2026-08-14
+- 적용 범위: Stage 4 Local HWPX Vertical Slice
+
+### 결정
+
+- HWP binary보다 ZIP/XML 기반 HWPX를 먼저 지원한다.
+- XML safety를 위해 `defusedxml`을 direct runtime dependency로 사용한다.
+- HWPX ZIP은 `extract()`/`extractall()` 없이 archive member를 직접 읽는다.
+- absolute/traversal/duplicate member path, member count, individual size 및 total uncompressed size를 제한한다.
+- `Contents/content.hpf` manifest와 spine으로 document reading order를 해석한다.
+- manifest href는 package-root와 `content.hpf`-relative 후보 중 정확히 하나만 존재할 때 해석한다.
+- 실제 Hancom package-root href (`Contents/section0.xml`)를 지원하고 ambiguous href는 거부한다.
+- spine target XML root local-name이 `sec`인 document만 body section으로 분류한다.
+- `header.xml`, `settings.xml` 및 arbitrary non-body XML은 body evidence에서 제외한다.
+- paragraph text를 deterministic `"\n\n"` separator로 정규화한다.
+- body provenance는 `hwpx_section_index`와 `hwpx_package_path`로 보존한다.
+- blank body section은 package section count에는 남지만 nonblank `ResearchSourceDocumentSection`으로 만들지 않는다.
+- Local adapter는 `.hwpx`를 `HWPX_TEXT`로 변환하며 deterministic/semantic CLI 모두 지원한다.
+- 하나의 section에 완전히 포함된 evidence만 generic section metadata를 상속한다.
+- HWP binary, OCR, table/image/layout-specific parsing 및 Integrated Web+Local RAG는 후속 범위이다.
+
+### 검증
+
+- real Hancom extractor/adapter smoke: `Contents/section0.xml`, range `0..96`, slice invariant 통과
+- deterministic HWPX CLI: `hwpx_text`, evidence/citation `0..96`, section provenance 보존
+- semantic HWPX CLI: section 2 evidence `114..303`, unrelated sections 제외
+- semantic provenance: `hwpx_section_index="2"`, `hwpx_package_path="Contents/section1.xml"`
+- generated claim 1개와 citation exact range 보존
+- citation verification: verified / fully_supported, entailment/traceability/accuracy `1.0`
+- malformed/no-text HWPX와 unsupported `.hwp` CLI failure 검증
+- focused regression: `137 passed`
+- full regression: `4722 passed`
+- Ruff: `All checks passed`
+- `git diff --check`: 통과
+
+### 이전 결정과의 관계
+
+D-049의 deterministic 기본/semantic opt-in 계약과 D-050의 generic section provenance
+계약을 변경하지 않는다. D-051은 현재 Local 지원 형식을 text-bearing HWPX까지
+확장하지만 HWP binary 또는 일반 ZIP/XML 문서 지원으로 범위를 넓히지 않는다.

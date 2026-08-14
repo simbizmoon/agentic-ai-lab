@@ -10,6 +10,10 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.research.local_hwpx_text_extractor import (
+    LocalHwpxTextExtractionError,
+    LocalHwpxTextExtractor,
+)
 from app.research.local_pdf_text_extractor import (
     LocalPdfTextExtractionError,
     LocalPdfTextExtractor,
@@ -30,6 +34,7 @@ _SUPPORTED_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
         ".md",
         ".markdown",
+        ".hwpx",
         ".pdf",
         ".txt",
     }
@@ -95,7 +100,7 @@ class LocalDocumentAdapter:
 
             seen_paths.add(resolved)
 
-            content, sections, pdf_metadata = (
+            content, sections, format_metadata = (
                 self._read_document(resolved)
             )
             source_id = self._source_id(
@@ -111,7 +116,7 @@ class LocalDocumentAdapter:
                 "local_path": str(resolved),
                 "filename": resolved.name,
                 "adapter": "local-document",
-                **pdf_metadata,
+                **format_metadata,
             }
 
             source_records.append(
@@ -170,7 +175,7 @@ class LocalDocumentAdapter:
 
         if resolved.suffix.casefold() not in _SUPPORTED_SUFFIXES:
             raise ValueError(
-                "local document must be Markdown, text, or PDF: "
+                "local document must be Markdown, text, PDF, or HWPX: "
                 f"{resolved}"
             )
 
@@ -187,7 +192,10 @@ class LocalDocumentAdapter:
     ]:
         """Read content and optional format-specific structure."""
 
-        if path.suffix.casefold() != ".pdf":
+        suffix = path.suffix.casefold()
+        if suffix == ".hwpx":
+            return cls._read_hwpx(path)
+        if suffix != ".pdf":
             return cls._read_content(path), [], {}
 
         try:
@@ -219,6 +227,60 @@ class LocalDocumentAdapter:
             "pdf_text_page_count": str(text_page_count),
             "pdf_blank_page_count": str(
                 page_count - text_page_count
+            ),
+        }
+
+        return result.content, sections, metadata
+
+    @staticmethod
+    def _read_hwpx(
+        path: Path,
+    ) -> tuple[
+        str,
+        list[ResearchSourceDocumentSection],
+        dict[str, str],
+    ]:
+        """Read HWPX text and preserve nonblank body sections."""
+
+        try:
+            result = LocalHwpxTextExtractor().extract(path)
+        except LocalHwpxTextExtractionError as error:
+            raise ValueError(
+                f"local HWPX could not be read: {path}: {error}"
+            ) from error
+
+        text_sections = [
+            section for section in result.sections if section.content
+        ]
+        sections = [
+            ResearchSourceDocumentSection(
+                section_id=(
+                    f"hwpx-section-{section.section_index:03d}"
+                ),
+                heading=None,
+                content=section.content,
+                order=order,
+                start_character=section.start_character,
+                end_character=section.end_character,
+                metadata={
+                    "hwpx_section_index": str(
+                        section.section_index
+                    ),
+                    "hwpx_package_path": section.package_path,
+                },
+            )
+            for order, section in enumerate(
+                text_sections,
+                start=1,
+            )
+        ]
+        section_count = result.total_section_count
+        text_section_count = len(text_sections)
+        metadata = {
+            "hwpx_section_count": str(section_count),
+            "hwpx_text_section_count": str(text_section_count),
+            "hwpx_blank_section_count": str(
+                section_count - text_section_count
             ),
         }
 
@@ -287,7 +349,7 @@ class LocalDocumentAdapter:
                 if title:
                     return title
 
-        if path.suffix.casefold() == ".pdf":
+        if path.suffix.casefold() in {".pdf", ".hwpx"}:
             return path.stem
 
         return (
@@ -355,6 +417,9 @@ class LocalDocumentAdapter:
 
         if path.suffix.casefold() == ".pdf":
             return ResearchSourceContentType.PDF_TEXT
+
+        if path.suffix.casefold() == ".hwpx":
+            return ResearchSourceContentType.HWPX_TEXT
 
         return ResearchSourceContentType.TEXT
 

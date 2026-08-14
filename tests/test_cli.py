@@ -12,6 +12,7 @@ from app.cli import (
     main,
     validate_sources,
 )
+from tests.test_local_hwpx_text_extractor import write_hwpx
 from tests.test_local_pdf_text_extractor import write_pdf
 
 
@@ -134,19 +135,19 @@ def test_validate_sources_accepts_pdf(
 
     assert validate_sources([str(source)]) == (source.resolve(),)
 
-
+@pytest.mark.parametrize("suffix", [".hwp", ".docx"])
 def test_validate_sources_rejects_unsupported_file(
     tmp_path: Path,
+    suffix: str,
 ) -> None:
-    source = tmp_path / "source.docx"
+    source = tmp_path / f"source{suffix}"
     source.write_bytes(b"unsupported")
 
     with pytest.raises(
         ValueError,
-        match="Markdown, text, or PDF file",
+        match="Markdown, text, PDF, or HWPX file",
     ):
         validate_sources([str(source)])
-
 
 
 @pytest.mark.parametrize(
@@ -183,6 +184,18 @@ def test_main_reports_invalid_pdf_through_local_handler(
 
     assert result == 2
     assert message in capsys.readouterr().err
+
+
+def test_validate_sources_accepts_hwpx(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.hwpx"
+    write_hwpx(
+        source,
+        sections={"Contents/section0.xml": ("Local evidence.",)},
+    )
+
+    assert validate_sources([str(source)]) == (source.resolve(),)
 
 
 def test_main_calls_injected_research_handler(
@@ -263,7 +276,6 @@ def test_main_selects_semantic_local_handler(
     assert result == 0
     assert calls == ["semantic"]
 
-
 @pytest.mark.parametrize("mode", ["deterministic", "semantic"])
 def test_main_passes_resolved_pdf_to_selected_local_handler(
     tmp_path: Path,
@@ -309,6 +321,114 @@ def test_main_passes_resolved_pdf_to_selected_local_handler(
 
     assert result == 0
     assert calls == [(mode, (source.resolve(),))]
+
+
+
+@pytest.mark.parametrize("mode", ["deterministic", "semantic"])
+def test_main_passes_resolved_hwpx_to_selected_local_handler(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    source = tmp_path / "source.hwpx"
+    write_hwpx(
+        source,
+        sections={"Contents/section0.xml": ("Local evidence.",)},
+    )
+    calls: list[tuple[str, tuple[Path, ...]]] = []
+
+    def deterministic_handler(
+        _question: str,
+        _objective: str,
+        sources: tuple[Path, ...],
+        _output_dir: Path,
+    ) -> int:
+        calls.append(("deterministic", sources))
+        return 0
+
+    def semantic_handler(
+        _question: str,
+        _objective: str,
+        sources: tuple[Path, ...],
+        _output_dir: Path,
+    ) -> int:
+        calls.append(("semantic", sources))
+        return 0
+
+    arguments = [
+        "research",
+        "--question",
+        "How does local HWPX research work?",
+        "--source",
+        str(source),
+    ]
+    if mode == "semantic":
+        arguments[1:1] = ["--mode", "semantic"]
+
+    result = main(
+        arguments,
+        research_handler=deterministic_handler,
+        semantic_research_handler=semantic_handler,
+    )
+
+    assert result == 0
+    assert calls == [(mode, (source.resolve(),))]
+
+
+def test_main_reports_malformed_hwpx_through_local_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "malformed.hwpx"
+    source.write_bytes(b"not an HWPX package")
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does local HWPX research handle errors?",
+            "--source",
+            str(source),
+        ]
+    )
+
+    assert result == 2
+    assert "not a valid ZIP archive" in capsys.readouterr().err
+
+
+def test_main_runs_default_local_hwpx_runtime(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "grounded.hwpx"
+    write_hwpx(
+        source,
+        sections={
+            "Contents/section0.xml": (
+                "Grounded HWPX research connects claims to evidence.",
+            )
+        },
+    )
+    output_dir = tmp_path / "hwpx-reports"
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does grounded HWPX research use evidence?",
+            "--source",
+            str(source),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    execution_dirs = list(output_dir.iterdir())
+    assert result == 0
+    assert captured.err == ""
+    assert len(execution_dirs) == 1
+    assert (execution_dirs[0] / "report.md").is_file()
+    assert (execution_dirs[0] / "result.json").is_file()
 
 
 def test_main_returns_error_for_short_question(
@@ -433,7 +553,6 @@ def test_main_calls_injected_live_research_handler(
     assert captured["output_dir"] == (
         tmp_path / "live-reports"
     ).resolve()
-
 
 @pytest.mark.parametrize(
     ("option", "value", "message"),

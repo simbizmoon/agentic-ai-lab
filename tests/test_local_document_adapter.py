@@ -13,6 +13,7 @@ from app.schemas.research_request import ResearchSourceType
 from app.schemas.research_source_document import (
     ResearchSourceContentType,
 )
+from tests.test_local_hwpx_text_extractor import write_hwpx
 from tests.test_local_pdf_text_extractor import write_pdf
 
 
@@ -185,15 +186,17 @@ def test_adapter_rejects_duplicate_paths(
         )
 
 
+@pytest.mark.parametrize("suffix", [".hwp", ".docx"])
 def test_adapter_rejects_unsupported_suffix(
     tmp_path: Path,
+    suffix: str,
 ) -> None:
-    path = tmp_path / "source.docx"
+    path = tmp_path / f"source{suffix}"
     path.write_bytes(b"document")
 
     with pytest.raises(
         ValueError,
-        match="Markdown, text, or PDF",
+        match="Markdown, text, PDF, or HWPX",
     ):
         LocalDocumentAdapter().load((path,))
 
@@ -292,6 +295,129 @@ def test_adapter_translates_pdf_extraction_failures(
         LocalDocumentAdapter().load((path,))
 
     assert "local PDF could not be read" in str(error_info.value)
+
+
+def test_adapter_loads_one_section_hwpx(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "hybrid-routing.hwpx"
+    content = (
+        "에이라는 로컬 근거와 주장을 안전하게 연결하며 "
+        "AIRA 연구 결과를 생성한다."
+    )
+    write_hwpx(
+        path,
+        sections={"Contents/section0.xml": (content,)},
+    )
+
+    bundle = LocalDocumentAdapter().load((path,))
+
+    source = bundle.source_records[0]
+    document = bundle.document_records[0]
+    section = document.sections[0]
+    assert source.title == "hybrid-routing"
+    assert source.snippet == content
+    assert "aira" in source.keywords
+    assert "연구" in source.keywords
+    assert source.metadata["local_path"] == str(path.resolve())
+    assert source.metadata["filename"] == path.name
+    assert source.metadata["adapter"] == "local-document"
+    assert source.metadata["hwpx_section_count"] == "1"
+    assert source.metadata["hwpx_text_section_count"] == "1"
+    assert source.metadata["hwpx_blank_section_count"] == "0"
+    assert document.content_type is ResearchSourceContentType.HWPX_TEXT
+    assert document.content == content
+    assert document.language == "ko"
+    assert document.metadata == source.metadata
+    assert section.section_id == "hwpx-section-001"
+    assert section.heading is None
+    assert section.order == 1
+    assert section.metadata == {
+        "hwpx_section_index": "1",
+        "hwpx_package_path": "Contents/section0.xml",
+    }
+    assert document.content[
+        section.start_character:section.end_character
+    ] == section.content
+
+
+def test_adapter_preserves_hwpx_body_section_provenance(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "body-sections.hwpx"
+    first = "First readable body section."
+    third = "Third readable body section."
+    write_hwpx(
+        path,
+        sections={
+            "Contents/section0.xml": (first,),
+            "Contents/section1.xml": (),
+            "Contents/section2.xml": (third,),
+        },
+    )
+
+    document = LocalDocumentAdapter().load(
+        (path,)
+    ).document_records[0]
+
+    assert document.content == f"{first}\n\n{third}"
+    assert document.metadata["hwpx_section_count"] == "3"
+    assert document.metadata["hwpx_text_section_count"] == "2"
+    assert document.metadata["hwpx_blank_section_count"] == "1"
+    assert [section.section_id for section in document.sections] == [
+        "hwpx-section-001",
+        "hwpx-section-003",
+    ]
+    assert [section.order for section in document.sections] == [1, 2]
+    assert [
+        section.metadata["hwpx_section_index"]
+        for section in document.sections
+    ] == ["1", "3"]
+    assert [
+        section.metadata["hwpx_package_path"]
+        for section in document.sections
+    ] == [
+        "Contents/section0.xml",
+        "Contents/section2.xml",
+    ]
+    for section in document.sections:
+        assert document.content[
+            section.start_character:section.end_character
+        ] == section.content
+
+
+@pytest.mark.parametrize(
+    ("fixture", "message"),
+    [
+        ("malformed", "not a valid ZIP archive"),
+        ("unsafe", "unsafe member path"),
+        ("no-text", "no extractable nonblank body text"),
+    ],
+)
+def test_adapter_translates_hwpx_extraction_failures(
+    tmp_path: Path,
+    fixture: str,
+    message: str,
+) -> None:
+    path = tmp_path / f"{fixture}.hwpx"
+    if fixture == "malformed":
+        path.write_bytes(b"not an HWPX package")
+    elif fixture == "unsafe":
+        write_hwpx(
+            path,
+            sections={"Contents/section0.xml": ("Text.",)},
+            extra_members={"../outside.xml": "unsafe"},
+        )
+    else:
+        write_hwpx(
+            path,
+            sections={"Contents/section0.xml": ()},
+        )
+
+    with pytest.raises(ValueError, match=message) as error_info:
+        LocalDocumentAdapter().load((path,))
+
+    assert "local HWPX could not be read" in str(error_info.value)
 
 
 def test_adapter_requires_at_least_one_document() -> None:

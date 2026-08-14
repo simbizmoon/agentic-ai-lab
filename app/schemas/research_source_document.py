@@ -31,6 +31,7 @@ class ResearchSourceContentType(StrEnum):
     HTML = "html"
     MARKDOWN = "markdown"
     PDF_TEXT = "pdf_text"
+    HWPX_TEXT = "hwpx_text"
     JSON = "json"
     OTHER = "other"
 
