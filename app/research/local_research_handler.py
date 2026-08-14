@@ -25,9 +25,18 @@ from app.research.hybrid_runtime import (
     build_hybrid_bounded_research_workers,
     legacy_compatible_role_policy,
 )
+from app.research.local_document_access_policy import (
+    LocalDocumentAccessGate,
+    LocalDocumentAccessPolicy,
+    LocalDocumentAccessResult,
+)
 from app.research.local_document_adapter import (
     LocalDocumentAdapter,
     LocalDocumentBundle,
+)
+from app.research.local_external_send_approval import (
+    LocalExternalSendApproval,
+    LocalExternalSendApprovalGate,
 )
 from app.research.local_runtime import (
     build_local_research_pipeline,
@@ -87,6 +96,8 @@ LOCAL_EVIDENCE_RELEVANCE_BUDGET = ExecutionBudget(
     max_elapsed_seconds=60.0,
 )
 
+DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES = 32 * 1024 * 1024
+
 
 class LocalResearchHandler:
     """Execute local research and persist its results."""
@@ -110,8 +121,10 @@ class LocalResearchHandler:
         self,
         question: str,
         objective: str,
-        sources: tuple[Path, ...],
+        sources: tuple[LocalDocumentAccessResult, ...],
         output_dir: Path,
+        access_policy: LocalDocumentAccessPolicy,
+        external_send_approval: LocalExternalSendApproval | None,
     ) -> int:
         """Run the local pipeline and write report artifacts."""
 
@@ -122,7 +135,16 @@ class LocalResearchHandler:
                 "research execution ID factory returned blank value"
             )
 
-        bundle = LocalDocumentAdapter().load(sources)
+        self._validate_before_document_load(
+            sources=sources,
+            approval=external_send_approval,
+        )
+        bundle = LocalDocumentAdapter().load_validated(sources)
+        self._validate_before_pipeline_build(
+            sources=sources,
+            access_policy=access_policy,
+            approval=external_send_approval,
+        )
         pipeline = self._build_pipeline(
             bundle,
             question=question,
@@ -162,6 +184,23 @@ class LocalResearchHandler:
         )
 
         return 0
+
+    def _validate_before_document_load(
+        self,
+        *,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        approval: LocalExternalSendApproval | None,
+    ) -> None:
+        """Leave deterministic Local Research approval-free."""
+
+    def _validate_before_pipeline_build(
+        self,
+        *,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        access_policy: LocalDocumentAccessPolicy,
+        approval: LocalExternalSendApproval | None,
+    ) -> None:
+        """Leave deterministic Local Research without provider revalidation."""
 
     def _build_pipeline(
         self,
@@ -214,6 +253,31 @@ class SemanticLocalResearchHandler(LocalResearchHandler):
         self._local_worker_settings_loader = (
             local_worker_settings_loader
             or load_local_worker_settings
+        )
+
+    def _validate_before_document_load(
+        self,
+        *,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        approval: LocalExternalSendApproval | None,
+    ) -> None:
+        LocalExternalSendApprovalGate().validate(approval, sources)
+
+    def _validate_before_pipeline_build(
+        self,
+        *,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        access_policy: LocalDocumentAccessPolicy,
+        approval: LocalExternalSendApproval | None,
+    ) -> None:
+        access_gate = LocalDocumentAccessGate(access_policy)
+        fresh_sources = tuple(
+            access_gate.validate(source.resolved_path)
+            for source in sources
+        )
+        LocalExternalSendApprovalGate().validate(
+            approval,
+            fresh_sources,
         )
 
     def _build_pipeline(

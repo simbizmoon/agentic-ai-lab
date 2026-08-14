@@ -40,6 +40,8 @@ def test_cli_subprocess_creates_report_and_json(
             ),
             "--source",
             str(source),
+            "--allowed-root",
+            str(source.parent),
             "--output-dir",
             str(output_dir),
         ],

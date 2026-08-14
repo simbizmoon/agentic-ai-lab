@@ -10,6 +10,9 @@ from urllib.parse import quote
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.research.local_document_access_policy import (
+    LocalDocumentAccessResult,
+)
 from app.research.local_hwpx_text_extractor import (
     LocalHwpxTextExtractionError,
     LocalHwpxTextExtractor,
@@ -79,6 +82,45 @@ class LocalDocumentAdapter:
     ) -> LocalDocumentBundle:
         """Read local documents and build research records."""
 
+        return self._load(paths, access_results_by_path={})
+
+    def load_validated(
+        self,
+        access_results: tuple[LocalDocumentAccessResult, ...],
+    ) -> LocalDocumentBundle:
+        """Read documents carrying validated raw-file provenance."""
+
+        if not access_results:
+            raise ValueError(
+                "at least one validated local document is required"
+            )
+        if any(
+            not isinstance(result, LocalDocumentAccessResult)
+            for result in access_results
+        ):
+            raise TypeError(
+                "access_results must contain "
+                "LocalDocumentAccessResult values"
+            )
+        results_by_path = {
+            result.resolved_path: result
+            for result in access_results
+        }
+        if len(results_by_path) != len(access_results):
+            raise ValueError("duplicate validated local document")
+        return self._load(
+            tuple(result.resolved_path for result in access_results),
+            access_results_by_path=results_by_path,
+        )
+
+    def _load(
+        self,
+        paths: tuple[Path, ...],
+        *,
+        access_results_by_path: dict[Path, LocalDocumentAccessResult],
+    ) -> LocalDocumentBundle:
+        """Build records with optional validated raw-file provenance."""
+
         if not paths:
             raise ValueError(
                 "at least one local document is required"
@@ -116,6 +158,9 @@ class LocalDocumentAdapter:
                 "local_path": str(resolved),
                 "filename": resolved.name,
                 "adapter": "local-document",
+                **self._access_metadata(
+                    access_results_by_path.get(resolved)
+                ),
                 **format_metadata,
             }
 
@@ -153,6 +198,17 @@ class LocalDocumentAdapter:
             source_records=source_records,
             document_records=document_records,
         )
+
+    @staticmethod
+    def _access_metadata(
+        result: LocalDocumentAccessResult | None,
+    ) -> dict[str, str]:
+        if result is None:
+            return {}
+        return {
+            "local_file_size_bytes": str(result.file_size_bytes),
+            "local_content_sha256": result.content_sha256,
+        }
 
     @staticmethod
     def _validate_path(path: Path) -> Path:

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
 
+from app.research.local_document_access_policy import (
+    LocalDocumentAccessGate,
+    LocalDocumentAccessPolicy,
+    LocalDocumentAccessResult,
+)
 from app.research.local_document_adapter import (
     LocalDocumentAdapter,
 )
@@ -15,6 +21,66 @@ from app.schemas.research_source_document import (
 )
 from tests.test_local_hwpx_text_extractor import write_hwpx
 from tests.test_local_pdf_text_extractor import write_pdf
+
+
+def _validated_result(path: Path) -> LocalDocumentAccessResult:
+    policy = LocalDocumentAccessPolicy(
+        allowed_roots=(path.parent,),
+        maximum_file_bytes=32 * 1024 * 1024,
+    )
+    return LocalDocumentAccessGate(policy).validate(path)
+
+
+def test_adapter_load_validated_preserves_raw_file_provenance(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "raw-source.txt"
+    raw_content = b"raw source bytes"
+    path.write_bytes(raw_content)
+
+    bundle = LocalDocumentAdapter().load_validated(
+        (_validated_result(path),)
+    )
+
+    expected_digest = hashlib.sha256(raw_content).hexdigest()
+    for metadata in (
+        bundle.source_records[0].metadata,
+        bundle.document_records[0].metadata,
+    ):
+        assert metadata["local_file_size_bytes"] == str(len(raw_content))
+        assert metadata["local_content_sha256"] == expected_digest
+
+
+@pytest.mark.parametrize("suffix", [".pdf", ".hwpx"])
+def test_validated_metadata_coexists_with_structured_format_provenance(
+    tmp_path: Path,
+    suffix: str,
+) -> None:
+    path = tmp_path / f"structured{suffix}"
+    if suffix == ".pdf":
+        write_pdf(path, ["PDF evidence."])
+        format_key = "pdf_page_count"
+        section_metadata = {"page_number": "1"}
+    else:
+        write_hwpx(
+            path,
+            sections={"Contents/section0.xml": ("HWPX evidence.",)},
+        )
+        format_key = "hwpx_section_count"
+        section_metadata = {
+            "hwpx_section_index": "1",
+            "hwpx_package_path": "Contents/section0.xml",
+        }
+
+    bundle = LocalDocumentAdapter().load_validated(
+        (_validated_result(path),)
+    )
+    document = bundle.document_records[0]
+
+    assert document.metadata["local_file_size_bytes"] == str(path.stat().st_size)
+    assert len(document.metadata["local_content_sha256"]) == 64
+    assert document.metadata[format_key] == "1"
+    assert document.sections[0].metadata == section_metadata
 
 
 def test_adapter_loads_markdown_document(

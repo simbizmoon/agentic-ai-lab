@@ -19,10 +19,19 @@ from app.research.hybrid_role_policy import (
     HybridResearchRole,
     ResearchExecutionProvider,
 )
+from app.research.local_document_access_policy import (
+    LocalDocumentAccessGate,
+    LocalDocumentAccessPolicy,
+    LocalDocumentAccessResult,
+)
+from app.research.local_external_send_approval import (
+    LocalExternalSendApproval,
+)
 from app.research.local_research_handler import (
     LOCAL_CLAIM_GENERATION_BUDGET,
     LOCAL_CLAIM_RELEVANCE_BUDGET,
     LOCAL_EVIDENCE_RELEVANCE_BUDGET,
+    LocalResearchHandler,
     SemanticLocalResearchHandler,
 )
 from app.research.local_worker_runtime import LocalWorkerSettings
@@ -90,6 +99,144 @@ def worker_settings(provider: str) -> LocalWorkerSettings:
     )
 
 
+def access_results(
+    *paths: Path,
+) -> tuple[LocalDocumentAccessResult, ...]:
+    policy = LocalDocumentAccessPolicy(
+        allowed_roots=tuple({path.parent for path in paths}),
+        maximum_file_bytes=32 * 1024 * 1024,
+    )
+    gate = LocalDocumentAccessGate(policy)
+    return tuple(gate.validate(path) for path in paths)
+
+
+def access_policy(*paths: Path) -> LocalDocumentAccessPolicy:
+    return LocalDocumentAccessPolicy(
+        allowed_roots=tuple({path.parent for path in paths}),
+        maximum_file_bytes=32 * 1024 * 1024,
+    )
+
+
+def approval_for(
+    sources: tuple[LocalDocumentAccessResult, ...],
+    *,
+    approved: bool = True,
+) -> LocalExternalSendApproval:
+    return LocalExternalSendApproval.for_semantic_local_research(
+        sources,
+        approved=approved,
+    )
+
+
+@pytest.mark.parametrize("approval_state", ["missing", "false"])
+def test_semantic_handler_blocks_without_valid_approval_before_openai(
+    tmp_path: Path,
+    approval_state: str,
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("Grounded semantic evidence.", encoding="utf-8")
+    sources = access_results(source)
+    approval = (
+        None
+        if approval_state == "missing"
+        else approval_for(sources, approved=False)
+    )
+    calls: list[str] = []
+    handler = SemanticLocalResearchHandler(
+        settings_loader=lambda: calls.append("settings"),  # type: ignore[arg-type]
+        openai_client_factory=lambda settings: calls.append("openai"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ValueError, match="explicit external-send approval"):
+        handler(
+            "How does semantic research work?",
+            "Explain grounded semantic research.",
+            sources,
+            tmp_path / "reports",
+            access_policy(source),
+            approval,
+        )
+
+    assert calls == []
+
+
+def test_semantic_handler_blocks_changed_bytes_before_openai(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.md"
+    source.write_bytes(b"original")
+    sources = access_results(source)
+    approval = approval_for(sources)
+    source.write_bytes(b"modified")
+    calls: list[str] = []
+    handler = SemanticLocalResearchHandler(
+        settings_loader=lambda: calls.append("settings"),  # type: ignore[arg-type]
+        openai_client_factory=lambda settings: calls.append("openai"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ValueError, match="digest changed"):
+        handler(
+            "How does changed-file approval work?",
+            "Explain approval integrity checks.",
+            sources,
+            tmp_path / "reports",
+            access_policy(source),
+            approval,
+        )
+
+    assert calls == []
+
+
+def test_semantic_handler_requires_exact_multiple_source_approval(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "first.md"
+    second = tmp_path / "second.md"
+    first.write_text("First evidence.", encoding="utf-8")
+    second.write_text("Second evidence.", encoding="utf-8")
+    sources = access_results(first, second)
+    calls: list[str] = []
+    handler = SemanticLocalResearchHandler(
+        settings_loader=lambda: calls.append("settings"),  # type: ignore[arg-type]
+        openai_client_factory=lambda settings: calls.append("openai"),  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(ValueError, match="source sets"):
+        handler(
+            "How does multi-source approval work?",
+            "Explain exact source-set approval.",
+            sources,
+            tmp_path / "reports",
+            access_policy(first, second),
+            approval_for((sources[0],)),
+        )
+
+    assert calls == []
+
+
+def test_deterministic_handler_remains_approval_free(tmp_path: Path) -> None:
+    source = tmp_path / "source.md"
+    source.write_text("Grounded research connects claims to traceable evidence.", encoding="utf-8")
+    output_dir = tmp_path / "reports"
+    handler = LocalResearchHandler(
+        id_factory=lambda: "deterministic-approval-free",
+        stdout=io.StringIO(),
+    )
+
+    status = handler(
+        "How does grounded research connect claims to evidence?",
+        "Explain traceable grounded evidence.",
+        access_results(source),
+        output_dir,
+        access_policy(source),
+        None,
+    )
+
+    assert status == 0
+    assert (output_dir / "deterministic-approval-free" / "report.md").is_file()
+    assert (output_dir / "deterministic-approval-free" / "result.json").is_file()
+
+
 def test_handler_validates_sources_before_loading_providers(
     tmp_path: Path,
 ) -> None:
@@ -125,8 +272,10 @@ def test_handler_validates_sources_before_loading_providers(
         handler(
             "Question",
             "Objective",
-            (source,),
+            access_results(source),
             tmp_path / "reports",
+            access_policy(source),
+            approval_for(access_results(source)),
         )
 
     assert calls == []
@@ -212,8 +361,10 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
     status = handler(
         "How does grounded research connect claims to evidence?",
         "Explain traceable evidence.",
-        (source,),
+        access_results(source),
         tmp_path / "reports",
+        access_policy(source),
+        approval_for(access_results(source)),
     )
 
     assert status == 0

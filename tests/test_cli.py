@@ -12,6 +12,7 @@ from app.cli import (
     main,
     validate_sources,
 )
+from app.research.local_document_access_policy import LocalDocumentAccessResult
 from tests.test_local_hwpx_text_extractor import write_hwpx
 from tests.test_local_pdf_text_extractor import write_pdf
 
@@ -33,6 +34,8 @@ def test_parser_accepts_research_command(
             "How does grounded research use evidence?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
         ]
     )
 
@@ -53,10 +56,13 @@ def test_parser_accepts_semantic_research_mode(
             "research",
             "--mode",
             "semantic",
+            "--approve-external-send",
             "--question",
             "How does semantic local research work?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
         ]
     )
 
@@ -79,6 +85,8 @@ def test_parser_rejects_unsupported_research_mode(
                 "How does semantic local research work?",
                 "--source",
                 str(source),
+            "--allowed-root",
+            str(tmp_path),
             ]
         )
 
@@ -179,6 +187,8 @@ def test_main_reports_invalid_pdf_through_local_handler(
             "How does local PDF research handle errors?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
         ]
     )
 
@@ -212,8 +222,10 @@ def test_main_calls_injected_research_handler(
     def handler(
         question: str,
         objective: str,
-        sources: tuple[Path, ...],
+        sources: tuple[LocalDocumentAccessResult, ...],
         output_dir: Path,
+        _access_policy: object,
+        _approval: object,
     ) -> int:
         captured["question"] = question
         captured["objective"] = objective
@@ -228,6 +240,8 @@ def test_main_calls_injected_research_handler(
             "How does grounded research use evidence?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
             "--output-dir",
             str(tmp_path / "reports"),
         ],
@@ -238,7 +252,10 @@ def test_main_calls_injected_research_handler(
     assert captured["question"] == (
         "How does grounded research use evidence?"
     )
-    assert captured["sources"] == (source.resolve(),)
+    assert tuple(
+        result.resolved_path
+        for result in captured["sources"]
+    ) == (source.resolve(),)
     assert captured["output_dir"] == (
         tmp_path / "reports"
     ).resolve()
@@ -264,10 +281,13 @@ def test_main_selects_semantic_local_handler(
             "research",
             "--mode",
             "semantic",
+            "--approve-external-send",
             "--question",
             "How does semantic local research work?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
         ],
         research_handler=deterministic_handler,
         semantic_research_handler=semantic_handler,
@@ -288,19 +308,29 @@ def test_main_passes_resolved_pdf_to_selected_local_handler(
     def deterministic_handler(
         _question: str,
         _objective: str,
-        sources: tuple[Path, ...],
+        sources: tuple[LocalDocumentAccessResult, ...],
         _output_dir: Path,
+        _access_policy: object,
+        _approval: object,
     ) -> int:
-        calls.append(("deterministic", sources))
+        calls.append((
+            "deterministic",
+            tuple(result.resolved_path for result in sources),
+        ))
         return 0
 
     def semantic_handler(
         _question: str,
         _objective: str,
-        sources: tuple[Path, ...],
+        sources: tuple[LocalDocumentAccessResult, ...],
         _output_dir: Path,
+        _access_policy: object,
+        _approval: object,
     ) -> int:
-        calls.append(("semantic", sources))
+        calls.append((
+            "semantic",
+            tuple(result.resolved_path for result in sources),
+        ))
         return 0
 
     arguments = [
@@ -309,9 +339,15 @@ def test_main_passes_resolved_pdf_to_selected_local_handler(
         "How does local PDF research work?",
         "--source",
         str(source),
+        "--allowed-root",
+        str(tmp_path),
     ]
     if mode == "semantic":
-        arguments[1:1] = ["--mode", "semantic"]
+        arguments[1:1] = [
+            "--mode",
+            "semantic",
+            "--approve-external-send",
+        ]
 
     result = main(
         arguments,
@@ -339,19 +375,29 @@ def test_main_passes_resolved_hwpx_to_selected_local_handler(
     def deterministic_handler(
         _question: str,
         _objective: str,
-        sources: tuple[Path, ...],
+        sources: tuple[LocalDocumentAccessResult, ...],
         _output_dir: Path,
+        _access_policy: object,
+        _approval: object,
     ) -> int:
-        calls.append(("deterministic", sources))
+        calls.append((
+            "deterministic",
+            tuple(result.resolved_path for result in sources),
+        ))
         return 0
 
     def semantic_handler(
         _question: str,
         _objective: str,
-        sources: tuple[Path, ...],
+        sources: tuple[LocalDocumentAccessResult, ...],
         _output_dir: Path,
+        _access_policy: object,
+        _approval: object,
     ) -> int:
-        calls.append(("semantic", sources))
+        calls.append((
+            "semantic",
+            tuple(result.resolved_path for result in sources),
+        ))
         return 0
 
     arguments = [
@@ -360,9 +406,15 @@ def test_main_passes_resolved_hwpx_to_selected_local_handler(
         "How does local HWPX research work?",
         "--source",
         str(source),
+        "--allowed-root",
+        str(tmp_path),
     ]
     if mode == "semantic":
-        arguments[1:1] = ["--mode", "semantic"]
+        arguments[1:1] = [
+            "--mode",
+            "semantic",
+            "--approve-external-send",
+        ]
 
     result = main(
         arguments,
@@ -388,6 +440,8 @@ def test_main_reports_malformed_hwpx_through_local_handler(
             "How does local HWPX research handle errors?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
         ]
     )
 
@@ -417,6 +471,8 @@ def test_main_runs_default_local_hwpx_runtime(
             "How does grounded HWPX research use evidence?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
             "--output-dir",
             str(output_dir),
         ]
@@ -445,6 +501,8 @@ def test_main_returns_error_for_short_question(
             "short",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
         ]
     )
 
@@ -476,6 +534,8 @@ def test_main_runs_default_local_runtime(
             "How does grounded research use evidence?",
             "--source",
             str(source),
+            "--allowed-root",
+            str(tmp_path),
             "--output-dir",
             str(output_dir),
         ]
@@ -495,6 +555,413 @@ def test_main_runs_default_local_runtime(
     assert (
         execution_dirs[0] / "result.json"
     ).is_file()
+
+
+def test_main_requires_allowed_root(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does allowed-root validation work?",
+            "--source",
+            str(source),
+        ],
+        research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "at least one allowed root is required" in capsys.readouterr().err
+
+
+def test_main_accepts_nested_source_inside_allowed_root(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+    source = nested / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    captured: list[tuple[LocalDocumentAccessResult, ...]] = []
+
+    def handler(
+        _question: str,
+        _objective: str,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        _output_dir: Path,
+        _access_policy: object,
+        _approval: object,
+    ) -> int:
+        captured.append(sources)
+        return 0
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does nested source validation work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(root),
+        ],
+        research_handler=handler,
+    )
+
+    assert result == 0
+    assert captured[0][0].resolved_path == source.resolve()
+
+
+@pytest.mark.parametrize("lookalike", [False, True])
+def test_main_rejects_source_outside_root_before_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    lookalike: bool,
+) -> None:
+    root = tmp_path / "data"
+    outside = tmp_path / ("database" if lookalike else "outside")
+    root.mkdir()
+    outside.mkdir()
+    source = outside / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does root containment validation work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(root),
+        ],
+        research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "outside the allowed roots" in capsys.readouterr().err
+
+
+def test_main_rejects_leaf_symlink_source(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    link = tmp_path / "source-link.txt"
+    try:
+        link.symlink_to(source)
+    except OSError:
+        pytest.skip("platform cannot create symlinks")
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does symlink source validation work?",
+            "--source",
+            str(link),
+            "--allowed-root",
+            str(tmp_path),
+        ],
+        research_handler=lambda *args: 0,
+    )
+
+    assert result == 2
+    assert "must not be a symlink" in capsys.readouterr().err
+
+
+def test_main_rejects_ancestor_symlink_escape(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    source = outside / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    link = root / "linked"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("platform cannot create symlinks")
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does ancestor symlink validation work?",
+            "--source",
+            str(link / source.name),
+            "--allowed-root",
+            str(root),
+        ],
+        research_handler=lambda *args: 0,
+    )
+
+    assert result == 2
+    assert "outside the allowed roots" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("root_kind", "message"),
+    [("missing", "exist and be readable"), ("file", "must be directories")],
+)
+def test_main_rejects_invalid_allowed_root(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    root_kind: str,
+    message: str,
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+    root = tmp_path / root_kind
+    if root_kind == "file":
+        root.write_text("not a directory", encoding="utf-8")
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does allowed-root configuration work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(root),
+        ],
+        research_handler=lambda *args: 0,
+    )
+
+    assert result == 2
+    assert message in capsys.readouterr().err
+
+
+def test_main_rejects_duplicate_canonical_allowed_roots(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("evidence", encoding="utf-8")
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does duplicate root validation work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+            "--allowed-root",
+            str(tmp_path / "."),
+        ],
+        research_handler=lambda *args: 0,
+    )
+
+    assert result == 2
+    assert "allowed roots must be unique" in capsys.readouterr().err
+
+
+def test_main_rejects_oversize_source_before_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"12345")
+    calls: list[object] = []
+    monkeypatch.setattr("app.cli.DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES", 4)
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does source size validation work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+        ],
+        research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "exceeds the maximum file size" in capsys.readouterr().err
+
+
+def test_gate_rejection_does_not_call_local_document_adapter(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    source = tmp_path / "outside.txt"
+    source.write_text("evidence", encoding="utf-8")
+    adapter_calls: list[object] = []
+
+    def fail_if_called(*args: object, **kwargs: object) -> object:
+        adapter_calls.append((args, kwargs))
+        raise AssertionError("adapter must not be called")
+
+    monkeypatch.setattr(
+        "app.research.local_document_adapter."
+        "LocalDocumentAdapter.load_validated",
+        fail_if_called,
+    )
+
+    result = main(
+        [
+            "research",
+            "--question",
+            "How does pre-parse root validation work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(root),
+        ]
+    )
+
+    assert result == 2
+    assert adapter_calls == []
+    assert "outside the allowed roots" in capsys.readouterr().err
+
+
+def test_main_semantic_requires_external_send_approval(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("semantic evidence", encoding="utf-8")
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research",
+            "--mode",
+            "semantic",
+            "--question",
+            "How does semantic approval work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+        ],
+        semantic_research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "explicit external-send approval is required" in capsys.readouterr().err
+
+
+def test_main_semantic_approval_is_bound_to_validated_sources(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"semantic evidence")
+    captured: list[tuple[object, ...]] = []
+
+    result = main(
+        [
+            "research",
+            "--mode",
+            "semantic",
+            "--approve-external-send",
+            "--question",
+            "How does semantic approval work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+        ],
+        semantic_research_handler=lambda *args: captured.append(args) or 0,
+    )
+
+    assert result == 0
+    access_results = captured[0][2]
+    approval = captured[0][5]
+    assert approval.approved is True
+    assert approval.sources[0].resolved_path == source.resolve()
+    assert approval.sources[0].content_sha256 == access_results[0].content_sha256
+    assert approval.sources[0].file_size_bytes == len(b"semantic evidence")
+
+
+def test_main_rejects_external_send_approval_in_deterministic_mode(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("offline evidence", encoding="utf-8")
+
+    result = main(
+        [
+            "research",
+            "--approve-external-send",
+            "--question",
+            "How does deterministic research work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+        ],
+        research_handler=lambda *args: 0,
+    )
+
+    assert result == 2
+    assert "only valid with --mode semantic" in capsys.readouterr().err
+
+
+def test_semantic_trust_failure_precedes_approval_and_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    source = tmp_path / "outside.txt"
+    source.write_text("semantic evidence", encoding="utf-8")
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research",
+            "--mode",
+            "semantic",
+            "--approve-external-send",
+            "--question",
+            "How does semantic trust validation work?",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(root),
+        ],
+        semantic_research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "outside the allowed roots" in capsys.readouterr().err
+
+
+def test_research_live_does_not_accept_external_send_approval() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "research-live",
+                "--question",
+                "How does live grounded research work?",
+                "--approve-external-send",
+            ]
+        )
 
 
 def test_parser_accepts_live_research_command() -> None:

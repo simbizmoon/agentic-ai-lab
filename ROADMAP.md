@@ -720,11 +720,12 @@ Rewrite가 아니라 Integration-first
 - [x] Semantic citation/claim relevance/answer coverage integration
 - [x] Deterministic mode backward compatibility
 - [x] Deterministic + Semantic 실제 CLI smoke
-- [ ] 허용된 경로
-- [ ] 파일 크기 제한
-- [ ] 민감문서 외부 전송 승인
+- [x] 허용된 경로
+- [x] 파일 크기 제한
+- [x] 민감문서 외부 전송 승인
 - [x] PDF parser/encrypted/no-text 실패 처리
-- [ ] 동일 문서 Hash와 Cache
+- [x] 동일 문서 raw SHA-256 identity/provenance
+- [ ] 동일 문서 parsing/embedding Cache
 
 ## 완료 결과
 
@@ -1159,7 +1160,7 @@ Stage와 별도로 다음 항목은 전체 기간 동안 지속적으로 관리�
 - [ ] 내부 네트워크 접근 제한
 - [ ] Prompt Injection 방어
 - [ ] Secret 관리
-- [ ] 민감문서 외부 전송 승인
+- [x] 민감문서 외부 전송 승인
 - [ ] 개인정보 Sanitization
 - [ ] 데이터 삭제 승인
 
@@ -2833,7 +2834,13 @@ Text-bearing HWPX Vertical Slice
 - malformed/encrypted/no-text PDF clear failure
 - real Hancom HWPX adapter + deterministic CLI smoke (`0..96`)
 - semantic HWPX section-2 evidence + exact citation (`114..303`)
-- full regression `4722 passed`
+- explicit allowed-root containment and leaf symlink rejection
+- raw local source 32 MiB limit and raw SHA-256/size provenance
+- execution-scoped semantic external-send approval bound to path + digest + size
+- provider composition 직전 same-policy digest revalidation
+- approved semantic smoke: relevant paragraph `94..283`, exact citation, verified/fully_supported
+- deterministic mode approval-free offline contract 유지
+- full regression `4779 passed`
 - Ruff `All checks passed`, `git diff --check` 통과
 
 미완료 범위:
@@ -2842,6 +2849,8 @@ Text-bearing HWPX Vertical Slice
 - line number provenance
 - table-specialized parsing
 - persistent indexing/embedding cache
+- sensitive-content classification/redaction와 persistent approval storage
+- descriptor-level TOCTOU resistance
 - Web + Local unified Integrated RAG
 
 현재 다음 제품 순서:

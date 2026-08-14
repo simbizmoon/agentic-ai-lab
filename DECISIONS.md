@@ -2788,3 +2788,42 @@ D-049의 deterministic 기본, semantic opt-in, provider routing 및 no-silent-f
 D-049의 deterministic 기본/semantic opt-in 계약과 D-050의 generic section provenance
 계약을 변경하지 않는다. D-051은 현재 Local 지원 형식을 text-bearing HWPX까지
 확장하지만 HWP binary 또는 일반 ZIP/XML 문서 지원으로 범위를 넓히지 않는다.
+
+---
+
+## D-052 — Local 문서는 명시적 trust boundary와 실행 단위 external-send approval을 사용
+
+- 상태: 확정
+- 날짜: 2026-08-14
+- 적용 범위: Stage 4 Local Document Safety Controls
+
+### 결정
+
+- `aira research`는 하나 이상의 repeatable `--allowed-root`를 요구한다.
+- canonical allowed-root containment를 사용하고 string prefix 비교를 사용하지 않는다.
+- leaf symlink를 거부하고 ancestor symlink escape는 canonical containment로 차단한다.
+- raw local source 크기는 source당 32 MiB로 제한한다.
+- raw file byte의 SHA-256과 size를 source/document provenance로 보존한다.
+- deterministic Local Research는 external-send approval 없이 offline으로 실행한다.
+- semantic Local Research는 명시적 `--approve-external-send`를 요구한다.
+- 승인은 현재 실행에만 유효하며 모든 validated source의 canonical path, raw SHA-256 및 size에 묶인다.
+- partial/extra/stale source approval을 허용하지 않으며 자동 재승인하거나 영구 저장하지 않는다.
+- semantic document parsing 뒤 Settings/OpenAI client 및 external-provider component 구성 전에 동일한 `LocalDocumentAccessPolicy`로 source를 다시 fingerprint한다.
+- path, size 또는 digest가 바뀌면 실행을 중단하고 새 승인을 요구한다.
+- approval 자체를 evidence/citation metadata에 복제하지 않는다.
+
+### 한계와 후속 범위
+
+- 재검증은 practical approval-integrity check이며 descriptor-level TOCTOU를 해결하지 않는다.
+- sensitive-content classification, redaction, persistent approval/cache는 후속 범위이다.
+- research-live와 기존 OpenAI/Local bounded-worker routing은 변경하지 않는다.
+- Stage 4는 계속 진행 중이다.
+
+### 검증
+
+- focused Local safety/approval regression: `110 passed`
+- Local format/runtime regression: `48 passed`
+- full regression: `4779 passed`
+- deterministic real CLI smoke: approval 없이 report/result 생성
+- semantic no-approval real CLI smoke: provider 실행 전 approval-required failure
+- semantic approved real CLI smoke: relevant evidence `94..283`, exact citation, verified/fully_supported

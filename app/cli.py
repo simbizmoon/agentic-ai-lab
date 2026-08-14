@@ -11,13 +11,30 @@ from typing import Final
 from app.research.live_research_handler import (
     LiveResearchHandler,
 )
+from app.research.local_document_access_policy import (
+    LocalDocumentAccessGate,
+    LocalDocumentAccessPolicy,
+    LocalDocumentAccessResult,
+)
+from app.research.local_external_send_approval import (
+    LocalExternalSendApproval,
+    LocalExternalSendApprovalError,
+)
 from app.research.local_research_handler import (
+    DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES,
     LocalResearchHandler,
     SemanticLocalResearchHandler,
 )
 
 ResearchHandler = Callable[
-    [str, str, tuple[Path, ...], Path],
+    [
+        str,
+        str,
+        tuple[LocalDocumentAccessResult, ...],
+        Path,
+        LocalDocumentAccessPolicy,
+        LocalExternalSendApproval | None,
+    ],
     int,
 ]
 LiveResearchHandlerType = Callable[
@@ -86,6 +103,23 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Local Markdown, text, PDF, or HWPX source path. "
             "Repeat this option to provide multiple sources."
+        ),
+    )
+    research_parser.add_argument(
+        "--allowed-root",
+        action="append",
+        metavar="PATH",
+        help=(
+            "Trusted directory containing local research sources. "
+            "Repeat this option to allow multiple roots."
+        ),
+    )
+    research_parser.add_argument(
+        "--approve-external-send",
+        action="store_true",
+        help=(
+            "Approve sending content derived from the validated local "
+            "sources to external AI providers for this semantic execution."
         ),
     )
     research_parser.add_argument(
@@ -228,9 +262,26 @@ def validate_sources(
             )
 
         normalized_paths.add(resolved)
-        sources.append(resolved)
+        sources.append(source)
 
     return tuple(sources)
+
+
+def validate_local_access_policy(
+    values: Sequence[str] | None,
+) -> LocalDocumentAccessPolicy:
+    """Build the explicit Local Research source trust policy."""
+
+    if not values:
+        raise ValueError("at least one allowed root is required")
+
+    return LocalDocumentAccessPolicy(
+        allowed_roots=tuple(
+            Path(value).expanduser()
+            for value in values
+        ),
+        maximum_file_bytes=DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES,
+    )
 
 
 def validate_output_dir(value: str) -> Path:
@@ -274,13 +325,39 @@ def run_research_command(
         question=question,
     )
     sources = validate_sources(namespace.source)
+    access_policy = validate_local_access_policy(
+        namespace.allowed_root
+    )
+    access_gate = LocalDocumentAccessGate(access_policy)
+    access_results = tuple(
+        access_gate.validate(source)
+        for source in sources
+    )
+    external_send_approval: LocalExternalSendApproval | None = None
+    if namespace.approve_external_send:
+        if namespace.mode != "semantic":
+            raise LocalExternalSendApprovalError(
+                "--approve-external-send is only valid with --mode semantic"
+            )
+        external_send_approval = (
+            LocalExternalSendApproval.for_semantic_local_research(
+                access_results
+            )
+        )
+    elif namespace.mode == "semantic":
+        raise LocalExternalSendApprovalError(
+            "explicit external-send approval is required for "
+            "semantic local research"
+        )
     output_dir = validate_output_dir(namespace.output_dir)
 
     return research_handler(
         question,
         objective,
-        sources,
+        access_results,
         output_dir,
+        access_policy,
+        external_send_approval,
     )
 
 

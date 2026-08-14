@@ -379,6 +379,7 @@ OpenAI, Tavily, Ollama 설정이 필요하지 않다.
 
 ```bash
 aira research \
+  --allowed-root "$PWD" \
   --question "How does grounded research use local evidence?" \
   --objective "Explain the local evidence using traceable citations." \
   --source notes.md \
@@ -389,6 +390,7 @@ aira research \
 
 ```bash
 aira research --mode deterministic \
+  --allowed-root "$PWD" \
   --question "How does grounded research use local evidence?" \
   --objective "Explain the local evidence using traceable citations." \
   --source notes.md
@@ -398,6 +400,7 @@ Text-based PDF도 같은 offline 경로를 사용할 수 있다.
 
 ```bash
 aira research --mode deterministic \
+  --allowed-root "$PWD" \
   --question "What evidence does this PDF provide?" \
   --objective "Create a grounded offline report from the local PDF." \
   --source evidence.pdf
@@ -407,6 +410,7 @@ Text-bearing HWPX도 같은 명령 계약을 사용한다.
 
 ```bash
 aira research --mode deterministic \
+  --allowed-root "$PWD" \
   --question "What evidence does this HWPX document contain?" \
   --objective "Create a grounded offline report from local HWPX evidence." \
   --source evidence.hwpx
@@ -424,6 +428,8 @@ Semantic Local Research는 opt-in이다.
 export OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 
 aira research --mode semantic \
+  --approve-external-send \
+  --allowed-root "$PWD" \
   --question "How does AIRA divide work between OpenAI and the local model?" \
   --objective "Explain hybrid role routing using grounded local evidence." \
   --source hybrid-routing.hwpx \
@@ -434,6 +440,14 @@ Semantic 모드는 local search/reader와 query, local path, filename provenance
 보존한다. PDF evidence는 physical page number를, HWPX evidence는 `hwpx_section_index`와 `hwpx_package_path`를 exact character range와 함께 보존하면서 paragraph candidate, lexical + embedding RRF shortlist, semantic
 evidence relevance, generated claim 및 semantic citation/relevance/coverage를
 실행한다.
+
+모든 Local Research source는 명시적 `--allowed-root` 안에 있어야 하며 raw file
+크기는 source당 최대 32 MiB이다. leaf symlink는 거부하고 raw byte SHA-256과 file
+size를 provenance로 보존한다. Deterministic mode는 approval 없이 offline으로
+실행된다. Semantic mode의 `--approve-external-send`는 현재 실행의 canonical path,
+raw SHA-256 및 size에만 유효하며, provider 구성 직전에 같은 policy로 다시 검증한다.
+파일이 바뀌면 새 승인이 필요하다. 이 검사는 descriptor-level TOCTOU를 완전히
+해결하지 않으며 민감정보 분류·redaction·영구 approval 저장도 아직 제공하지 않는다.
 
 Provider routing:
 

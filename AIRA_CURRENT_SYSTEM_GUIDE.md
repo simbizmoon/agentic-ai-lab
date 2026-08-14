@@ -37,6 +37,8 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 외부 Provider 없이 `WholeDocumentEvidenceExtractor`와
 `DeterministicPipelineClaimBuilder`를 사용하는 역사적 offline regression 계약을
 보존한다. 기존 `report.md`와 `result.json` 생성 동작도 유지한다.
+Local source는 명시적 allowed root 안의 regular file이어야 하며 leaf symlink와
+32 MiB 초과 raw file은 거부된다. raw byte size와 SHA-256 provenance를 기록한다.
 
 ## 2.2 Local Semantic Research
 
@@ -44,6 +46,11 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 in-memory search와 reader로 처리하고 paragraph 단위 semantic evidence와 generated
 claim을 만든다. query text, local path, filename, character range, PDF physical page 및 HWPX body-section provenance를
 보존한다.
+Semantic 실행은 `--approve-external-send`를 요구한다. 승인은 실행 단위이며 모든
+source의 canonical path, raw SHA-256 및 size에 묶인다. 문서 parsing 뒤 provider
+구성 직전에 같은 access policy로 다시 fingerprint하여 변경된 파일을 거부한다.
+이는 practical revalidation이며 descriptor-level TOCTOU 해결은 아니다.
+승인 상태 자체는 evidence/citation metadata에 저장하지 않으며 영구 approval 저장소도 없다.
 
 ```text
 TXT / Markdown / Text PDF / Text-bearing HWPX
@@ -698,6 +705,7 @@ aira research-live --help
 
 ```bash
 aira research --mode deterministic \
+  --allowed-root "$PWD" \
   --question "How does grounded research use local evidence?" \
   --objective "Explain the local evidence with traceable citations." \
   --source notes.md
@@ -707,6 +715,8 @@ Semantic Local Research는 명시적으로 선택한다.
 
 ```bash
 aira research --mode semantic \
+  --approve-external-send \
+  --allowed-root "$PWD" \
   --question "How does AIRA divide work between OpenAI and the local model?" \
   --objective "Explain hybrid role routing using grounded local evidence." \
   --source hybrid-routing.md
