@@ -149,6 +149,10 @@ def test_tool_returns_matching_candidates() -> None:
         candidate.source_id
         for candidate in result.candidates
     ) == "source-working"
+    assert all(
+        "research_origin" not in candidate.metadata
+        for candidate in result.candidates
+    )
 
 
 def test_tool_returns_no_results() -> None:
@@ -234,7 +238,10 @@ def test_tool_adds_search_metadata() -> None:
                 title="Agent working memory",
                 url="https://example.com/memory",
                 source_type=ResearchSourceType.ACADEMIC,
-                metadata={"document_path": "memory.md"},
+                metadata={
+                    "document_path": "memory.md",
+                    "research_origin": "fixture",
+                },
             )
         ]
     )
@@ -252,6 +259,7 @@ def test_tool_adds_search_metadata() -> None:
     assert first_candidate.metadata["provider"] == (
         "in-memory"
     )
+    assert first_candidate.metadata["research_origin"] == "fixture"
     assert int(
         first_candidate.metadata["relevance_score"]
     ) > 0

@@ -2827,3 +2827,72 @@ D-049의 deterministic 기본/semantic opt-in 계약과 D-050의 generic section
 - deterministic real CLI smoke: approval 없이 report/result 생성
 - semantic no-approval real CLI smoke: provider 실행 전 approval-required failure
 - semantic approved real CLI smoke: relevant evidence `94..283`, exact citation, verified/fully_supported
+
+---
+
+## D-053 — Integrated Web + Local Research는 federated source core와 source-universe-aware selection을 사용
+
+- 상태: 확정
+- 날짜: 2026-08-15
+- 적용 범위: Stage 4 Integrated Web + Local Federated Research Vertical Slice
+
+### 배경
+
+Web-only `research-live`와 Local-only `research` 경로는 이미 존재했지만, 하나의 연구
+실행에서 두 source universe를 함께 조사하는 제품 경로가 필요했다. Web provider
+score와 Local lexical score 및 source quality는 동일한 의미 체계가 아니므로 단순
+cross-universe score 비교만으로 Local evidence를 탈락시키면 안 된다. 또한 Local
+content가 external AI provider에 도달하기 전에는 D-052의 명시적 trust/approval
+boundary가 유지되어야 한다.
+
+### 결정
+
+- normalized Web/Local candidate를 하나의 federated stream으로 결합한다.
+- producer가 `research_origin=web|local`을 명시하고 reader 및 quality evaluator는 이
+  origin만으로 routing한다. URL, hostname, storage mechanism으로 origin을 추론하지 않는다.
+- per-query Web/Local rank를 deterministic하게 interleave하고 merged rank를 다시
+  부여한다. source ID는 전체 set에서, normalized URL은 query 안에서 deduplicate한다.
+- Tavily provider call/credit/latency만 search usage로 집계하고 Local in-memory retrieval은
+  provider usage에 포함하지 않는다.
+- 새 pipeline architecture를 만들지 않고 기존 `SingleResearchAgentPipeline`을 재사용한다.
+- CLI는 `aira research-integrated`로 분리하고 `--mode`를 추가하지 않는다.
+- Integrated approval purpose는 `integrated_web_local_research`로 하며
+  `semantic_local_research`와 상호 대체할 수 없다.
+- approval은 canonical path, raw SHA-256 및 raw size에 묶고, initial approval validation
+  → `LocalDocumentAdapter.load_validated()` → same-policy fresh revalidation → approval
+  revalidation을 통과한 뒤에만 Tavily/OpenAI/worker component를 구성한다.
+- Integrated-only source-diversity selector는 `maximum_sources >= 2`이고 두 origin이 모두
+  readable일 때 best eligible Web, best eligible Local, 기존 combined quality order 순으로
+  evidence extraction 기회를 제공한다.
+- 이는 citation quota가 아니다. `NO_EVIDENCE`는 기존 evidence-aware backfill로 다음
+  document를 시도하며 irrelevant Local/Web source를 final report에 강제하지 않는다.
+- `maximum_sources=1`은 기존 combined quality-aware order를 사용한다.
+- 첫 real slice에서는 supplemental/coverage replanning을 활성화하지 않는다.
+- generic persistent vector indexing, parsing/embedding cache 및 full persistent RAG는 이
+  결정의 범위 밖에 둔다.
+
+### 검증
+
+- focused Integrated selector/runtime/pipeline regression: `78 passed`
+- Step 2A focused approval/CLI/runtime regression: `164 passed`
+- Ruff: `All checks passed`
+- `git diff --check`: 통과
+- real Tavily Web search와 OpenAI semantic component가 포함된 CLI smoke 통과
+- weak Local fixture는 extraction opportunity 뒤 `NO_EVIDENCE`를 반환했고 workspace는
+  attempted `3`, selected/evidence sources `2`, backfilled `1`, no-evidence `1`을 기록했다.
+- strong Local fixture는 final 3 evidence source(2 Web + 1 Local), 8 claims, 8 citations,
+  quality `0.97 / excellent / passed`를 생성했고 Local evidence가 final claim/citation에
+  실제 포함되었다.
+
+### 결과와 후속 범위
+
+- AIRA는 이제 Web와 Local 자료를 하나의 실행에서 조사하는 실제 federated research
+  경로를 가진다.
+- 이 완료 범위는 broader RAG의 foundation이며 persistent vector RAG 완료를 의미하지 않는다.
+- persistent Local index/embedding hash cache, scanned PDF/OCR, HWP binary,
+  sensitive-content classification/redaction, persistent approval, descriptor-level TOCTOU
+  hardening 및 later replanning은 후속 작업이다.
+- semantic evidence evaluation은 real smoke에서 지배적인 latency/cost 구간이었다.
+- `OPENAI_TIMEOUT_SECONDS=30`, `OPENAI_MAX_RETRIES=2`는 evidence relevance 중
+  `APITimeoutError`가 발생했고, 관측상 `120`/`0` smoke는 성공했다. `120`/`0`을 permanent
+  default로 확정하지 않으며 timeout/retry policy는 별도 운영 결정으로 남긴다.

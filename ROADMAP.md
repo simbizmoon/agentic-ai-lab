@@ -37,10 +37,11 @@
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
 - 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
-- 현재 상태: Live Research 기준선을 유지하면서 Local TXT/Markdown, text-based PDF 및 text-bearing HWPX
-  Semantic Research Vertical Slices를 통합·검증 완료했다. Stage 4의 HWP binary 확장,
-  scanned PDF/OCR 및 Integrated Web+Local RAG는 아직 진행 전이다.
-- 현재 기준일: 2026-08-14
+- 현재 상태: Local TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice와
+  Integrated Web + Local Federated Research vertical slice를 실제 CLI smoke까지 완료했다.
+  Stage 4는 persistent parsing/embedding cache, HWP binary, scanned PDF/OCR 및 추가
+  sensitive-data hardening이 남아 있어 계속 진행 중이다.
+- 현재 기준일: 2026-08-15
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -697,7 +698,8 @@ Rewrite가 아니라 Integration-first
 - [x] 초기 TXT/Markdown Semantic Research Vertical Slice 완료
 - [x] text-based PDF vertical slice 완료
 - [x] text-bearing HWPX vertical slice 완료
-- [ ] scanned PDF/OCR, HWP binary 및 Integrated Web+Local 범위는 미완료
+- [x] Integrated Web + Local Federated Research vertical slice 완료
+- [ ] scanned PDF/OCR 및 HWP binary는 미완료
 
 ## Work Items
 
@@ -726,6 +728,10 @@ Rewrite가 아니라 Integration-first
 - [x] PDF parser/encrypted/no-text 실패 처리
 - [x] 동일 문서 raw SHA-256 identity/provenance
 - [ ] 동일 문서 parsing/embedding Cache
+- [x] Integrated Web + Local federated source core
+- [x] Integrated real runtime/CLI와 distinct external-send approval
+- [x] Integrated source-universe-aware selection과 evidence backfill
+- [x] Strong real Web + Local smoke
 
 ## 완료 결과
 
@@ -2851,12 +2857,48 @@ Text-bearing HWPX Vertical Slice
 - persistent indexing/embedding cache
 - sensitive-content classification/redaction와 persistent approval storage
 - descriptor-level TOCTOU resistance
-- Web + Local unified Integrated RAG
 
-현재 다음 제품 순서:
+## 33.2 Integrated Web + Local Federated Research 완료
 
 ```text
-Local Document expansion
-→ Integrated Web+Local RAG
+Integrated Web + Local federated source core
+→ COMPLETE
+
+research-integrated real runtime / CLI
+→ COMPLETE
+
+Integrated external-send approval boundary
+→ COMPLETE
+
+Source-universe-aware document selection
+→ COMPLETE
+
+Strong real Web + Local smoke
+→ COMPLETE
+```
+
+완료된 범위:
+
+- explicit `research_origin=web|local`과 origin 기반 reader/quality routing
+- deterministic interleaving, global source-ID deduplication, per-query URL deduplication 및 rank 재작성
+- Tavily provider usage만 집계하고 Local in-memory retrieval은 provider usage에서 제외
+- 기존 `SingleResearchAgentPipeline` 재사용
+- `aira research-integrated` CLI와 distinct `integrated_web_local_research` approval purpose
+- path + raw SHA-256 + raw size approval, fresh same-policy revalidation 뒤 provider 구성
+- Web와 Local에 각각 semantic evidence extraction 기회를 주는 Integrated-only selector
+- `NO_EVIDENCE` source가 quota를 소비하지 않는 evidence-aware backfill
+- real smoke에서 2 Web + 1 Local evidence source, 8 claims, 8 citations, quality `0.97 / excellent / passed`
+
+Stage 4 전체는 아직 `IN PROGRESS`이다. 완료되지 않은 항목은 persistent
+parsing/embedding cache, scanned PDF/OCR, HWP binary, sensitive-content
+classification/redaction, persistent approval storage 및 descriptor-level TOCTOU
+hardening이다. 완료된 Integrated slice는 persistent vector RAG 전체가 아니라 broader
+RAG를 위한 federated research foundation이다.
+
+현재 다음 우선 과제:
+
+```text
+Persistent Local Index / Embedding Hash Cache
+→ remaining Local format/safety expansion
 → Patent Research Vertical Slice
 ```

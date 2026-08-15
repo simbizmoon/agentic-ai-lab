@@ -2,7 +2,7 @@
 
 ## 1. 문서 목적
 
-본 문서는 2026-08-14 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된
+본 문서는 2026-08-15 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된
 AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 방법,
 현재 한계 및 후속 개선 방향을 사용자 관점에서 정리한다.
 
@@ -23,12 +23,13 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 
 # 2. 현재 AIRA의 위치
 
-현재 AIRA에는 세 가지 주요 연구 경로가 존재한다.
+현재 AIRA에는 네 가지 주요 연구 경로가 존재한다.
 
 ```text
 1. Local Deterministic Research
 2. Local Semantic Research
 3. Live Web Research
+4. Integrated Web + Local Research
 ```
 
 ## 2.1 Local Deterministic Research
@@ -75,7 +76,44 @@ relevance, answer coverage만 기존 bounded-worker 정책에 따라 OpenAI 또�
 citation, coverage 및 bounded replanning을 포함하는 Web 중심 경로이다.
 
 과거 Offline Baseline과 Live Single-Agent Vertical Slice 설명은 역사적 비교 기준으로
-유효하며, Local Semantic Research가 세 번째 명시적 제품 경로로 추가되었다.
+유효하며, Integrated Web + Local Research가 네 번째 명시적 제품 경로로 추가되었다.
+
+## 2.4 Integrated Web + Local Research
+
+`aira research-integrated`는 Tavily Web source와 명시적으로 승인된 Local document를
+하나의 기존 `SingleResearchAgentPipeline` 실행에서 조사한다. `--source`와
+`--allowed-root`는 repeatable이고 `--approve-external-send`는 필수이며 `--mode`는 없다.
+
+```bash
+aira research-integrated \
+  --question "How does AIRA combine Web and Local evidence?" \
+  --objective "Explain the topic using current Web sources and an approved local note." \
+  --source "$PWD/non-sensitive-notes.md" \
+  --allowed-root "$PWD" \
+  --approve-external-send \
+  --maximum-sources 4 \
+  --maximum-bytes 1000000 \
+  --output-dir reports/integrated
+```
+
+Local approval purpose는 `integrated_web_local_research`이며 Semantic Local purpose와
+서로 대체할 수 없다. canonical path, raw SHA-256 및 raw size를 initial/fresh validation
+모두에서 확인한 뒤에만 provider component를 구성한다. Local source의 path, filename,
+digest, size 및 `research_origin=local` provenance는 보존된다.
+
+Integrated-only selector는 quota가 2 이상이고 두 origin이 readable이면 best Web와 best
+Local에 각각 semantic evidence extraction 기회를 준다. Relevant Local evidence는 final
+citation에 기여할 수 있지만 irrelevant Local evidence는 `NO_EVIDENCE`로 거부되고 기존
+backfill이 다음 document를 시도한다. Tavily call/credit usage는 Web search만 나타내며
+Local in-memory retrieval은 provider search usage에 더하지 않는다.
+
+이는 Integrated Web + Local Federated Research vertical slice이며 persistent vector index,
+parsing/embedding cache를 갖춘 full persistent RAG는 아직 아니다.
+
+관측된 첫 smoke에서 OpenAI timeout `30s`, retry `2`는 evidence relevance 단계의
+`APITimeoutError`로 끝났고 `120s`, retry `0` smoke는 성공했다. 이는 permanent default가
+아니며 evidence semantic processing이 dominant latency였다는 운영 관측과 함께 별도
+timeout/retry 결정으로 남긴다.
 
 # 3. 현재 구현된 핵심 기능
 
@@ -1318,8 +1356,8 @@ HWPX real-Hancom adapter/deterministic smoke는 `Contents/section0.xml`, range `
 `hwpx_section_index="1"`을 보존했다. Semantic three-section smoke는 section 2의 relevant
 paragraph만 `114..303`으로 선택했고 citation verification은 fully supported였다.
 
-현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`, text-based `.pdf`, text-bearing `.hwpx`이다. PDF는 `pypdf`로 page별 text를 추출하며, 한 page section 안에 완전히 포함된 evidence는 `metadata["page_number"]`를 보존한다. HWPX는 safe ZIP direct-read와 `defusedxml`, manifest/spine 및 `sec` body classification을 사용한다. Scanned PDF/OCR, HWP binary, DOCX, table-specialized parsing, persistent vector index 및 Web+Local
-unified Integrated RAG는 아직 완료되지 않았다.
+현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`, text-based `.pdf`, text-bearing `.hwpx`이다. PDF는 `pypdf`로 page별 text를 추출하며, 한 page section 안에 완전히 포함된 evidence는 `metadata["page_number"]`를 보존한다. HWPX는 safe ZIP direct-read와 `defusedxml`, manifest/spine 및 `sec` body classification을 사용한다. Scanned PDF/OCR, HWP binary, DOCX, table-specialized parsing, persistent vector index와 parsing/embedding cache는 아직 완료되지 않았다. Web + Local
+Federated Research vertical slice는 완료되었지만 full persistent vector RAG로 확대 해석하지 않는다.
 
 현재 검증 기준:
 

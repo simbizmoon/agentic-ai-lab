@@ -85,8 +85,8 @@ def test_parser_rejects_unsupported_research_mode(
                 "How does semantic local research work?",
                 "--source",
                 str(source),
-            "--allowed-root",
-            str(tmp_path),
+                "--allowed-root",
+                str(tmp_path),
             ]
         )
 
@@ -142,6 +142,7 @@ def test_validate_sources_accepts_pdf(
     source.write_bytes(b"CLI validation does not parse content")
 
     assert validate_sources([str(source)]) == (source.resolve(),)
+
 
 @pytest.mark.parametrize("suffix", [".hwp", ".docx"])
 def test_validate_sources_rejects_unsupported_file(
@@ -249,16 +250,11 @@ def test_main_calls_injected_research_handler(
     )
 
     assert result == 0
-    assert captured["question"] == (
-        "How does grounded research use evidence?"
+    assert captured["question"] == ("How does grounded research use evidence?")
+    assert tuple(result.resolved_path for result in captured["sources"]) == (
+        source.resolve(),
     )
-    assert tuple(
-        result.resolved_path
-        for result in captured["sources"]
-    ) == (source.resolve(),)
-    assert captured["output_dir"] == (
-        tmp_path / "reports"
-    ).resolve()
+    assert captured["output_dir"] == (tmp_path / "reports").resolve()
 
 
 def test_main_selects_semantic_local_handler(
@@ -296,6 +292,7 @@ def test_main_selects_semantic_local_handler(
     assert result == 0
     assert calls == ["semantic"]
 
+
 @pytest.mark.parametrize("mode", ["deterministic", "semantic"])
 def test_main_passes_resolved_pdf_to_selected_local_handler(
     tmp_path: Path,
@@ -313,10 +310,12 @@ def test_main_passes_resolved_pdf_to_selected_local_handler(
         _access_policy: object,
         _approval: object,
     ) -> int:
-        calls.append((
-            "deterministic",
-            tuple(result.resolved_path for result in sources),
-        ))
+        calls.append(
+            (
+                "deterministic",
+                tuple(result.resolved_path for result in sources),
+            )
+        )
         return 0
 
     def semantic_handler(
@@ -327,10 +326,12 @@ def test_main_passes_resolved_pdf_to_selected_local_handler(
         _access_policy: object,
         _approval: object,
     ) -> int:
-        calls.append((
-            "semantic",
-            tuple(result.resolved_path for result in sources),
-        ))
+        calls.append(
+            (
+                "semantic",
+                tuple(result.resolved_path for result in sources),
+            )
+        )
         return 0
 
     arguments = [
@@ -359,7 +360,6 @@ def test_main_passes_resolved_pdf_to_selected_local_handler(
     assert calls == [(mode, (source.resolve(),))]
 
 
-
 @pytest.mark.parametrize("mode", ["deterministic", "semantic"])
 def test_main_passes_resolved_hwpx_to_selected_local_handler(
     tmp_path: Path,
@@ -380,10 +380,12 @@ def test_main_passes_resolved_hwpx_to_selected_local_handler(
         _access_policy: object,
         _approval: object,
     ) -> int:
-        calls.append((
-            "deterministic",
-            tuple(result.resolved_path for result in sources),
-        ))
+        calls.append(
+            (
+                "deterministic",
+                tuple(result.resolved_path for result in sources),
+            )
+        )
         return 0
 
     def semantic_handler(
@@ -394,10 +396,12 @@ def test_main_passes_resolved_hwpx_to_selected_local_handler(
         _access_policy: object,
         _approval: object,
     ) -> int:
-        calls.append((
-            "semantic",
-            tuple(result.resolved_path for result in sources),
-        ))
+        calls.append(
+            (
+                "semantic",
+                tuple(result.resolved_path for result in sources),
+            )
+        )
         return 0
 
     arguments = [
@@ -549,12 +553,8 @@ def test_main_runs_default_local_runtime(
     assert "AIRA report:" in captured.out
     assert "AIRA result:" in captured.out
     assert len(execution_dirs) == 1
-    assert (
-        execution_dirs[0] / "report.md"
-    ).is_file()
-    assert (
-        execution_dirs[0] / "result.json"
-    ).is_file()
+    assert (execution_dirs[0] / "report.md").is_file()
+    assert (execution_dirs[0] / "result.json").is_file()
 
 
 def test_main_requires_allowed_root(
@@ -814,8 +814,7 @@ def test_gate_rejection_does_not_call_local_document_adapter(
         raise AssertionError("adapter must not be called")
 
     monkeypatch.setattr(
-        "app.research.local_document_adapter."
-        "LocalDocumentAdapter.load_validated",
+        "app.research.local_document_adapter.LocalDocumentAdapter.load_validated",
         fail_if_called,
     )
 
@@ -1017,9 +1016,8 @@ def test_main_calls_injected_live_research_handler(
     assert result == 0
     assert captured["maximum_sources"] == 2
     assert captured["maximum_bytes"] == 2048
-    assert captured["output_dir"] == (
-        tmp_path / "live-reports"
-    ).resolve()
+    assert captured["output_dir"] == (tmp_path / "live-reports").resolve()
+
 
 @pytest.mark.parametrize(
     ("option", "value", "message"),
@@ -1058,6 +1056,7 @@ def test_live_research_rejects_nonpositive_limits(
     assert result == 2
     assert message in captured.err
 
+
 def test_live_research_rejects_too_small_maximum_bytes(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1075,7 +1074,191 @@ def test_live_research_rejects_too_small_maximum_bytes(
     captured = capsys.readouterr()
 
     assert result == 2
-    assert (
-        "maximum_bytes must be at least 1024"
-        in captured.err
+    assert "maximum_bytes must be at least 1024" in captured.err
+
+
+def test_parser_accepts_integrated_research_command(tmp_path: Path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("Integrated evidence.", encoding="utf-8")
+
+    namespace = build_parser().parse_args(
+        [
+            "research-integrated",
+            "--question",
+            "How does integrated research work?",
+            "--objective",
+            "Explain federated Web and Local research.",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+            "--approve-external-send",
+        ]
     )
+
+    assert namespace.command == "research-integrated"
+    assert namespace.maximum_sources == 3
+    assert namespace.maximum_bytes == 1_000_000
+    assert namespace.output_dir == "reports/integrated"
+    assert not hasattr(namespace, "mode")
+
+
+def test_integrated_command_passes_bound_approval_and_limits(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"Integrated evidence.")
+    captured: dict[str, object] = {}
+
+    def handler(*args):
+        captured["args"] = args
+        return 0
+
+    result = main(
+        [
+            "research-integrated",
+            "--question",
+            "How does integrated research work?",
+            "--objective",
+            "Explain federated Web and Local research.",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+            "--approve-external-send",
+            "--maximum-sources",
+            "4",
+            "--maximum-bytes",
+            "2048",
+            "--output-dir",
+            str(tmp_path / "reports"),
+        ],
+        integrated_research_handler=handler,
+    )
+
+    assert result == 0
+    args = captured["args"]
+    access_result = args[2][0]
+    approval = args[7]
+    assert access_result.resolved_path == source.resolve()
+    assert approval.purpose == "integrated_web_local_research"
+    assert approval.sources[0].content_sha256 == access_result.content_sha256
+    assert args[3:5] == (4, 2048)
+
+
+def test_integrated_command_requires_approval_flag(tmp_path: Path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_text("Integrated evidence.", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "research-integrated",
+                "--question",
+                "How does integrated research work?",
+                "--objective",
+                "Explain federated Web and Local research.",
+                "--source",
+                str(source),
+                "--allowed-root",
+                str(tmp_path),
+            ]
+        )
+
+
+def test_integrated_command_rejects_out_of_root_before_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    allowed = tmp_path / "allowed"
+    outside = tmp_path / "outside"
+    allowed.mkdir()
+    outside.mkdir()
+    source = outside / "source.txt"
+    source.write_text("Integrated evidence.", encoding="utf-8")
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research-integrated",
+            "--question",
+            "How does integrated research work?",
+            "--objective",
+            "Explain federated Web and Local research.",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(allowed),
+            "--approve-external-send",
+        ],
+        integrated_research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "outside the allowed roots" in capsys.readouterr().err
+
+
+def test_integrated_command_rejects_leaf_symlink_before_handler(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    target = tmp_path / "target.txt"
+    target.write_text("Integrated evidence.", encoding="utf-8")
+    source = tmp_path / "source.txt"
+    try:
+        source.symlink_to(target)
+    except OSError:
+        pytest.skip("symlinks are unavailable")
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research-integrated",
+            "--question",
+            "How does integrated research work?",
+            "--objective",
+            "Explain federated Web and Local research.",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+            "--approve-external-send",
+        ],
+        integrated_research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "must not be a symlink" in capsys.readouterr().err
+
+
+def test_integrated_command_enforces_raw_size_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"four")
+    monkeypatch.setattr("app.cli.DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES", 3)
+    calls: list[object] = []
+
+    result = main(
+        [
+            "research-integrated",
+            "--question",
+            "How does integrated research work?",
+            "--objective",
+            "Explain federated Web and Local research.",
+            "--source",
+            str(source),
+            "--allowed-root",
+            str(tmp_path),
+            "--approve-external-send",
+        ],
+        integrated_research_handler=lambda *args: calls.append(args) or 0,
+    )
+
+    assert result == 2
+    assert calls == []
+    assert "maximum file size" in capsys.readouterr().err

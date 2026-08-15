@@ -88,6 +88,7 @@ def test_tool_maps_successful_response() -> None:
     assert result.status is ResearchSourceSearchStatus.SUCCEEDED
     assert [c.rank for c in result.candidates] == [1, 2]
     assert result.candidates[0].metadata["provider_score"] == "0.91"
+    assert result.candidates[0].metadata["research_origin"] == "web"
     assert (
         result.candidates[0].metadata["search_query_text"]
         == "agent memory architecture"

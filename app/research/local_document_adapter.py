@@ -158,6 +158,7 @@ class LocalDocumentAdapter:
                 "local_path": str(resolved),
                 "filename": resolved.name,
                 "adapter": "local-document",
+                "research_origin": "local",
                 **self._access_metadata(
                     access_results_by_path.get(resolved)
                 ),

@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from app.research.in_memory_research_source_search_tool import (
+    InMemoryResearchSourceSearchTool,
+)
 from app.research.local_document_access_policy import (
     LocalDocumentAccessGate,
     LocalDocumentAccessPolicy,
@@ -16,6 +19,7 @@ from app.research.local_document_adapter import (
     LocalDocumentAdapter,
 )
 from app.schemas.research_request import ResearchSourceType
+from app.schemas.research_search_query import ResearchSearchQuery
 from app.schemas.research_source_document import (
     ResearchSourceContentType,
 )
@@ -112,6 +116,7 @@ def test_adapter_loads_markdown_document(
     assert source.metadata["local_path"] == str(
         path.resolve()
     )
+    assert source.metadata["research_origin"] == "local"
     assert "grounded" in source.keywords
 
     assert document.source_id == source.source_id
@@ -119,6 +124,26 @@ def test_adapter_loads_markdown_document(
     assert "traceable evidence" in document.content
     assert document.language == "en"
     assert document.metadata["filename"] == path.name
+
+
+def test_adapter_origin_survives_in_memory_candidate_search(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "local-origin.txt"
+    path.write_text("Local origin evidence.", encoding="utf-8")
+    bundle = LocalDocumentAdapter().load((path,))
+    query = ResearchSearchQuery(
+        query_id="query-local-origin",
+        request_id="request-local-origin",
+        task_id="task-local-origin",
+        query_text="local origin evidence",
+    )
+
+    result = InMemoryResearchSourceSearchTool(
+        records=bundle.source_records
+    ).search(query)
+
+    assert result.candidates[0].metadata["research_origin"] == "local"
 
 
 def test_adapter_uses_filename_when_heading_is_missing(

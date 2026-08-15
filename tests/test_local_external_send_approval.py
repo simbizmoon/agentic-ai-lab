@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.research.local_document_access_policy import LocalDocumentAccessResult
 from app.research.local_external_send_approval import (
+    INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
     SEMANTIC_LOCAL_RESEARCH_PURPOSE,
     LocalExternalSendApproval,
     LocalExternalSendApprovalError,
@@ -117,4 +118,33 @@ def test_source_identity_rejects_malformed_digest(tmp_path: Path) -> None:
             resolved_path=(tmp_path / "source.txt").resolve(),
             content_sha256="invalid",
             file_size_bytes=1,
+        )
+
+
+def test_integrated_approval_accepts_only_integrated_purpose(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path / "source.txt", b"content")
+    integrated = LocalExternalSendApproval.for_integrated_web_local_research((source,))
+
+    LocalExternalSendApprovalGate().validate(
+        integrated,
+        (source,),
+        purpose=INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
+    )
+    with pytest.raises(LocalExternalSendApprovalError, match="purpose mismatch"):
+        LocalExternalSendApprovalGate().validate(integrated, (source,))
+
+
+def test_semantic_approval_cannot_authorize_integrated_research(
+    tmp_path: Path,
+) -> None:
+    source = _source(tmp_path / "source.txt", b"content")
+    semantic = LocalExternalSendApproval.for_semantic_local_research((source,))
+
+    with pytest.raises(LocalExternalSendApprovalError, match="purpose mismatch"):
+        LocalExternalSendApprovalGate().validate(
+            semantic,
+            (source,),
+            purpose=INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
         )

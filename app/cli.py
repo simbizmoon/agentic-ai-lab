@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
+from app.research.integrated_research_handler import IntegratedResearchHandler
 from app.research.live_research_handler import (
     LiveResearchHandler,
 )
@@ -41,6 +42,19 @@ LiveResearchHandlerType = Callable[
     [str, str, int, int, Path],
     int,
 ]
+IntegratedResearchHandlerType = Callable[
+    [
+        str,
+        str,
+        tuple[LocalDocumentAccessResult, ...],
+        int,
+        int,
+        Path,
+        LocalDocumentAccessPolicy,
+        LocalExternalSendApproval | None,
+    ],
+    int,
+]
 
 _SUPPORTED_SOURCE_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
@@ -58,9 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="aira",
-        description=(
-            "AIRA — Agentic Intelligence Research Assistant"
-        ),
+        description=("AIRA — Agentic Intelligence Research Assistant"),
     )
 
     subparsers = parser.add_subparsers(
@@ -129,12 +141,69 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory in which research results are stored.",
     )
 
+    integrated_parser = subparsers.add_parser(
+        "research-integrated",
+        help="Create one grounded report from Web and Local sources.",
+        description=(
+            "Run semantic research over live Web sources and approved "
+            "local Markdown, text, PDF, or HWPX documents."
+        ),
+    )
+    integrated_parser.add_argument(
+        "--question", required=True, help="Research question to answer."
+    )
+    integrated_parser.add_argument(
+        "--objective", required=True, help="Desired research outcome."
+    )
+    integrated_parser.add_argument(
+        "--source",
+        action="append",
+        required=True,
+        metavar="PATH",
+        help="Approved local source path. Repeat for multiple sources.",
+    )
+    integrated_parser.add_argument(
+        "--allowed-root",
+        action="append",
+        required=True,
+        metavar="PATH",
+        help="Trusted local source directory. Repeat for multiple roots.",
+    )
+    integrated_parser.add_argument(
+        "--approve-external-send",
+        action="store_true",
+        required=True,
+        help=(
+            "Approve sending content derived from the validated local "
+            "sources to external AI providers for this execution."
+        ),
+    )
+    integrated_parser.add_argument(
+        "--maximum-sources",
+        type=int,
+        default=3,
+        metavar="COUNT",
+        help="Maximum final Web and Local research sources.",
+    )
+    integrated_parser.add_argument(
+        "--maximum-bytes",
+        type=int,
+        default=1_000_000,
+        metavar="BYTES",
+        help="Maximum response size accepted per Web source.",
+    )
+    integrated_parser.add_argument(
+        "--output-dir",
+        default="reports/integrated",
+        metavar="PATH",
+        help="Directory in which integrated results are stored.",
+    )
+
     live_parser = subparsers.add_parser(
         "research-live",
         help="Create a grounded report from live web sources.",
         description=(
-            "Run grounded research using Tavily search and "
-            "the safe HTTP source reader."
+            "Run grounded research using Tavily search and the safe HTTP source reader."
         ),
     )
     live_parser.add_argument(
@@ -190,9 +259,7 @@ def validate_question(value: str) -> str:
     normalized = value.strip()
 
     if len(normalized) < 10:
-        raise ValueError(
-            "question must contain at least 10 characters"
-        )
+        raise ValueError("question must contain at least 10 characters")
 
     return normalized
 
@@ -204,23 +271,15 @@ def validate_objective(
 ) -> str:
     """Validate or generate the research objective."""
 
-    normalized = (
-        value.strip()
-        if value is not None
-        else default_objective(question)
-    )
+    normalized = value.strip() if value is not None else default_objective(question)
 
     if len(normalized) < 15:
-        raise ValueError(
-            "objective must contain at least 15 characters"
-        )
+        raise ValueError("objective must contain at least 15 characters")
 
     if " ".join(normalized.casefold().split()) == (
         " ".join(question.casefold().split())
     ):
-        raise ValueError(
-            "objective must not repeat the question"
-        )
+        raise ValueError("objective must not repeat the question")
 
     return normalized
 
@@ -237,29 +296,20 @@ def validate_sources(
         source = Path(value).expanduser()
 
         if not source.exists():
-            raise ValueError(
-                f"source does not exist: {source}"
-            )
+            raise ValueError(f"source does not exist: {source}")
 
         if not source.is_file():
-            raise ValueError(
-                f"source is not a file: {source}"
-            )
+            raise ValueError(f"source is not a file: {source}")
 
-        if source.suffix.casefold() not in (
-            _SUPPORTED_SOURCE_SUFFIXES
-        ):
+        if source.suffix.casefold() not in (_SUPPORTED_SOURCE_SUFFIXES):
             raise ValueError(
-                "source must be a Markdown, text, PDF, or HWPX file: "
-                f"{source}"
+                f"source must be a Markdown, text, PDF, or HWPX file: {source}"
             )
 
         resolved = source.resolve()
 
         if resolved in normalized_paths:
-            raise ValueError(
-                f"duplicate source path: {source}"
-            )
+            raise ValueError(f"duplicate source path: {source}")
 
         normalized_paths.add(resolved)
         sources.append(source)
@@ -276,10 +326,7 @@ def validate_local_access_policy(
         raise ValueError("at least one allowed root is required")
 
     return LocalDocumentAccessPolicy(
-        allowed_roots=tuple(
-            Path(value).expanduser()
-            for value in values
-        ),
+        allowed_roots=tuple(Path(value).expanduser() for value in values),
         maximum_file_bytes=DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES,
     )
 
@@ -290,9 +337,7 @@ def validate_output_dir(value: str) -> Path:
     output_dir = Path(value).expanduser()
 
     if output_dir.exists() and not output_dir.is_dir():
-        raise ValueError(
-            f"output path is not a directory: {output_dir}"
-        )
+        raise ValueError(f"output path is not a directory: {output_dir}")
 
     return output_dir.resolve()
 
@@ -305,9 +350,7 @@ def validate_positive_integer(
     """Require a positive CLI integer."""
 
     if value < 1:
-        raise ValueError(
-            f"{name} must be greater than zero"
-        )
+        raise ValueError(f"{name} must be greater than zero")
 
     return value
 
@@ -325,29 +368,21 @@ def run_research_command(
         question=question,
     )
     sources = validate_sources(namespace.source)
-    access_policy = validate_local_access_policy(
-        namespace.allowed_root
-    )
+    access_policy = validate_local_access_policy(namespace.allowed_root)
     access_gate = LocalDocumentAccessGate(access_policy)
-    access_results = tuple(
-        access_gate.validate(source)
-        for source in sources
-    )
+    access_results = tuple(access_gate.validate(source) for source in sources)
     external_send_approval: LocalExternalSendApproval | None = None
     if namespace.approve_external_send:
         if namespace.mode != "semantic":
             raise LocalExternalSendApprovalError(
                 "--approve-external-send is only valid with --mode semantic"
             )
-        external_send_approval = (
-            LocalExternalSendApproval.for_semantic_local_research(
-                access_results
-            )
+        external_send_approval = LocalExternalSendApproval.for_semantic_local_research(
+            access_results
         )
     elif namespace.mode == "semantic":
         raise LocalExternalSendApprovalError(
-            "explicit external-send approval is required for "
-            "semantic local research"
+            "explicit external-send approval is required for semantic local research"
         )
     output_dir = validate_output_dir(namespace.output_dir)
 
@@ -383,9 +418,7 @@ def run_live_research_command(
     )
 
     if maximum_bytes < 1_024:
-        raise ValueError(
-            "maximum_bytes must be at least 1024"
-        )
+        raise ValueError("maximum_bytes must be at least 1024")
     output_dir = validate_output_dir(namespace.output_dir)
 
     return live_research_handler(
@@ -397,14 +430,53 @@ def run_live_research_command(
     )
 
 
+def run_integrated_research_command(
+    namespace: argparse.Namespace,
+    *,
+    integrated_research_handler: IntegratedResearchHandlerType,
+) -> int:
+    """Validate and execute one approved integrated research command."""
+    question = validate_question(namespace.question)
+    objective = validate_objective(namespace.objective, question=question)
+    sources = validate_sources(namespace.source)
+    access_policy = validate_local_access_policy(namespace.allowed_root)
+    access_gate = LocalDocumentAccessGate(access_policy)
+    access_results = tuple(access_gate.validate(source) for source in sources)
+    if not namespace.approve_external_send:
+        raise LocalExternalSendApprovalError(
+            "explicit external-send approval is required for integrated research"
+        )
+    approval = LocalExternalSendApproval.for_integrated_web_local_research(
+        access_results
+    )
+    maximum_sources = validate_positive_integer(
+        namespace.maximum_sources, name="maximum_sources"
+    )
+    maximum_bytes = validate_positive_integer(
+        namespace.maximum_bytes, name="maximum_bytes"
+    )
+    if maximum_bytes < 1_024:
+        raise ValueError("maximum_bytes must be at least 1024")
+    output_dir = validate_output_dir(namespace.output_dir)
+    return integrated_research_handler(
+        question,
+        objective,
+        access_results,
+        maximum_sources,
+        maximum_bytes,
+        output_dir,
+        access_policy,
+        approval,
+    )
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
     research_handler: ResearchHandler | None = None,
     semantic_research_handler: ResearchHandler | None = None,
-    live_research_handler: (
-        LiveResearchHandlerType | None
-    ) = None,
+    live_research_handler: (LiveResearchHandlerType | None) = None,
+    integrated_research_handler: (IntegratedResearchHandlerType | None) = None,
 ) -> int:
     """Run the AIRA command-line interface."""
 
@@ -416,30 +488,27 @@ def main(
             return run_research_command(
                 namespace,
                 research_handler=(
-                    (
-                        semantic_research_handler
-                        or SemanticLocalResearchHandler()
-                    )
+                    (semantic_research_handler or SemanticLocalResearchHandler())
                     if namespace.mode == "semantic"
-                    else (
-                        research_handler
-                        or LocalResearchHandler()
-                    )
+                    else (research_handler or LocalResearchHandler())
+                ),
+            )
+
+        if namespace.command == "research-integrated":
+            return run_integrated_research_command(
+                namespace,
+                integrated_research_handler=(
+                    integrated_research_handler or IntegratedResearchHandler()
                 ),
             )
 
         if namespace.command == "research-live":
             return run_live_research_command(
                 namespace,
-                live_research_handler=(
-                    live_research_handler
-                    or LiveResearchHandler()
-                ),
+                live_research_handler=(live_research_handler or LiveResearchHandler()),
             )
 
-        parser.error(
-            f"unsupported command: {namespace.command}"
-        )
+        parser.error(f"unsupported command: {namespace.command}")
     except (RuntimeError, ValueError) as error:
         print(
             f"aira: error: {error}",

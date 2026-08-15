@@ -10,6 +10,7 @@ from app.report_integrity import is_valid_sha256_digest
 from app.research.local_document_access_policy import LocalDocumentAccessResult
 
 SEMANTIC_LOCAL_RESEARCH_PURPOSE = "semantic_local_research"
+INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE = "integrated_web_local_research"
 
 
 class LocalExternalSendApprovalError(ValueError):
@@ -77,6 +78,27 @@ class LocalExternalSendApproval(BaseModel):
             ),
         )
 
+    @classmethod
+    def for_integrated_web_local_research(
+        cls,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        *,
+        approved: bool = True,
+    ) -> LocalExternalSendApproval:
+        """Bind integrated approval to validated raw local sources."""
+        return cls(
+            purpose=INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
+            approved=approved,
+            sources=tuple(
+                LocalExternalSendSourceIdentity(
+                    resolved_path=source.resolved_path,
+                    content_sha256=source.content_sha256,
+                    file_size_bytes=source.file_size_bytes,
+                )
+                for source in sources
+            ),
+        )
+
 
 class LocalExternalSendApprovalGate:
     """Require exact approval for the current validated local sources."""
@@ -85,19 +107,31 @@ class LocalExternalSendApprovalGate:
         self,
         approval: LocalExternalSendApproval | None,
         current_sources: tuple[LocalDocumentAccessResult, ...],
+        *,
+        purpose: str = SEMANTIC_LOCAL_RESEARCH_PURPOSE,
     ) -> None:
         """Reject absent, false, or stale semantic send approval."""
         if approval is None or not approval.approved:
-            raise LocalExternalSendApprovalError(
-                "explicit external-send approval is required for semantic local research"
+            research_mode = (
+                "integrated Web and Local research"
+                if purpose == INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE
+                else "semantic local research"
             )
-        if approval.purpose != SEMANTIC_LOCAL_RESEARCH_PURPOSE:
-            raise LocalExternalSendApprovalError("external-send approval purpose mismatch")
+            raise LocalExternalSendApprovalError(
+                "explicit external-send approval is required for "
+                f"{research_mode}"
+            )
+        if approval.purpose != purpose:
+            raise LocalExternalSendApprovalError(
+                "external-send approval purpose mismatch"
+            )
 
         approved_by_path = {source.resolved_path: source for source in approval.sources}
         current_by_path = {source.resolved_path: source for source in current_sources}
         if approved_by_path.keys() != current_by_path.keys():
-            raise LocalExternalSendApprovalError("approved and current source sets do not match")
+            raise LocalExternalSendApprovalError(
+                "approved and current source sets do not match"
+            )
 
         for path, current in current_by_path.items():
             approved_source = approved_by_path[path]

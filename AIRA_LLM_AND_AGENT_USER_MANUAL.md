@@ -472,10 +472,38 @@ Semantic 모드는 여전히 유효한 OpenAI 설정이 필요하다. 실패 시
 인터넷 자료 조사는 별도 `research-live` capability를 사용한다. Tavily와 OpenAI
 설정이 필요하며 Local 문서 모드와 혼동하지 않는다.
 
+### Integrated Web + Local Research
+
+현재 Web 정보와 승인된 non-sensitive Local 문서를 한 report에서 함께 조사할 때 사용한다.
+
+```bash
+aira research-integrated \
+  --question "How does AIRA combine Web and Local evidence?" \
+  --objective "Explain the topic using current Web sources and an approved local note." \
+  --source "$PWD/non-sensitive-notes.md" \
+  --allowed-root "$PWD" \
+  --approve-external-send \
+  --maximum-sources 4 \
+  --maximum-bytes 1000000 \
+  --output-dir reports/integrated
+```
+
+`--source`와 `--allowed-root`는 repeatable이며 approval flag는 필수다. 이 command에는
+`--mode`가 없다. Local content는 canonical path, raw SHA-256 및 size에 묶인 distinct
+Integrated approval과 fresh revalidation을 통과한 뒤 external semantic component가
+처리한다. Semantic Local approval과 Integrated approval은 서로 호환되지 않는다.
+
+Web와 Local은 각각 evidence extraction 기회를 받지만 citation은 강제되지 않는다.
+Relevant Local evidence는 final claim/citation에 포함될 수 있고 irrelevant Local evidence는
+`NO_EVIDENCE`로 제외된 뒤 backfill된다. Tavily usage는 Web provider search만 나타낸다.
+
+이 경로는 Web와 Local source를 기존 research pipeline에 federation한 vertical slice이다.
+Persistent vector index, parsing/embedding cache를 포함하는 full persistent RAG는 후속 범위다.
+
 # 9. AIRA Local Single-Agent 실제 실행 예
 
-현재 실제 인터넷 Research는 `research-live` 경로를 사용하며,
-Local 문서는 위의 `research` 모드를 사용한다.
+Web-only 인터넷 Research는 `research-live`, Local-only 문서는 `research`, Web + Local
+통합 Research는 `research-integrated` 경로를 사용한다.
 
 예:
 
@@ -1558,6 +1586,17 @@ export AIRA_RESEARCH_WORKER_PROVIDER=openai
 
 # Production source-read default
 unset AIRA_SOURCE_READ_CONCURRENCY
+
+# Integrated Web + Local research (non-sensitive approved file)
+aira research-integrated \
+  --question "Your question" \
+  --objective "Evidence-grounded Web and Local answer" \
+  --source "$PWD/non-sensitive-notes.md" \
+  --allowed-root "$PWD" \
+  --approve-external-send \
+  --maximum-sources 4 \
+  --maximum-bytes 1000000 \
+  --output-dir /mnt/ai-data/experiments/integrated-run
 
 # Live research
 aira research-live \

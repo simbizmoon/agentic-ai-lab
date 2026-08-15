@@ -1530,3 +1530,87 @@ Reopen Condition
 3. 큰 구조적 낭비를 먼저 제거하고 작은 최적화는 실제 필요가 생길 때 한다.
 4. Cost-effectiveness에는 API 비용뿐 아니라 개발자의 시간과 복잡성도 포함된다.
 5. Multi-Agent도 같은 원칙으로 평가해야 한다.
+
+---
+
+## 2026-08-15 — Federated Retrieval != Integrated Evidence
+
+### 1. Federated Retrieval이란 무엇인가
+
+Federated Retrieval은 서로 다른 source universe를 각각 검색한 뒤 결과를 하나의
+normalized candidate stream으로 합치는 방법이다. 이번 slice에서는 Web와 Local을
+검색하고 `research_origin`, source/document identity 및 provenance를 잃지 않은 채
+interleave, deduplicate, rerank했다.
+
+```text
+Web candidates + Local candidates
+→ normalized federated candidate set
+```
+
+그러나 candidate set에 들어왔다는 사실만으로 final evidence가 된 것은 아니다.
+
+### 2. Federation과 Integrated Evidence는 다르다
+
+첫 real smoke에서 Local candidate는 path, filename, raw SHA-256/size와 함께 정상적으로
+federation되었지만 global quality selection 뒤 semantic evidence extraction에 도달하지
+못했다. 즉 다음 두 상태는 다르다.
+
+```text
+Federated Retrieval
+!=
+Integrated Evidence
+```
+
+이 실패는 search/routing 문제가 아니라 extraction 전 selection 문제였다.
+
+### 3. Source-universe-aware selection
+
+Web와 Local score는 같은 척도가 아니다. 따라서 Integrated-only selector는 두 origin이
+모두 readable이고 quota가 2 이상이면 best Web와 best Local에 각각 evidence extraction
+기회를 준 뒤 기존 combined quality order로 나머지를 채운다.
+
+이것은 citation 강제가 아니다. weak Local fixture는 실제 기회를 받은 뒤
+`NO_EVIDENCE`로 거부되었고 pipeline은 다음 Web document로 backfill했다. 반대로 질문에
+직접 답한 strong Local fixture는 final 3 source 중 Local 1개로 남아 여러 claim/citation을
+지원했다. 공정한 기회와 품질 기준을 동시에 유지한 사례다.
+
+### 4. Capability composition보다 먼저 오는 security boundary
+
+Local content를 external provider가 처리할 수 있는 component보다 먼저 구성하면 승인
+실패가 너무 늦다. 올바른 순서는 다음과 같다.
+
+```text
+path + raw digest + size approval validation
+→ local parsing
+→ same-policy fresh fingerprint
+→ approval revalidation
+→ Tavily/OpenAI/worker construction
+→ pipeline execution
+```
+
+Semantic Local approval과 Integrated approval은 purpose가 달라 서로 대신 사용할 수 없다.
+
+### 5. Provenance가 중요한 이유
+
+`research_origin`, canonical path, filename, raw digest/size, source/document/evidence ID,
+exact character range가 연결되어야 citation이 어느 원문에서 왔는지 추적할 수 있다.
+Federation은 provenance를 지우는 merge가 아니라 provenance를 보존하는 normalization이다.
+
+### 6. Offline test와 real smoke의 역할
+
+Offline tests는 federation, routing, approval ordering, selector 및 backfill contract를
+재현 가능하게 검증했다. 실제 runtime smoke는 추가로 다음을 드러냈다.
+
+- `OPENAI_TIMEOUT_SECONDS=30`, `OPENAI_MAX_RETRIES=2`에서 semantic evidence relevance
+  중 `APITimeoutError` 발생
+- `120`/`0` 설정의 smoke는 성공했지만 permanent default 결정은 아님
+- semantic evidence processing이 dominant latency 구간
+- weak fixture의 실제 `NO_EVIDENCE`와 backfill
+- strong fixture의 final Local claim/citation 기여
+
+### 핵심 교훈
+
+> Federated Retrieval != Integrated Evidence
+
+검색 결과에 포함되었는지뿐 아니라 selection, extraction, evidence, claim, citation까지
+끝까지 provenance가 이어지는지 실제 실행으로 확인해야 한다.

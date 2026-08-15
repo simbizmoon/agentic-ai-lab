@@ -243,6 +243,7 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
             rank = len(candidates) + 1
             metadata = {
                 "provider": self.provider,
+                "research_origin": "web",
                 "search_query_text": query.query_text.strip(),
             }
 
