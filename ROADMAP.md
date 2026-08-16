@@ -39,9 +39,10 @@
 - 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
 - 현재 상태: Local TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice와
   Integrated Web + Local Federated Research vertical slice를 실제 CLI smoke까지 완료했다.
-  Stage 4는 persistent parsing/embedding cache, HWP binary, scanned PDF/OCR 및 추가
-  sensitive-data hardening이 남아 있어 계속 진행 중이다.
-- 현재 기준일: 2026-08-15
+  Parsed Document Cache runtime integration까지 완료했다. Stage 4는 cache
+  lifecycle/maintenance, HWP binary, scanned PDF/OCR,
+  descriptor-level TOCTOU hardening 및 추가 sensitive-data hardening이 남아 있어 계속 진행 중이다.
+- 현재 기준일: 2026-08-16
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -727,11 +728,38 @@ Rewrite가 아니라 Integration-first
 - [x] 민감문서 외부 전송 승인
 - [x] PDF parser/encrypted/no-text 실패 처리
 - [x] 동일 문서 raw SHA-256 identity/provenance
-- [ ] 동일 문서 parsing/embedding Cache
+- [~] Persistent Local Cache / Index Foundation
+  - [x] Persistent Embedding Cache Core
+  - [x] Local Semantic persistent embedding cache integration
+  - [x] Shared Integrated Web + Local semantic cache integration
+  - [x] XDG/user cache directory policy
+  - [x] cache directory `0700` / entries and lock `0600` hardening
+  - [x] offline repeated-run persistent-hit test
+  - [x] real Local Semantic repeated-run smoke
+  - [x] real Integrated cache smoke
+  - [x] cross-mode Local/Integrated and Web/Local reuse tests
+  - [x] Parsed Document Cache core
+  - [x] `CachingLocalDocumentParser`
+  - [x] Deterministic Local integration
+  - [x] Semantic Local integration
+  - [x] Integrated Local integration
+  - [x] PDF/HWPX persistent parsed reuse와 provenance 보존
+  - [x] access/approval/provider-near revalidation ordering
+  - [ ] cache lifecycle/eviction/maintenance policy
+  - [ ] persistent retrieval/index layer (Stage 6 boundary)
 - [x] Integrated Web + Local federated source core
 - [x] Integrated real runtime/CLI와 distinct external-send approval
 - [x] Integrated source-universe-aware selection과 evidence backfill
 - [x] Strong real Web + Local smoke
+- [x] Research Result Artifact Permission Audit / Hardening
+  - [x] `0664`/`0775` umask-derived behavior 감사
+  - [x] Local-derived result artifact data-sensitivity 검토
+  - [x] execution directory `0700`
+  - [x] `report.md`/`result.json` `0600`
+  - [x] private temporary file + file/directory `fsync` + atomic `os.replace`
+  - [x] preparation/replace/final-fsync failure rollback behavior
+  - [x] execution ID single-component path validation
+  - [x] real deterministic Local permission smoke
 
 ## 완료 결과
 
@@ -2800,7 +2828,8 @@ profiler evidence가 현재 hardware를 병목으로 확인할 때 다시 평가
 # 33. 2026-08-14 Local Document Semantic Research Vertical Slices
 
 > 이 섹션은 Stage 4 Local Document Expansion의 최신 authoritative status이다.
-> Stage 4 전체 완료가 아니라 TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice 완료를 기록한다.
+> Stage 4 전체 완료가 아니라 Local format vertical slices, Integrated Web + Local federated
+> research, Persistent Embedding Cache 및 Parsed Document Cache runtime integration 완료를 기록한다.
 
 ## 33.1 상태
 
@@ -2846,7 +2875,12 @@ Text-bearing HWPX Vertical Slice
 - provider composition 직전 same-policy digest revalidation
 - approved semantic smoke: relevant paragraph `94..283`, exact citation, verified/fully_supported
 - deterministic mode approval-free offline contract 유지
-- full regression `4779 passed`
+- path-neutral Parsed Document Cache core와 per-parser revision/config identity
+- deterministic, semantic 및 Integrated Local persistent parsed-cache runtime integration
+- same-bytes/different-path reuse와 current path/source identity runtime reconstruction
+- PDF page 및 HWPX body-section provenance의 persistent round trip
+- parsed cache 전 fresh access validation과 provider 전 fresh approval revalidation
+- latest full repository regression `4955 passed`
 - Ruff `All checks passed`, `git diff --check` 통과
 
 미완료 범위:
@@ -2854,7 +2888,8 @@ Text-bearing HWPX Vertical Slice
 - scanned PDF/OCR, HWP binary, DOCX
 - line number provenance
 - table-specialized parsing
-- persistent indexing/embedding cache
+- cache lifecycle/eviction/maintenance policy
+- persistent retrieval/index layer (Stage 6 boundary)
 - sensitive-content classification/redaction와 persistent approval storage
 - descriptor-level TOCTOU resistance
 
@@ -2889,16 +2924,94 @@ Strong real Web + Local smoke
 - `NO_EVIDENCE` source가 quota를 소비하지 않는 evidence-aware backfill
 - real smoke에서 2 Web + 1 Local evidence source, 8 claims, 8 citations, quality `0.97 / excellent / passed`
 
-Stage 4 전체는 아직 `IN PROGRESS`이다. 완료되지 않은 항목은 persistent
-parsing/embedding cache, scanned PDF/OCR, HWP binary, sensitive-content
+Stage 4 전체는 아직 `IN PROGRESS`이다. 완료되지 않은 항목은 cache
+lifecycle/eviction/maintenance, persistent retrieval/index layer,
+scanned PDF/OCR, HWP binary, sensitive-content
 classification/redaction, persistent approval storage 및 descriptor-level TOCTOU
 hardening이다. 완료된 Integrated slice는 persistent vector RAG 전체가 아니라 broader
 RAG를 위한 federated research foundation이다.
 
+## 33.3 Persistent Embedding Cache Foundation 완료
+
+```text
+Persistent Embedding Cache Core
+→ COMPLETE
+
+Local Semantic persistent cache integration
+→ COMPLETE
+
+Shared Integrated Web + Local semantic cache integration
+→ COMPLETE
+
+Cache directory permission hardening
+→ COMPLETE
+
+Real Integrated cache smoke
+→ COMPLETE
+```
+
+완료된 범위:
+
+- exact UTF-8 text SHA-256 + embedding model + dimensions content identity
+- strict versioned JSON entry와 file-backed atomic persistence
+- POSIX lock, size bound, duplicate-key rejection 및 symlink/path safety
+- malformed/invalid UTF-8/schema-invalid/identity-mismatched entry의 cache miss 처리
+- `OpenAIEmbeddingProvider → CachingEmbeddingProvider → EmbeddingSemanticEvidenceShortlister`
+- deterministic Local mode cache-free 계약과 access/approval 선행 순서 유지
+- XDG/user cache directory policy
+- offline new-provider/new-cache persistent hit 검증
+- real Local Semantic 동일 입력 2회 실행과 동일한 3개 cache entry 유지
+- shared semantic identity boundary와 Integrated Web/Local 공통 cache-backed shortlister
+- cache directory `0700`, JSON/lock/temp file `0600` permission hardening
+- standalone Local → Integrated 및 Integrated Web → Integrated Local cross-mode reuse
+- real Integrated smoke: first run entry 87개 뒤 downstream timeout, temporary `120`/`0` retry 성공과 entry `87 → 121`
+
+이 섹션의 완료는 Persistent Embedding Cache foundation을 의미한다. 후속 Parsed Document
+Cache runtime integration은 아래 33.4에 기록하며 persistent VectorStore/vector database는
+여전히 Stage 6 boundary로 유지한다.
+
+## 33.4 Parsed Document Cache Runtime Integration 완료
+
+```text
+Path-neutral ParsedLocalDocument boundary
+→ COMPLETE
+
+Persistent Parsed Document Cache core
+→ COMPLETE
+
+CachingLocalDocumentParser
+→ COMPLETE
+
+Deterministic / Semantic / Integrated Local runtime integration
+→ COMPLETE
+
+PDF/HWPX persistent parsed reuse
+→ COMPLETE
+```
+
+완료된 범위:
+
+- raw SHA-256 + raw size + cache schema + parser/content identity 기반 key
+- TXT/Markdown/PDF/HWPX parser ID, revision, configuration 및 relevant dependency identity
+- path/source/execution/approval field를 제외한 path-neutral parsed payload
+- file-backed strict JSON, directory `0700`, JSON/lock/temp `0600`
+- per-entry `fcntl` lock과 cross-process same-key duplicate parse suppression
+- corruption은 miss, unsafe filesystem/locking failure는 explicit error
+- oversized successful parse는 valid result를 uncached로 계속 사용
+- LocalDocumentAccessGate와 external-send approval을 cache보다 authoritative하게 유지
+- semantic/Integrated provider 구성 직전 fresh source 및 approval revalidation 유지
+- same bytes/different path persistent reuse와 current path/source identity 재구성
+- PDF page와 HWPX body-section provenance 및 exact character slice 보존
+- isolated deterministic smoke에서 parsed JSON entry `1 → 1`, directory `0700`, JSON/lock `0600`
+
+Parsed Document Cache는 parsing work를 재사용하고 Persistent Semantic Embedding Cache는
+embedding calculation을 재사용한다. 둘 다 persistent retrieval index/vector database가
+아니며 Stage 6 persistent retrieval/index boundary를 완료하지 않는다.
+
 현재 다음 우선 과제:
 
 ```text
-Persistent Local Index / Embedding Hash Cache
+cache lifecycle/eviction/maintenance architecture audit
 → remaining Local format/safety expansion
 → Patent Research Vertical Slice
 ```

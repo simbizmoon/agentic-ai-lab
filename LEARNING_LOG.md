@@ -1614,3 +1614,358 @@ Offline tests는 federation, routing, approval ordering, selector 및 backfill c
 
 검색 결과에 포함되었는지뿐 아니라 selection, extraction, evidence, claim, citation까지
 끝까지 provenance가 이어지는지 실제 실행으로 확인해야 한다.
+
+---
+
+## 2026-08-16 — Persistent Embedding Cache: Cache는 권한이 아니라 최적화다
+
+### 1. Cache, Index, Vector Database의 차이
+
+- **Cache**는 이미 계산한 결과를 같은 identity로 다시 요청할 때 재사용하는 최적화다.
+- **Index**는 문서를 검색 가능한 구조로 조직하여 어떤 항목을 찾을지 결정한다.
+- **Vector database**는 vector 저장, 검색, lifecycle 및 운영 기능을 제공하는 persistence다.
+
+이번 구현은 exact text embedding 결과를 재사용하는 cache이며 persistent retrieval index나
+vector database가 아니다. 서로 다른 책임을 한 component에 합치지 않는 것이 중요하다.
+
+### 2. Content-addressed identity와 decorator pattern
+
+동일 embedding을 재사용할 수 있는 identity는 다음 세 값으로 구성했다.
+
+```text
+exact UTF-8 text SHA-256
++ embedding model name
++ embedding dimensions
+```
+
+source path는 같은 내용이 다른 파일로 복사될 때 재사용을 막으므로 identity에 넣지 않는다.
+`CachingEmbeddingProvider`는 기존 provider를 변경하지 않고 감싸는 decorator/composition
+pattern을 사용한다. miss만 underlying provider에 batch로 보내고 input order는 복원한다.
+
+### 3. Authoritative validation과 non-authoritative cache
+
+Local source validation과 external-send approval은 authoritative safety boundary다. Cache는
+결과를 빠르게 만드는 non-authoritative optimization일 뿐이다.
+
+```text
+LocalDocumentAccessGate
+→ external-send approval
+→ fresh source/approval revalidation
+→ cache/provider composition
+```
+
+따라서 cache hit가 있어도 access gate나 approval을 건너뛸 수 없다. 빠른 결과가 권한을
+대체하면 안 된다.
+
+### 4. Corruption은 miss, 안전한 I/O 실패는 error
+
+Malformed JSON, unsupported/schema-invalid payload 및 identity mismatch는 stale embedding을
+반환하지 않고 miss로 낮출 수 있다. 하지만 unsafe symlink/path 또는 genuine filesystem,
+read/write/locking failure를 miss로 숨기면 안전 문제를 정상 cache 상태로 오해하게 된다.
+
+구현 중 decoding boundary의 누락을 발견했다. 처음에는 `read_text()` 주변에서 `OSError`만
+처리했지만 invalid UTF-8은 JSON parsing 전에 `UnicodeDecodeError`를 발생시켰다.
+
+```python
+except UnicodeDecodeError:
+    return None
+```
+
+회귀 테스트를 추가하여 invalid UTF-8 entry가 miss가 되는 것을 검증했다. 핵심 교훈은
+corruption handling이 JSON/schema parser뿐 아니라 byte-to-text decoding layer까지
+포함해야 한다는 점이다.
+
+### 5. Persistent hit를 증명하는 방법
+
+같은 in-memory provider object를 재사용하는 것만으로 persistence를 증명할 수 없다.
+동일 directory를 가리키는 새 `FileEmbeddingCache`와 새 provider instance를 만들고 같은
+query/candidate text를 요청했다.
+
+```text
+first provider calls  = one batch
+second provider calls = []
+```
+
+Real Local Semantic CLI smoke에서도 첫 실행 뒤 JSON entry 3개가 생성되었고 두 번째 실행
+뒤에도 같은 3개만 남았다. 두 실행 모두 report/result artifact를 만들었다.
+
+```text
+run 1: real 1m14.286s, entries 3
+run 2: real 1m26.481s, entries 3
+```
+
+두 번째 wall-clock time이 더 길어도 cache 실패를 의미하지 않는다. Evidence relevance,
+claim generation, citation/relevance/coverage 등 embedding 이외 semantic LLM call이 계속
+실행되며 전체 latency를 지배할 수 있기 때문이다.
+
+### 검증과 다음 학습 목표
+
+- Step 1 focused tests: `57 passed`
+- Step 2 focused integration tests: `74 passed`
+- real Local Semantic repeated-run smoke: 두 실행 성공, entry `3 → 3`
+
+다음 목표는 같은 cache abstraction을 Integrated Web + Local semantic research에 연결하되,
+Local source access/approval ordering을 약화하지 않는 것이다.
+
+
+---
+
+## 2026-08-16 — Persistent Semantic Embedding Cache: 캐시 경계는 데이터 출처가 아니라 계산 identity에 둘 수 있다
+
+### 1. Retrieval origin과 semantic computation은 다른 concern이다
+
+Local/Web origin은 source routing, approval 및 provenance의 concern이다. 반면 embedding
+reuse는 같은 입력으로 같은 semantic computation을 다시 수행하는지의 concern이다.
+Integrated Research는 Web와 Local document에 하나의 shared semantic shortlister를 사용한다.
+이 경계에서 Local-only cache를 유지하려면 origin-aware router나 extractor duplication이
+필요했고, 이는 retrieval concern을 embedding provider layer에 끌어들이는 구조였다.
+
+따라서 cache를 provider-level semantic identity 경계에 두었다.
+
+```text
+exact UTF-8 text SHA-256
++ embedding model
++ embedding dimensions
+```
+
+path, URL, origin 및 execution mode가 달라도 위 계산이 같으면 entry를 재사용할 수 있다.
+같은 computation을 source universe별로 중복 저장할 이유가 없다는 뜻이다.
+
+### 2. Authoritative safety와 non-authoritative cache
+
+Source approval/access validation은 authoritative하고 cache는 non-authoritative optimization이다.
+Integrated Local source는 다음 순서를 모두 통과한 뒤에만 cache lookup에 도달한다.
+
+```text
+approval validation
+→ validated document loading
+→ fresh raw source fingerprint
+→ approval revalidation
+→ cache/provider composition
+```
+
+따라서 cache hit는 빠른 계산 결과일 뿐 권한이 아니다. pre-existing entry가 있어도 Local
+access gate, raw SHA-256 revalidation 또는 external-send approval을 생략할 수 없다.
+
+### 3. Mandatory cache와 error taxonomy
+
+Mandatory cache는 persistent filesystem을 runtime availability dependency로 만든다. 하지만
+best-effort fallback이 항상 더 안전한 것은 아니다. malformed JSON이나 invalid UTF-8 같은
+payload corruption은 miss로 낮출 수 있지만 unsafe symlink, lock failure 및 permission failure를
+숨기면 security-significant condition을 정상 miss로 오해할 수 있다.
+
+현재 taxonomy가 recoverable I/O와 security failure를 충분히 구분하지 않으므로 cache는
+fail-closed로 유지한다. 안전한 fallback을 원한다면 먼저 error taxonomy를 세분화해야 한다.
+
+### 4. Raw text를 저장하지 않아도 privacy concern은 남는다
+
+Cache payload는 raw source/query text, URL, local path 및 origin을 저장하지 않는다. 그러나
+embedding vector는 semantic information을 담고 SHA-256은 공격자가 예상 text를 알고 있을 때
+확인 수단이 될 수 있다. shared cache는 Local뿐 아니라 Web/query hash와 vector도 저장한다.
+
+따라서 final directory를 `0700`, JSON/lock/temp file을 `0600`으로 normalize했다. 기존
+broader-mode directory도 `0700`으로 줄이고 `chmod` 실패는 명시적 error로 처리한다.
+
+### 5. Real smoke가 보여 준 partial success
+
+Isolated Integrated smoke의 첫 실행은 embedding entry 87개를 성공적으로 저장한 뒤
+`OpenAIEvidenceRelevanceEvaluator`에서 `APITimeoutError`가 발생했다. 즉 전체 실행 실패가
+모든 앞 단계 실패를 의미하지 않는다. embedding persistence는 완료됐고 downstream semantic
+relevance call이 timeout 난 것이다.
+
+환경변수는 unset이어서 repository default 30 seconds/2 retries가 적용되었다. retry에서는
+smoke isolation 목적으로 shell에서만 temporary `120`/`0`을 사용했고 report/result 생성에
+성공했다. 이는 permanent configuration decision이 아니다. cache entry는 `87 → 121`로
+증가했는데, live Web result와 paragraph text가 실행마다 달라질 수 있으므로 정상이다.
+
+### 6. 새 permission 관측
+
+같은 smoke에서 `report.md`와 `result.json` mode가 `0664`로 관측되었다. 이것만으로 policy
+violation이나 취약점이라고 결론 내릴 수는 없다. 다만 Local-derived research artifact의
+confidentiality 관점에서 `ResearchResultWriter`와 기존 persistence convention을 별도로
+감사할 이유가 생겼다. embedding cache의 `0700`/`0600` hardening과는 다른 boundary다.
+
+### 검증과 다음 학습 목표
+
+- focused cache/handler suite: `82 passed`
+- broader Integrated regression: `151 passed`
+- offline persistent reuse: new instance, Local → Integrated, Web → Local 통과
+- real Integrated smoke: entry `87 → 121`, temporary `120`/`0` retry 성공
+
+다음 구현 목표는 `Parsed Document Cache`이다. 다만 그 전에 Research Result Artifact
+Permission Audit을 좁은 security audit으로 수행할지 우선순위를 판단한다.
+
+
+---
+
+## 2026-08-16 — Research Result Artifact Hardening: 출력 파일도 데이터 경계다
+
+### 1. Unix umask는 보안 정책 자체가 아니다
+
+일반적으로 text file creation은 requested mode `0666`, directory creation은 `0777`에서
+시작하고 process umask가 bit를 제거한다. 기존 writer가 `Path.write_text()`와 기본
+`mkdir()`에 의존했을 때 umask `0002`는 file `0664`, directory `0775`를 만들었다.
+이는 실행 환경에서 파생된 결과이지 AIRA가 의도적으로 선택한 private policy가 아니었다.
+
+### 2. Directory permission도 함께 봐야 한다
+
+File이 `0664`여도 모든 ancestor가 `0700`이면 다른 사용자가 접근할 수 없다. 하지만
+관측된 output root와 execution directory가 모두 `0775`였으므로 그런 parent protection이
+없었다. Permission audit은 file mode 하나가 아니라 전체 path boundary를 확인해야 한다.
+
+### 3. Result artifact는 최종 report보다 더 많은 데이터를 담을 수 있다
+
+`report.md`는 Local evidence excerpt, filename/title, citation 및 derived claim을 포함할
+수 있다. `result.json`은 normalized source text와 section, canonical Local path, raw
+SHA-256/size, evidence range, PDF/HWPX provenance 및 전체 workspace metadata까지 담을 수
+있다. 따라서 사람이 읽는 final answer뿐 아니라 machine-readable artifact도 중요한
+confidentiality boundary다.
+
+### 4. Shared root 안에 private execution boundary를 둔다
+
+User-selected output root는 협업이나 후속 처리를 위해 의도적으로 shared일 수 있으므로
+writer가 mode를 바꾸지 않는다. 대신 각 새 research execution directory를 `0700`으로,
+`report.md`와 `result.json` 및 temporary artifact를 `0600`으로 만든다.
+
+```text
+shared-or-user-managed output root
+└── private execution directory (0700)
+    ├── report.md (0600)
+    └── result.json (0600)
+```
+
+이 구조는 사용자 root ownership을 존중하면서 Local-derived output을 private-by-default로
+만든다.
+
+### 5. Atomic write는 content completeness와 durability를 높인다
+
+Same-directory temporary file에 전체 UTF-8 content를 쓴 뒤 flush와 file `fsync`를 하고
+`os.replace`로 final name을 설치한다. 마지막에 directory를 `fsync`하면 directory entry
+변경의 durability도 요청할 수 있다. Temporary file은 content write 전에 `0600`으로
+설정해 post-write `chmod`의 노출 window를 피한다.
+
+### 6. 두 파일은 하나의 완전한 transaction이 아니다
+
+Report와 JSON temporary file을 모두 준비한 후 replace하고, 실패 시 설치된 artifact를
+rollback하면 partial state window를 크게 줄일 수 있다. 그러나 ordinary filesystem에서
+두 개의 서로 다른 file을 하나의 atomic operation으로 commit할 수는 없다. 두 replace
+사이의 process/machine crash에는 하나만 보일 가능성이 남는다.
+
+### 7. Path check와 descriptor-level TOCTOU는 다르다
+
+Execution ID single-component validation과 symlink/final-target rejection은 명백한 unsafe
+path를 막는다. 새 `0700` directory도 cross-user race surface를 크게 줄인다. 하지만
+path check와 use 사이 race를 descriptor 수준에서 제거하려면 `openat()`/`O_NOFOLLOW`
+같은 별도 hardening이 필요하다. 이번 변경이 모든 TOCTOU를 해결했다고 주장해서는 안 된다.
+
+### 8. Real deterministic Local smoke
+
+`/tmp/aira-result-permission-smoke`의 실제 smoke에서 user-managed root `0775`는 그대로
+유지되고 새 execution directory는 `0700`, report/result는 각각 `0600`이었다.
+`source.md`의 `0664`는 사용자가 만든 input mode이며 writer artifact policy와 별개다.
+Deterministic Local Research는 성공했고 report 1099 bytes와 parse 가능한 JSON 33474 bytes를
+생성했다.
+
+### 검증과 다음 학습 목표
+
+- ResearchResultWriter focused tests: `18 passed`
+- authoritative independent affected-suite re-audit: `90 passed`
+- implementation task의 다른 test-file 조합: `98 passed`
+- broader research regression: `104 passed`
+- Ruff, format check 및 `git diff --check`: 통과
+
+다음 학습 및 구현 목표는 `Parsed Document Cache`이다.
+
+
+---
+
+## 2026-08-16 — Parsed Document Cache: content identity, filesystem identity, authorization은 서로 다른 경계다
+
+### 1. Content identity와 filesystem identity를 분리한다
+
+같은 bytes가 `/data/a.pdf`와 `/archive/copy.pdf`에 있으면 parsing 계산 결과는 같을 수 있지만
+현재 filesystem provenance는 다르다. 그래서 reusable `ParsedLocalDocument`에는 normalized
+content, content type, section range 및 PDF/HWPX structural provenance만 넣고 path, filename,
+source ID와 pseudo-URL은 넣지 않았다.
+
+```text
+raw SHA-256 + raw size + parser identity
+→ reusable parsed content
+
+current validated path + input position
+→ current source/document identity
+```
+
+Cache hit 뒤 `LocalDocumentAdapter`가 현재 path에서 runtime identity를 다시 만들기 때문에
+동일 bytes를 다른 path에서 재사용해도 이전 path가 새 result에 섞이지 않는다.
+
+### 2. Cache hit는 권한을 만들지 않는다
+
+Cache는 과거 계산 결과를 갖고 있을 뿐 현재 file을 읽을 권한이나 외부 provider로 보낼
+권한을 증명하지 않는다. 따라서 deterministic, semantic 및 Integrated Local 모두 cache보다
+먼저 fresh `LocalDocumentAccessGate`를 통과한다. Semantic/Integrated는 fresh identity에
+approval을 다시 확인한 뒤에만 cache를 사용한다.
+
+External provider 직전에는 source를 다시 hash하고 approval을 다시 검증한다. Parsing 이후
+provider composition 사이에 file이 바뀌는 practical TOCTOU window를 줄이기 위해서다. Cache
+entry가 이미 있어도 stale approval이나 changed bytes는 이 경계를 통과하지 못한다.
+
+### 3. Same-key compute lock은 cache stampede를 막는다
+
+두 process가 같은 miss를 동시에 보면 둘 다 PDF/HWPX를 parse하는 cache stampede가 생길 수
+있다. Global lock은 서로 다른 document까지 막으므로 key별 `fcntl` lock을 사용했다.
+
+```text
+Process A: exclusive key lock → recheck → parse → persist → unlock
+Process B: wait → recheck → persistent hit
+```
+
+Locked handle이 lock 없는 내부 `get`/`put`을 제공해 같은 process가 public lock API를 다시
+호출하는 nested-lock 문제를 피했다. 실제 two-process test에서 underlying parse는 한 번만
+기록되었다.
+
+### 4. Parsed cache, embedding cache, vector index는 다르다
+
+- Parsed Document Cache는 decoding, PDF page extraction 및 HWPX ZIP/XML parsing을 피한다.
+- Persistent Semantic Embedding Cache는 exact text의 vector 계산을 피한다.
+- Vector index/database는 어떤 document를 찾을지 결정하는 retrieval structure다.
+
+```text
+raw document
+→ access validation
+→ Parsed Document Cache
+→ evidence text
+→ Persistent Semantic Embedding Cache
+→ semantic ranking
+```
+
+이번 Stage 4 구현은 앞의 두 cache이며 Stage 6 persistent VectorStore/vector database 완료를
+의미하지 않는다.
+
+### 5. Real persistent hit와 permission smoke
+
+Isolated `XDG_CACHE_HOME=/tmp/aira-parsed-cache-smoke`에서 같은 deterministic Local request를
+두 번 실행했다. 첫 실행 뒤 parsed JSON은 1개였고 두 번째 실행 뒤에도 같은 1개였다. 두
+실행 모두 report/result를 생성했다. Cache directory는 `0700`, JSON과 lock은 `0600`이었다.
+
+자동화된 second-instance test는 새 handler, 새 cache 및 새 parser를 사용해 두 번째 parser
+call이 없음을 직접 확인했다. PDF/HWPX runtime test도 두 번째 extraction이 실행되지 않으면서
+page/body-section provenance가 그대로 유지됨을 검증했다.
+
+### 6. Test도 cache location을 격리해야 한다
+
+Runtime default를 테스트하면 의도하지 않게 실제 user cache에 fixture entry가 남을 수 있다.
+Handler/CLI test는 `XDG_CACHE_HOME`을 `tmp_path`로 설정하고 subprocess에도 isolated environment를
+전달해야 한다. Test isolation도 persistent-state 설계의 일부다.
+
+### 검증과 다음 학습 목표
+
+- Step 3 focused: `64 passed`
+- Step 1–3 regression: `168 passed`
+- Step 4 focused: `75 passed`
+- full repository pytest: `4955 passed`
+- full Ruff 및 `git diff --check`: 통과
+- changed Python format: `14 files already formatted`
+
+다음 학습 목표는 cache lifecycle/eviction/maintenance architecture audit이다. 이후 remaining
+Local format/safety work와 Patent Research Vertical Slice를 진행한다.
