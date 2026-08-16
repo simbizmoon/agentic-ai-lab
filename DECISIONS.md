@@ -3417,3 +3417,77 @@ entry는 1개였고 동일 request의 두 번째 실행 뒤에도 1개였다. �
 D-054와 D-055의 embedding cache foundation, D-056의 private result-artifact boundary를
 변경하지 않는다. Parsed Document Cache core와 deterministic, semantic 및 Integrated Local
 runtime integration을 accepted/verified로 확정하며 Stage 4 전체는 계속 `IN PROGRESS`이다.
+
+## D-058 — Persistent cache lifecycle은 explicit size inventory와 lock-aware manual pruning으로 관리하고 retrieval/index lifecycle과 분리한다
+
+- 상태: 확정
+- 날짜: 2026-08-16
+- 적용 범위: Stage 4 — Persistent Cache Lifecycle / Manual Maintenance
+
+### 배경
+
+Persistent Embedding Cache와 Parsed Document Cache는 재생성 가능한 non-authoritative
+optimization이다. D-058 이전에는 persistence만 있고 inventory/prune lifecycle은 없었다.
+Embedding cache는 text/query/evidence variation으로 성장하고, Parsed cache는 큰 개별 entry와
+parser revision/config/dependency 변경 뒤 stranded generation이 생길 수 있다. Retrieval/index
+lifecycle은 이 계산 cache와 다른 Stage 6 작업이다.
+
+### 결정
+
+- Stage 4는 explicit read-only inventory와 manual size-based pruning을 제공한다.
+- Automatic pruning, TTL, true LRU, last-access mutation 및 central manifest/index는 도입하지 않는다.
+- Prune은 oldest-successful-write-first, 즉 `mtime_ns` 오름차순과 `entry_key` 오름차순
+  tie-break를 사용한다.
+- Target bytes는 operational prune target이지 hard quota가 아니다.
+- `CacheStatus`는 observation이고 `CachePrunePlan`은 pure computation이다. Plan은 deletion
+  authorization이나 current-state guarantee가 아니다.
+- Execution은 각 candidate를 cache-appropriate lock 아래에서 재검증한다. Embedding은 기존
+  global exclusive lock, Parsed는 기존 per-entry exclusive lock을 사용한다.
+- Parsed lock file은 inode가 갈라져 `flock` coordination이 깨지는 일을 막기 위해 유지한다.
+- Validated planned final JSON entry만 삭제한다. Corrupt/temp/unknown/lock file은 candidate가 아니다.
+- Execution은 non-transactional이며 partial mutation을 명시적으로 보고한다.
+- Successful deletion은 directory `fsync`까지 필요하고 fresh post-inventory가 최종 truth다.
+- Local source validation과 external-send approval은 독립된 authoritative security boundary다.
+- Persistent retrieval/index lifecycle은 Stage 6이 담당한다.
+
+### CLI
+
+```text
+aira cache status
+aira cache prune --embedding --target-bytes N --dry-run
+aira cache prune --embedding --target-bytes N
+aira cache prune --parsed --target-bytes N --dry-run
+aira cache prune --parsed --target-bytes N
+```
+
+Status는 두 cache의 valid/corrupt/lock/temp/unknown count와 bytes 및 valid entry write-time
+범위를 content 노출 없이 보고한다. Dry-run은 plan만 만들고, 실제 prune은 fresh status
+→ plan → lock-aware execution → fresh post-status로 수행한다. CLI에는 직접 unlink/locking/
+entry-validation logic이 없다.
+
+### 검증
+
+- maintenance focused: `62 passed`
+- cache CLI: `11 passed`
+- existing CLI regression: `51 passed`
+- broader cache/CLI regression: `229 passed`
+- isolated real `XDG_CACHE_HOME` smoke: 통과
+- prune 뒤 repopulation: 통과
+- full repository pytest: `5028 passed in 23.31s`
+- Ruff: 통과
+- changed Python format: `7 files already formatted`
+- `git diff --check`: 통과
+
+### 알려진 한계
+
+- Filesystem mtime은 write recency이지 LRU/access recency가 아니다.
+- Manual target은 concurrent hard quota가 아니다.
+- POSIX/`fcntl` assumption이 남는다.
+- AIRA locking을 무시하는 external process에 대한 descriptor/pathname TOCTOU는 완전히 제거되지 않았다.
+- Corrupt/temp/unknown file은 보고하지만 정리하지 않는다.
+- Automatic lifecycle과 encryption at rest는 없다.
+- Lock file, 특히 parsed per-key lock은 누적될 수 있다.
+- Persistent vector/index lifecycle은 Stage 6으로 미룬다.
+
+Persistent cache lifecycle/manual maintenance를 accepted/verified로 확정하며 Stage 4 전체는
+계속 `IN PROGRESS`이다.

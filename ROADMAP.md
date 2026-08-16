@@ -39,8 +39,8 @@
 - 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
 - 현재 상태: Local TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice와
   Integrated Web + Local Federated Research vertical slice를 실제 CLI smoke까지 완료했다.
-  Parsed Document Cache runtime integration까지 완료했다. Stage 4는 cache
-  lifecycle/maintenance, HWP binary, scanned PDF/OCR,
+  Parsed Document Cache runtime integration과 Persistent Cache Lifecycle / Manual Maintenance까지
+  완료했다. Stage 4는 HWP binary, scanned PDF/OCR,
   descriptor-level TOCTOU hardening 및 추가 sensitive-data hardening이 남아 있어 계속 진행 중이다.
 - 현재 기준일: 2026-08-16
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
@@ -745,7 +745,14 @@ Rewrite가 아니라 Integration-first
   - [x] Integrated Local integration
   - [x] PDF/HWPX persistent parsed reuse와 provenance 보존
   - [x] access/approval/provider-near revalidation ordering
-  - [ ] cache lifecycle/eviction/maintenance policy
+  - [x] Persistent Cache Lifecycle / Manual Maintenance
+    - [x] read-only inventory
+    - [x] deterministic oldest-successful-write-first prune planning
+    - [x] lock-aware execution과 revalidation
+    - [x] cache status/dry-run/prune CLI
+    - [x] isolated smoke와 repopulation
+    - [x] full repository regression `5028 passed`
+    - automatic prune / TTL / LRU는 도입하지 않음
   - [ ] persistent retrieval/index layer (Stage 6 boundary)
 - [x] Integrated Web + Local federated source core
 - [x] Integrated real runtime/CLI와 distinct external-send approval
@@ -2880,7 +2887,7 @@ Text-bearing HWPX Vertical Slice
 - same-bytes/different-path reuse와 current path/source identity runtime reconstruction
 - PDF page 및 HWPX body-section provenance의 persistent round trip
 - parsed cache 전 fresh access validation과 provider 전 fresh approval revalidation
-- latest full repository regression `4955 passed`
+- latest full repository regression `5028 passed`
 - Ruff `All checks passed`, `git diff --check` 통과
 
 미완료 범위:
@@ -2888,7 +2895,7 @@ Text-bearing HWPX Vertical Slice
 - scanned PDF/OCR, HWP binary, DOCX
 - line number provenance
 - table-specialized parsing
-- cache lifecycle/eviction/maintenance policy
+- automatic cache pruning / TTL / LRU는 미도입
 - persistent retrieval/index layer (Stage 6 boundary)
 - sensitive-content classification/redaction와 persistent approval storage
 - descriptor-level TOCTOU resistance
@@ -2924,9 +2931,8 @@ Strong real Web + Local smoke
 - `NO_EVIDENCE` source가 quota를 소비하지 않는 evidence-aware backfill
 - real smoke에서 2 Web + 1 Local evidence source, 8 claims, 8 citations, quality `0.97 / excellent / passed`
 
-Stage 4 전체는 아직 `IN PROGRESS`이다. 완료되지 않은 항목은 cache
-lifecycle/eviction/maintenance, persistent retrieval/index layer,
-scanned PDF/OCR, HWP binary, sensitive-content
+Stage 4 전체는 아직 `IN PROGRESS`이다. 완료되지 않은 항목은 persistent retrieval/index
+layer, scanned PDF/OCR, HWP binary, sensitive-content
 classification/redaction, persistent approval storage 및 descriptor-level TOCTOU
 hardening이다. 완료된 Integrated slice는 persistent vector RAG 전체가 아니라 broader
 RAG를 위한 federated research foundation이다.
@@ -3008,10 +3014,34 @@ Parsed Document Cache는 parsing work를 재사용하고 Persistent Semantic Emb
 embedding calculation을 재사용한다. 둘 다 persistent retrieval index/vector database가
 아니며 Stage 6 persistent retrieval/index boundary를 완료하지 않는다.
 
+## 33.5 Persistent Cache Lifecycle / Manual Maintenance 완료
+
+```text
+Read-only inventory → COMPLETE
+Deterministic prune planning → COMPLETE
+Lock-aware prune execution → COMPLETE
+Cache status / dry-run / prune CLI → COMPLETE
+Isolated smoke and repopulation → COMPLETE
+```
+
+완료된 범위:
+
+- embedding/parsed cache별 valid/corrupt/lock/temp/unknown read-only inventory
+- `mtime_ns`, `entry_key` 순 oldest-successful-write-first plan
+- plan과 deletion authorization을 분리하고 실행 시 filesystem state/identity 재검증
+- embedding global lock과 parsed per-entry lock을 이용한 execution
+- corrupt/temp/unknown/lock file 보존과 validated planned final JSON만 삭제
+- partial mutation 보고, directory `fsync`, fresh post-inventory
+- `aira cache status`와 embedding/parsed dry-run 및 prune
+- isolated smoke, no-mutation dry-run, actual prune, object 보존 및 repopulation
+- full repository regression `5028 passed`
+
+Automatic prune, TTL 및 true LRU는 도입하지 않았다. Target은 strict concurrent quota가 아니고
+persistent retrieval/index lifecycle은 Stage 6 boundary로 유지한다.
+
 현재 다음 우선 과제:
 
 ```text
-cache lifecycle/eviction/maintenance architecture audit
-→ remaining Local format/safety expansion
+remaining Local format/safety expansion
 → Patent Research Vertical Slice
 ```

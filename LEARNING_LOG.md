@@ -1969,3 +1969,65 @@ Handler/CLI test는 `XDG_CACHE_HOME`을 `tmp_path`로 설정하고 subprocess에
 
 다음 학습 목표는 cache lifecycle/eviction/maintenance architecture audit이다. 이후 remaining
 Local format/safety work와 Patent Research Vertical Slice를 진행한다.
+
+## 2026-08-16 — Persistent Cache Lifecycle: 관찰, 계획, 삭제 권한은 서로 다르다
+
+### 1. Observation, plan, mutation은 다른 계약이다
+
+```text
+filesystem
+→ CacheStatus observation
+→ CachePrunePlan pure computation
+→ CachePruneResult actual mutation
+```
+
+Status는 concurrent writer가 있을 수 있는 observational view이고 transactional snapshot이
+아니다. Plan은 target까지 지울 valid entry를 계산하지만 deletion authorization이 아니다.
+이 lifecycle은 다음 authoritative boundary와도 분리된다.
+
+```text
+Local source validation / external-send approval
+≠ cache authorization
+```
+
+Cache hit가 source access나 send permission을 만들지 않듯 prune plan도 pathname을 삭제할
+권한을 만들지 않는다.
+
+### 2. Mutation에는 lock과 revalidation이 필요하다
+
+Execution은 candidate가 같은 regular non-symlink final JSON이고 size/mtime/identity가 여전히
+일치하는지 다시 확인한다. Embedding cache는 global exclusive lock, Parsed cache는 per-entry
+exclusive lock을 쓴다. Parsed lock pathname을 unlink하면 새 inode가 생겨 서로 다른 process의
+`flock` coordination이 갈라질 수 있으므로 lock file은 보존한다.
+
+### 3. Target과 mtime은 quota/LRU가 아니다
+
+Manual target은 operational target이지 concurrent hard quota가 아니다. `mtime_ns`는
+successful-write recency이며 access recency가 아니므로 true LRU가 아니다. Hit마다 access
+metadata를 쓰지 않아 read path와 lock contention도 늘리지 않았다.
+
+### 4. Regenerable cache의 non-transactional 삭제
+
+Cache content는 재생성 가능하므로 여러 entry 삭제를 transaction처럼 rollback하지 않는다.
+중간 실패 전 mutation은 유지하고 partial state를 명시적으로 보고한다. Unlink 뒤 directory
+`fsync`가 durable success에 필요하며, 실행 후 fresh inventory가 최종 source of truth다.
+Corrupt/temp/unknown/lock file은 보고하지만 자동 삭제하지 않는다.
+
+Cache lifecycle은 계산 결과의 disk growth를 관리한다. 어떤 document를 검색할지 관리하는
+retrieval/index lifecycle은 별도 Stage 6 문제다.
+
+### 검증과 다음 학습 목표
+
+- maintenance focused: `62 passed`
+- cache CLI: `11 passed`
+- existing CLI regression: `51 passed`
+- broader cache/CLI regression: `229 passed`
+- isolated smoke, dry-run no-mutation 및 actual prune: 통과
+- lock/corrupt/temp/unknown 보존과 repopulation: 통과
+- full repository pytest: `5028 passed in 23.31s`
+- Ruff: 통과
+- changed Python format: `7 files already formatted`
+- `git diff --check`: 통과
+
+다음 학습 목표는 remaining Local format/safety expansion이며, 그 뒤 Patent Research Vertical
+Slice를 진행한다.
