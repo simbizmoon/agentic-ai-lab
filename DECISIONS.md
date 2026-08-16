@@ -3491,3 +3491,89 @@ entry-validation logic이 없다.
 
 Persistent cache lifecycle/manual maintenance를 accepted/verified로 확정하며 Stage 4 전체는
 계속 `IN PROGRESS`이다.
+
+## D-059 — Stage 4 Local Document Expansion의 완료 기준은 안전한 TXT/Markdown/text-PDF/HWPX baseline과 provenance/Web integration으로 확정하고 고급 format/hardening 항목은 evidence-driven follow-up으로 분리한다
+
+- 상태: 확정
+- 날짜: 2026-08-16
+- 적용 범위: Stage 4 — Local Document Expansion Closure
+
+### 배경
+
+Stage 4의 명시적 목표는 사용자가 지정한 Local 문서를 안전하게 읽고 원문 위치를 보존하여
+Web 자료와 함께 분석하는 것이다. UTF-8 TXT/Markdown, text-based PDF, text-bearing HWPX,
+Local provenance, deterministic/semantic execution, Integrated Web + Local federation, explicit
+external-send approval, persistent embedding/parsed cache, private result artifacts 및 manual cache
+maintenance가 구현되고 real smoke까지 검증되었다.
+
+그럼에도 broader final-product checklist의 OCR, HWP, DOCX, line/table provenance, persistent
+retrieval/index와 hostile-filesystem hardening이 Stage 4 blocker처럼 남아 scope ambiguity를
+만들었다. Read-only completion audit는 현재 목표를 막는 production-code MUST NOW 항목이
+없다고 결론 내렸다.
+
+### 결정
+
+- Stage 4 accepted Local format baseline은 UTF-8 TXT, Markdown (`.md`, `.markdown`),
+  text-based PDF 및 text-bearing HWPX이다.
+- Scanned/image-only PDF의 clear no-extractable-text failure와 HWP binary/DOCX unsupported
+  failure는 안전한 baseline 계약이다. Unsupported는 broken을 의미하지 않는다.
+- Stage 4는 모든 office format, OCR, persistent vector/index retrieval 또는 Hybrid Retrieval을
+  요구하지 않는다.
+- 현재 single-user/local trust model에서 practical SHA/size revalidation은 baseline에
+  충분하다. Descriptor-bound hostile-filesystem hardening은 완료했다고 주장하지 않는다.
+- Persistent approval, expiry/revocation 및 automatic sensitive-content redaction은 baseline
+  요구사항이 아니다. Execution-scoped exact-source approval은 계속 authoritative하다.
+- Stage 4 baseline을 `COMPLETE`로 확정하고 Patent Research Vertical Slice를 시작할 수 있다.
+- Baseline completion은 모든 future Local-document capability 완료를 의미하지 않는다.
+
+### Follow-up 분류
+
+SHOULD NOW:
+
+- HWP binary support
+- table-specialized parsing
+- descriptor-bound source reading / TOCTOU hardening
+
+DEFER:
+
+- scanned PDF / OCR
+- Markdown heading/section provenance
+- sensitive-content classification/redaction
+- persistent approval storage / expiry / revocation
+
+OUT OF SCOPE FOR STAGE 4:
+
+- DOCX
+- line-number provenance
+- persistent vector retrieval/index
+- Hybrid Retrieval
+- general Stage 5 patent/academic/Web expansion
+- automatic cache pruning / TTL / LRU
+- advanced autonomous agent loop
+
+Persistent retrieval/index와 Hybrid Retrieval은 Stage 6 boundary를 유지한다. General
+Patent/academic/Web expansion은 Stage 5이며 Stage 4 closure가 Stage 5/6 완료를 뜻하지 않는다.
+
+### 재개 조건
+
+다음 evidence가 생기면 해당 follow-up을 다시 연다.
+
+- scanned/image-only patent fixture가 일반적 입력이 된다.
+- HWP conversion이 필요한 evidence 또는 provenance를 잃는다.
+- Patent conclusion에 table row/cell identity가 필요함이 입증된다.
+- Deployment가 hostile/shared filesystem trust model로 바뀐다.
+- Privacy review가 classifier/redaction을 요구한다.
+- Reusable approval이 product requirement가 된다.
+- DOCX가 빈번한 실제 입력이 된다.
+
+### 검증 기준선
+
+- full repository pytest: `5028 passed`
+- Ruff: `All checks passed`
+- `git diff --check`: 통과
+- cache lifecycle isolated smoke: 통과
+- cache repopulation smoke: 통과
+- Stage 4 Local/Integrated real smokes: 기존 결정에 기록된 대로 통과
+
+D-054부터 D-058까지의 cache, artifact 및 lifecycle 경계를 유지한다. Stage 4 baseline을
+accepted/verified로 완료하고 다음 product step을 Patent Research Vertical Slice로 정한다.

@@ -107,8 +107,8 @@ citation에 기여할 수 있지만 irrelevant Local evidence는 `NO_EVIDENCE`�
 backfill이 다음 document를 시도한다. Tavily call/credit usage는 Web search만 나타내며
 Local in-memory retrieval은 provider search usage에 더하지 않는다.
 
-이는 Integrated Web + Local Federated Research vertical slice이며 persistent vector index,
-parsing/embedding cache를 갖춘 full persistent RAG는 아직 아니다.
+이는 Integrated Web + Local Federated Research vertical slice이며 persistent vector index를
+갖춘 full persistent RAG는 아직 아니다. Persistent embedding/parsed cache는 현재 연결되어 있다.
 
 관측된 첫 smoke에서 OpenAI timeout `30s`, retry `2`는 evidence relevance 단계의
 `APITimeoutError`로 끝났고 `120s`, retry `0` smoke는 성공했다. 이는 permanent default가
@@ -956,23 +956,20 @@ Known Failure가 Citation Judge 평가에서 확인되었다.
 
 일부 결과는 아직 자동 실행 차단이나 자동 Claim 삭제에 직접 사용하지 않는다.
 
-## 24.4 Local Document Expansion은 진행 중
+## 24.4 Local Document Expansion baseline은 완료
 
-TXT/Markdown, text-based PDF 및 text-bearing HWPX Semantic Local Vertical Slice는 구현되었고 실제 CLI smoke로
-`report.md`와 `result.json` 생성, relevant paragraph 선택, character/query/file
-provenance, generated claim 및 semantic citation/relevance/coverage 연결을 확인했다.
+Stage 4 baseline은 `COMPLETE`이다. 지원 형식은 UTF-8 TXT, Markdown (`.md`, `.markdown`),
+text-based PDF 및 text-bearing HWPX다. Deterministic/Semantic Local과 Integrated Web + Local에서
+provenance, claim/citation 및 real smoke를 검증했다.
 
-그러나 다음 범위는 아직 미완성이다.
+Persistent Embedding Cache와 Parsed Document Cache가 runtime에 연결되어 있고,
+`aira cache status` 및 embedding/parsed prune dry-run/manual execution을 제공한다.
 
-- scanned PDF/OCR (text extraction이 없는 PDF는 명확히 실패)
-- HWP binary/DOCX
-- line number와 table-specialized parsing
-- persistent vector index/cache
-- Web + Local unified Integrated RAG
-- 선행특허 전문 Research
-
-따라서 TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice 완료를 전체 Local Document Expansion
-완료로 해석하지 않는다.
+Unsupported baseline은 명확하다. Scanned/image-only PDF는 no-extractable-text error로 실패하고,
+HWP binary와 DOCX는 unsupported다. 이는 broken behavior가 아니라 explicit safe failure다. OCR,
+HWP/table 확장, sensitive-data hardening 및 descriptor-bound TOCTOU는 evidence-driven follow-up이다.
+Persistent vector retrieval/index와 Hybrid Retrieval은 Stage 6에 남는다. Stage 4 baseline 완료는
+모든 future Local format이나 hostile multi-user production hardening 완료를 뜻하지 않는다.
 
 ## 24.5 실제 Dollar Cost 계측
 
@@ -1176,7 +1173,7 @@ Single-Agent micro-optimization
 → Deferred
 
 Current product focus
-→ Stage 4 Local Document Expansion
+→ Patent Research Vertical Slice (Stage 4 baseline COMPLETE)
 ```
 
 # 31. 2026-08-13 현재 시스템 갱신 — Local / Multi-Agent / Hybrid / Parallel Runtime
@@ -1323,6 +1320,12 @@ aira research --mode semantic
 
 aira research-live
 → Live Web Research
+
+aira research-integrated
+→ Integrated Web + Local Research (explicit Local external-send approval required)
+
+aira cache status / cache prune
+→ Persistent embedding/parsed cache inventory, dry-run 및 manual maintenance
 ```
 
 실제 deterministic 및 semantic CLI smoke 모두 `report.md`와 `result.json`을
@@ -1356,13 +1359,14 @@ HWPX real-Hancom adapter/deterministic smoke는 `Contents/section0.xml`, range `
 `hwpx_section_index="1"`을 보존했다. Semantic three-section smoke는 section 2의 relevant
 paragraph만 `114..303`으로 선택했고 citation verification은 fully supported였다.
 
-현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`, text-based `.pdf`, text-bearing `.hwpx`이다. PDF는 `pypdf`로 page별 text를 추출하며, 한 page section 안에 완전히 포함된 evidence는 `metadata["page_number"]`를 보존한다. HWPX는 safe ZIP direct-read와 `defusedxml`, manifest/spine 및 `sec` body classification을 사용한다. Scanned PDF/OCR, HWP binary, DOCX, table-specialized parsing, persistent vector index와 parsing/embedding cache는 아직 완료되지 않았다. Web + Local
-Federated Research vertical slice는 완료되었지만 full persistent vector RAG로 확대 해석하지 않는다.
+현재 지원 형식은 UTF-8 `.txt`, `.md`, `.markdown`, text-based `.pdf`, text-bearing `.hwpx`이다. PDF는 `pypdf`로 page별 text를 추출하며 한 page section 안의 evidence는 `metadata["page_number"]`를 보존한다. HWPX는 safe ZIP direct-read와 `defusedxml`, manifest/spine 및 `sec` body classification을 사용한다. Persistent embedding/parsed cache와 manual status/dry-run/prune가 구현되어 있고 Web + Local Federated Research도 사용 가능하다.
+
+Scanned/image-only PDF는 명확한 no-extractable-text failure이며 OCR은 제공하지 않는다. HWP binary와 DOCX는 unsupported다. Persistent vector retrieval/index 및 Hybrid Retrieval은 Stage 6 boundary이므로 Stage 4 baseline 완료를 full persistent vector RAG 완료로 확대 해석하지 않는다.
 
 현재 검증 기준:
 
 ```text
-full regression = 4722 passed
+full regression = 5028 passed
 Ruff = All checks passed
 git diff --check = passed
 ```

@@ -2031,3 +2031,46 @@ retrieval/index lifecycle은 별도 Stage 6 문제다.
 
 다음 학습 목표는 remaining Local format/safety expansion이며, 그 뒤 Patent Research Vertical
 Slice를 진행한다.
+
+## 2026-08-16 — Stage completion은 모든 checklist 소진이 아니라 product capability 계약으로 판단한다
+
+### 1. Stage goal은 계약이다
+
+Stage는 가능한 기능을 모두 구현하는 무한 backlog가 아니다. Stage 4의 계약은 Local 문서를
+안전하게 읽고 provenance를 보존해 Web evidence와 함께 분석하는 것이었다. TXT/Markdown,
+text-PDF, text-bearing HWPX baseline이 이 계약을 충족했고, 감사 결과 production-code
+`MUST NOW` 항목은 남지 않았다.
+
+### 2. Unsupported-but-safe failure도 baseline이다
+
+Image-only PDF가 명확한 no-text error로 끝나고 HWP/DOCX가 지원되지 않는다고 일관되게
+거절되는 것은 silent corruption보다 안전하다. 모든 format을 추가하는 것이 자동으로 더 좋은
+architecture는 아니다. 실제 입력 evidence 없이 parser와 dependency를 늘리면 attack surface,
+provenance contract 및 maintenance burden도 함께 늘어난다.
+
+### 3. Security hardening은 threat model에 맞춘다
+
+현재 raw SHA/size, allowed root, symlink rejection, per-execution approval 및 provider-near
+revalidation은 single-user/local baseline을 구성한다. Descriptor-level race resistance가 완성된
+것은 아니지만 hostile/shared deployment evidence가 없을 때 Stage closure를 막지는 않는다.
+Threat model이 바뀌면 TOCTOU hardening을 다시 연다.
+
+### 4. SHOULD와 DEFER는 evidence로 재개한다
+
+HWP binary, structured tables 및 descriptor-bound reading은 가치가 있어 SHOULD NOW로
+남긴다. OCR, Markdown heading provenance, classifier/redaction 및 persistent approval은 DEFER다.
+이들은 scanned patent fixture, conversion loss, table-dependent conclusion, privacy review 같은
+실제 evidence가 생길 때 재개한다.
+
+### 5. Abstraction boundary를 Stage boundary와 맞춘다
+
+Parsed/Embedding Cache는 계산 재사용이고 persistent vector retrieval/index와 Hybrid Retrieval은
+다른 abstraction이다. 후자는 Stage 6에 남긴다. General Patent/academic/Web expansion은 Stage 5다.
+Stage 4 안에서 이를 미리 완성하려 하면 실제 Patent Research Vertical Slice보다 Local optimization을
+끝없이 앞세우게 된다.
+
+Stage 4 baseline completion은 future Local capability 전체 완료가 아니다. Scope를 닫음으로써
+이제 real product use인 Patent Research Vertical Slice에서 다음 필요를 관찰할 수 있다.
+
+검증 기준선은 full pytest `5028 passed`, Ruff `All checks passed`, `git diff --check` 통과,
+cache lifecycle isolated/repopulation smoke 통과 및 기존 Local/Integrated real smoke 통과이다.

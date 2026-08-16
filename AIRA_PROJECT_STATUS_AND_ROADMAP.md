@@ -1738,46 +1738,85 @@ Hardware
 
 ---
 
-# 37. 2026-08-15 최신 상태 — Integrated Web + Local Federated Research 완료
+# 37. 2026-08-16 최신 상태 — Stage 4 Local Document Expansion baseline 완료
 
-> 이 섹션은 Integrated Web + Local 진행상태에 관한 최신 authoritative summary이다.
-> 앞선 Local Document 또는 Internet + Local 항목의 미래형 설명은 역사적 checkpoint로
-> 보존하되 현재 상태는 이 섹션을 우선한다.
+> 이 섹션은 Stage 4와 다음 project step에 관한 최신 authoritative summary이다.
+> 앞선 Local Document, Integrated Web + Local 또는 cache 미래형 설명은 역사적 checkpoint로
+> 보존하되 현재 상태는 이 섹션과 D-059를 우선한다.
 
 ```text
-Integrated federated source core                 COMPLETE
-research-integrated real runtime / CLI           COMPLETE
-Integrated external-send approval boundary       COMPLETE
-Source-universe-aware evidence opportunity        COMPLETE
-Real Web + Local end-to-end smoke                 PASSED
-Strong Local evidence in final claims/citations   VERIFIED
-Stage 4 overall                                   IN PROGRESS
+Stage 4 Local Document Expansion baseline         COMPLETE
+TXT / Markdown Local Research                     COMPLETE
+Text-based PDF vertical slice                     COMPLETE
+Text-bearing HWPX vertical slice                  COMPLETE
+Local provenance and safety gates                 COMPLETE
+Semantic external-send approval                   COMPLETE
+Integrated Web + Local federated research         COMPLETE
+Persistent Embedding Cache                        COMPLETE
+Parsed Document Cache runtime integration         COMPLETE
+Research Result Artifact Hardening                COMPLETE
+Persistent Cache Lifecycle / Manual Maintenance   COMPLETE
 ```
 
-현재 `aira research-integrated`는 Web와 승인된 Local source를 명시적 origin으로
-federation하고 기존 `SingleResearchAgentPipeline`에서 reader, quality, semantic evidence,
-claim 및 citation까지 처리한다. strong real smoke는 2 Web + 1 Local evidence source로
-8 claims와 8 citations을 생성했고 quality `0.97 / excellent / passed`를 기록했다.
+Accepted Local format baseline:
 
-이 완료는 persistent vector RAG 전체 완료가 아니다. Stage 4에는 다음이 남아 있다.
+- UTF-8 TXT
+- Markdown (`.md`, `.markdown`)
+- text-based PDF
+- text-bearing HWPX
 
-- persistent Local index / parsing and embedding hash cache
-- scanned PDF/OCR
-- HWP binary
+Unsupported but explicitly handled:
+
+- scanned/image-only PDF → clear no-extractable-text failure
+- HWP binary → unsupported
+- DOCX → unsupported
+
+Unsupported는 broken을 의미하지 않는다. Stage 4 goal인 safe Local reading, provenance
+preservation 및 Web integration은 위 baseline으로 구현·검증되었다. Baseline completion은 모든
+future Local format이나 hostile multi-user production hardening 완료를 뜻하지 않는다.
+
+Follow-up classification (Stage 4 completion blocker가 아님):
+
+SHOULD NOW:
+
+- HWP binary support
+- table-specialized parsing
+- descriptor-bound source reading / TOCTOU hardening
+
+DEFER:
+
+- scanned PDF / OCR
+- Markdown heading/section provenance
 - sensitive-content classification/redaction
-- persistent approval storage
-- descriptor-level TOCTOU hardening
+- persistent approval lifecycle
 
-현재 다음 우선순위:
+OUT OF SCOPE FOR STAGE 4:
+
+- DOCX
+- line-number provenance
+- persistent vector retrieval/index
+- Hybrid Retrieval
+- Stage 5 general Web/patent expansion
+- automatic cache TTL/LRU pruning
+- advanced autonomous agent loop
+
+Persistent retrieval/index와 Hybrid Retrieval은 Stage 6 boundary다. General Web/patent expansion은
+Stage 5 boundary이며 Stage 4 closure는 Stage 5 또는 Stage 6 완료를 의미하지 않는다.
+
+Latest accepted validation:
+
+- full repository pytest: `5028 passed`
+- Ruff: PASS
+- `git diff --check`: PASS
+- cache lifecycle isolated smoke: PASS
+- cache repopulation smoke: PASS
+- Stage 4 Local/Integrated real smokes: PASS
+
+현재 다음 project step:
 
 ```text
-Persistent Local Index / Embedding Hash Cache
+Patent Research Vertical Slice
 ```
 
-Patent Research Vertical Slice는 위 foundation 확장 뒤의 downstream product slice로
-유지한다.
-
-운영 관측으로 `OPENAI_TIMEOUT_SECONDS=30`, `OPENAI_MAX_RETRIES=2` smoke는 semantic
-evidence relevance에서 timeout이 발생했고 `120`/`0` smoke는 성공했다. Evidence semantic
-processing이 dominant latency였지만 `120`/`0`은 아직 permanent default가 아니며 최종
-retry/timeout 정책은 후속 운영 결정이다.
+Real patent inputs가 OCR, HWP, table identity, hostile/shared filesystem 또는 강화된 privacy
+workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.

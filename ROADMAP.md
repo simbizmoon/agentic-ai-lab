@@ -36,12 +36,11 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 3 핵심 Single-Agent Live Research 완료 → Stage 4 Local Document Expansion 진행 중
-- 현재 상태: Local TXT/Markdown, text-based PDF 및 text-bearing HWPX vertical slice와
-  Integrated Web + Local Federated Research vertical slice를 실제 CLI smoke까지 완료했다.
-  Parsed Document Cache runtime integration과 Persistent Cache Lifecycle / Manual Maintenance까지
-  완료했다. Stage 4는 HWP binary, scanned PDF/OCR,
-  descriptor-level TOCTOU hardening 및 추가 sensitive-data hardening이 남아 있어 계속 진행 중이다.
+- 현재 제품 단계: Stage 4 Local Document Expansion baseline 완료 → Patent Research Vertical Slice 준비
+- 현재 상태: UTF-8 TXT/Markdown, text-based PDF 및 text-bearing HWPX Local baseline과
+  Integrated Web + Local Federated Research, persistent embedding/parsed cache, private result
+  artifact 및 manual cache lifecycle을 실제 smoke까지 완료했다. HWP binary, OCR 및 추가
+  hardening은 evidence-driven follow-up이며 Stage 4 baseline completion blocker가 아니다.
 - 현재 기준일: 2026-08-16
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -695,28 +694,28 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [~] 진행 중
-- [x] 초기 TXT/Markdown Semantic Research Vertical Slice 완료
+- [x] Stage 4 baseline COMPLETE
+- [x] UTF-8 TXT/Markdown Semantic Research Vertical Slice 완료
 - [x] text-based PDF vertical slice 완료
 - [x] text-bearing HWPX vertical slice 완료
 - [x] Integrated Web + Local Federated Research vertical slice 완료
-- [ ] scanned PDF/OCR 및 HWP binary는 미완료
+- unsupported baseline: scanned/image-only PDF는 clear no-text failure, HWP binary와 DOCX는 unsupported
 
 ## Work Items
 
 - [x] TXT
 - [x] Markdown
 - [x] PDF Text (`pypdf`)
-- [ ] Scanned PDF 처리 전략
-- [ ] HWP
+- [x] Scanned/image-only PDF explicit no-extractable-text failure와 OCR defer 결정
+- HWP binary는 unsupported이며 SHOULD NOW follow-up
 - [x] HWPX (safe ZIP + defusedxml)
 - [x] 파일 Metadata (`local_path`, `filename`)
 - [x] Query provenance (`search_query_text`)
-- [ ] Heading 또는 Section
+- Markdown heading/section provenance는 DEFER follow-up
 - [x] PDF physical page number (single-section-contained evidence)
 - [x] 문단 및 character range 위치 보존
-- [ ] 줄 번호
-- [ ] 표 처리
+- line-number provenance는 Stage 4 OUT OF SCOPE
+- table-specialized parsing은 SHOULD NOW follow-up
 - [x] Citation character 위치 보존
 - [x] Paragraph semantic evidence selection
 - [x] Generated claim integration
@@ -728,7 +727,7 @@ Rewrite가 아니라 Integration-first
 - [x] 민감문서 외부 전송 승인
 - [x] PDF parser/encrypted/no-text 실패 처리
 - [x] 동일 문서 raw SHA-256 identity/provenance
-- [~] Persistent Local Cache / Index Foundation
+- [x] Persistent Local Cache Foundation
   - [x] Persistent Embedding Cache Core
   - [x] Local Semantic persistent embedding cache integration
   - [x] Shared Integrated Web + Local semantic cache integration
@@ -753,7 +752,7 @@ Rewrite가 아니라 Integration-first
     - [x] isolated smoke와 repopulation
     - [x] full repository regression `5028 passed`
     - automatic prune / TTL / LRU는 도입하지 않음
-  - [ ] persistent retrieval/index layer (Stage 6 boundary)
+  - persistent retrieval/index layer → Stage 6 boundary (not a Stage 4 completion item)
 - [x] Integrated Web + Local federated source core
 - [x] Integrated real runtime/CLI와 distinct external-send approval
 - [x] Integrated source-universe-aware selection과 evidence backfill
@@ -2835,14 +2834,15 @@ profiler evidence가 현재 hardware를 병목으로 확인할 때 다시 평가
 # 33. 2026-08-14 Local Document Semantic Research Vertical Slices
 
 > 이 섹션은 Stage 4 Local Document Expansion의 최신 authoritative status이다.
-> Stage 4 전체 완료가 아니라 Local format vertical slices, Integrated Web + Local federated
-> research, Persistent Embedding Cache 및 Parsed Document Cache runtime integration 완료를 기록한다.
+> Stage 4 baseline completion과 Local format vertical slices, Integrated Web + Local federated
+> research, persistent cache 및 manual maintenance 완료를 기록한다. Baseline completion은 모든
+> future Local-document capability 완료를 의미하지 않는다.
 
 ## 33.1 상태
 
 ```text
-Stage 4 Local Document Expansion
-→ IN PROGRESS
+Stage 4 Local Document Expansion baseline
+→ COMPLETE
 
 Initial TXT/Markdown Semantic Vertical Slice
 → COMPLETE
@@ -2890,15 +2890,14 @@ Text-bearing HWPX Vertical Slice
 - latest full repository regression `5028 passed`
 - Ruff `All checks passed`, `git diff --check` 통과
 
-미완료 범위:
+Follow-up 분류 (Stage 4 completion blocker가 아님):
 
-- scanned PDF/OCR, HWP binary, DOCX
-- line number provenance
-- table-specialized parsing
-- automatic cache pruning / TTL / LRU는 미도입
-- persistent retrieval/index layer (Stage 6 boundary)
-- sensitive-content classification/redaction와 persistent approval storage
-- descriptor-level TOCTOU resistance
+- SHOULD NOW: HWP binary, table-specialized parsing, descriptor-bound source reading / TOCTOU hardening
+- DEFER: scanned PDF/OCR, Markdown heading/section provenance, sensitive-content classification/redaction, persistent approval storage/expiry/revocation
+- OUT OF SCOPE FOR STAGE 4: DOCX, line-number provenance, automatic cache pruning/TTL/LRU
+- Stage 5 boundary: general Patent/academic/Web research expansion
+- Stage 6 boundary: persistent vector retrieval/index와 Hybrid Retrieval
+- later boundary: advanced autonomous agent loop
 
 ## 33.2 Integrated Web + Local Federated Research 완료
 
@@ -2931,11 +2930,10 @@ Strong real Web + Local smoke
 - `NO_EVIDENCE` source가 quota를 소비하지 않는 evidence-aware backfill
 - real smoke에서 2 Web + 1 Local evidence source, 8 claims, 8 citations, quality `0.97 / excellent / passed`
 
-Stage 4 전체는 아직 `IN PROGRESS`이다. 완료되지 않은 항목은 persistent retrieval/index
-layer, scanned PDF/OCR, HWP binary, sensitive-content
-classification/redaction, persistent approval storage 및 descriptor-level TOCTOU
-hardening이다. 완료된 Integrated slice는 persistent vector RAG 전체가 아니라 broader
-RAG를 위한 federated research foundation이다.
+Stage 4 baseline은 `COMPLETE`이다. Accepted baseline은 TXT/Markdown/text-PDF/text-bearing HWPX와
+clear unsupported/no-text failure, provenance 및 Web integration이다. Follow-up hardening과 format
+확장은 evidence-driven backlog이며, 완료된 Integrated slice는 persistent vector RAG 전체가
+아니다.
 
 ## 33.3 Persistent Embedding Cache Foundation 완료
 
@@ -3042,6 +3040,5 @@ persistent retrieval/index lifecycle은 Stage 6 boundary로 유지한다.
 현재 다음 우선 과제:
 
 ```text
-remaining Local format/safety expansion
-→ Patent Research Vertical Slice
+Patent Research Vertical Slice
 ```
