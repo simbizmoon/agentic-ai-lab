@@ -12,12 +12,21 @@ from openai import OpenAI
 
 from app.budget import ExecutionBudget
 from app.config import Settings, load_settings
+from app.rag.caching_embedding_provider import (
+    CachingEmbeddingProvider,
+)
+from app.rag.embedding_cache_directory import (
+    resolve_embedding_cache_directory,
+)
+from app.rag.file_embedding_cache import FileEmbeddingCache
 from app.rag.openai_embedding_provider import (
     OpenAIEmbeddingProvider,
 )
+from app.research.caching_local_document_parser import CachingLocalDocumentParser
 from app.research.embedding_semantic_evidence_shortlister import (
     EmbeddingSemanticEvidenceShortlister,
 )
+from app.research.file_parsed_document_cache import FileParsedDocumentCache
 from app.research.generative_pipeline_claim_builder import (
     GenerativePipelineClaimBuilder,
 )
@@ -34,6 +43,7 @@ from app.research.local_document_adapter import (
     LocalDocumentAdapter,
     LocalDocumentBundle,
 )
+from app.research.local_document_parser import LocalDocumentParser
 from app.research.local_external_send_approval import (
     LocalExternalSendApproval,
     LocalExternalSendApprovalGate,
@@ -53,6 +63,10 @@ from app.research.openai_evidence_relevance_evaluator import (
 )
 from app.research.paragraph_evidence_extractor import (
     ParagraphEvidenceExtractor,
+)
+from app.research.parsed_document_cache import ParsedDocumentCache
+from app.research.parsed_document_cache_directory import (
+    resolve_parsed_document_cache_directory,
 )
 from app.research.pipeline_analysis_adapters import (
     PipelineEvidenceExtractorAdapter,
@@ -109,13 +123,23 @@ class LocalResearchHandler:
         writer: ResearchResultWriter | None = None,
         guardrail: ResearchResultGuardrail | None = None,
         stdout: TextIO | None = None,
+        parsed_cache_directory_resolver: Callable[[], Path] | None = None,
+        local_document_parser_factory: Callable[[], LocalDocumentParser] | None = None,
+        parsed_cache_factory: Callable[[Path], ParsedDocumentCache] | None = None,
     ) -> None:
         self._id_factory = id_factory or self._default_id
         self._writer = writer or ResearchResultWriter()
-        self._guardrail = (
-            guardrail or ResearchResultGuardrail()
-        )
+        self._guardrail = guardrail or ResearchResultGuardrail()
         self._stdout = stdout or sys.stdout
+        self._parsed_cache_directory_resolver = (
+            parsed_cache_directory_resolver or resolve_parsed_document_cache_directory
+        )
+        self._local_document_parser_factory = (
+            local_document_parser_factory or LocalDocumentParser
+        )
+        self._parsed_cache_factory = parsed_cache_factory or (
+            lambda directory: FileParsedDocumentCache(directory=directory)
+        )
 
     def __call__(
         self,
@@ -131,17 +155,20 @@ class LocalResearchHandler:
         execution_id = self._id_factory().strip()
 
         if not execution_id:
-            raise RuntimeError(
-                "research execution ID factory returned blank value"
-            )
+            raise RuntimeError("research execution ID factory returned blank value")
 
         self._validate_before_document_load(
             sources=sources,
             approval=external_send_approval,
         )
-        bundle = LocalDocumentAdapter().load_validated(sources)
-        self._validate_before_pipeline_build(
+        fresh_sources = self._validate_before_parsed_cache(
             sources=sources,
+            access_policy=access_policy,
+            approval=external_send_approval,
+        )
+        bundle = self._load_documents(fresh_sources)
+        self._validate_before_pipeline_build(
+            sources=fresh_sources,
             access_policy=access_policy,
             approval=external_send_approval,
         )
@@ -184,6 +211,31 @@ class LocalResearchHandler:
         )
 
         return 0
+
+    @staticmethod
+    def _validate_before_parsed_cache(
+        *,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        access_policy: LocalDocumentAccessPolicy,
+        approval: LocalExternalSendApproval | None,
+    ) -> tuple[LocalDocumentAccessResult, ...]:
+        """Freshly validate raw sources before any parsed-cache lookup."""
+
+        access_gate = LocalDocumentAccessGate(access_policy)
+        return tuple(access_gate.validate(source.resolved_path) for source in sources)
+
+    def _load_documents(
+        self,
+        sources: tuple[LocalDocumentAccessResult, ...],
+    ) -> LocalDocumentBundle:
+        """Compose persistent parsing only after authoritative access checks."""
+
+        cache = self._parsed_cache_factory(self._parsed_cache_directory_resolver())
+        parser = CachingLocalDocumentParser(
+            parser=self._local_document_parser_factory(),
+            cache=cache,
+        )
+        return LocalDocumentAdapter(parser=parser).load_validated(sources)
 
     def _validate_before_document_load(
         self,
@@ -230,29 +282,30 @@ class SemanticLocalResearchHandler(LocalResearchHandler):
         writer: ResearchResultWriter | None = None,
         guardrail: ResearchResultGuardrail | None = None,
         stdout: TextIO | None = None,
-        settings_loader: (
-            Callable[[], Settings] | None
-        ) = None,
-        openai_client_factory: (
-            Callable[[Settings], OpenAI] | None
-        ) = None,
-        local_worker_settings_loader: (
-            Callable[[], LocalWorkerSettings] | None
-        ) = None,
+        settings_loader: (Callable[[], Settings] | None) = None,
+        openai_client_factory: (Callable[[Settings], OpenAI] | None) = None,
+        local_worker_settings_loader: (Callable[[], LocalWorkerSettings] | None) = None,
+        embedding_cache_directory_resolver: (Callable[[], Path] | None) = None,
+        parsed_cache_directory_resolver: Callable[[], Path] | None = None,
+        local_document_parser_factory: Callable[[], LocalDocumentParser] | None = None,
+        parsed_cache_factory: Callable[[Path], ParsedDocumentCache] | None = None,
     ) -> None:
         super().__init__(
             id_factory=id_factory,
             writer=writer,
             guardrail=guardrail,
             stdout=stdout,
+            parsed_cache_directory_resolver=parsed_cache_directory_resolver,
+            local_document_parser_factory=local_document_parser_factory,
+            parsed_cache_factory=parsed_cache_factory,
         )
         self._settings_loader = settings_loader or load_settings
-        self._openai_client_factory = (
-            openai_client_factory or create_openai_client
-        )
+        self._openai_client_factory = openai_client_factory or create_openai_client
         self._local_worker_settings_loader = (
-            local_worker_settings_loader
-            or load_local_worker_settings
+            local_worker_settings_loader or load_local_worker_settings
+        )
+        self._embedding_cache_directory_resolver = (
+            embedding_cache_directory_resolver or resolve_embedding_cache_directory
         )
 
     def _validate_before_document_load(
@@ -272,13 +325,29 @@ class SemanticLocalResearchHandler(LocalResearchHandler):
     ) -> None:
         access_gate = LocalDocumentAccessGate(access_policy)
         fresh_sources = tuple(
-            access_gate.validate(source.resolved_path)
-            for source in sources
+            access_gate.validate(source.resolved_path) for source in sources
         )
         LocalExternalSendApprovalGate().validate(
             approval,
             fresh_sources,
         )
+
+    @staticmethod
+    def _validate_before_parsed_cache(
+        *,
+        sources: tuple[LocalDocumentAccessResult, ...],
+        access_policy: LocalDocumentAccessPolicy,
+        approval: LocalExternalSendApproval | None,
+    ) -> tuple[LocalDocumentAccessResult, ...]:
+        """Bind approval to fresh identities before parsed-cache access."""
+
+        fresh_sources = LocalResearchHandler._validate_before_parsed_cache(
+            sources=sources,
+            access_policy=access_policy,
+            approval=approval,
+        )
+        LocalExternalSendApprovalGate().validate(approval, fresh_sources)
+        return fresh_sources
 
     def _build_pipeline(
         self,
@@ -289,6 +358,9 @@ class SemanticLocalResearchHandler(LocalResearchHandler):
     ) -> SingleResearchAgentPipeline:
         """Build the semantic Local pipeline after source validation."""
 
+        embedding_cache = FileEmbeddingCache(
+            directory=self._embedding_cache_directory_resolver()
+        )
         settings = self._settings_loader()
         openai_client = self._openai_client_factory(settings)
         local_worker_settings = self._local_worker_settings_loader()
@@ -308,8 +380,11 @@ class SemanticLocalResearchHandler(LocalResearchHandler):
                 objective=objective,
                 paragraph_extractor=ParagraphEvidenceExtractor(),
                 shortlister=EmbeddingSemanticEvidenceShortlister(
-                    embedding_provider=OpenAIEmbeddingProvider(
-                        client=openai_client,
+                    embedding_provider=CachingEmbeddingProvider(
+                        provider=OpenAIEmbeddingProvider(
+                            client=openai_client,
+                        ),
+                        cache=embedding_cache,
                     )
                 ),
                 reranker=SemanticEvidenceReranker(
@@ -333,13 +408,7 @@ class SemanticLocalResearchHandler(LocalResearchHandler):
             bundle,
             evidence_extractor=evidence_extractor,
             claim_builder=claim_builder,
-            semantic_citation_verifier=(
-                bounded_workers.semantic_citation_verifier
-            ),
-            claim_relevance_evaluator=(
-                bounded_workers.claim_relevance_evaluator
-            ),
-            answer_coverage_evaluator=(
-                bounded_workers.answer_coverage_evaluator
-            ),
+            semantic_citation_verifier=(bounded_workers.semantic_citation_verifier),
+            claim_relevance_evaluator=(bounded_workers.claim_relevance_evaluator),
+            answer_coverage_evaluator=(bounded_workers.answer_coverage_evaluator),
         )

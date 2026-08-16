@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.rag.caching_embedding_provider import CachingEmbeddingProvider
+from app.rag.file_embedding_cache import FileEmbeddingCache
 from app.rag.openai_embedding_provider import OpenAIEmbeddingProvider
 from app.research.embedding_semantic_evidence_shortlister import (
     EmbeddingSemanticEvidenceShortlister,
@@ -54,6 +56,11 @@ from app.research.semantic_evidence_reranker import (
 from app.research.semantic_research_evidence_extractor import (
     SemanticResearchEvidenceExtractor,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_runtime_caches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
 
 
 class FakePipeline:
@@ -137,14 +144,18 @@ def test_semantic_handler_blocks_without_valid_approval_before_openai(
     source.write_text("Grounded semantic evidence.", encoding="utf-8")
     sources = access_results(source)
     approval = (
-        None
-        if approval_state == "missing"
-        else approval_for(sources, approved=False)
+        None if approval_state == "missing" else approval_for(sources, approved=False)
     )
     calls: list[str] = []
     handler = SemanticLocalResearchHandler(
         settings_loader=lambda: calls.append("settings"),  # type: ignore[arg-type]
         openai_client_factory=lambda settings: calls.append("openai"),  # type: ignore[arg-type]
+        embedding_cache_directory_resolver=lambda: (
+            calls.append("cache") or tmp_path / "cache"
+        ),
+        parsed_cache_directory_resolver=lambda: (
+            calls.append("parsed-cache") or tmp_path / "parsed-cache"
+        ),
     )
 
     with pytest.raises(ValueError, match="explicit external-send approval"):
@@ -172,6 +183,12 @@ def test_semantic_handler_blocks_changed_bytes_before_openai(
     handler = SemanticLocalResearchHandler(
         settings_loader=lambda: calls.append("settings"),  # type: ignore[arg-type]
         openai_client_factory=lambda settings: calls.append("openai"),  # type: ignore[arg-type]
+        embedding_cache_directory_resolver=lambda: (
+            calls.append("cache") or tmp_path / "cache"
+        ),
+        parsed_cache_directory_resolver=lambda: (
+            calls.append("parsed-cache") or tmp_path / "parsed-cache"
+        ),
     )
 
     with pytest.raises(ValueError, match="digest changed"):
@@ -199,6 +216,12 @@ def test_semantic_handler_requires_exact_multiple_source_approval(
     handler = SemanticLocalResearchHandler(
         settings_loader=lambda: calls.append("settings"),  # type: ignore[arg-type]
         openai_client_factory=lambda settings: calls.append("openai"),  # type: ignore[arg-type]
+        embedding_cache_directory_resolver=lambda: (
+            calls.append("cache") or tmp_path / "cache"
+        ),
+        parsed_cache_directory_resolver=lambda: (
+            calls.append("parsed-cache") or tmp_path / "parsed-cache"
+        ),
     )
 
     with pytest.raises(ValueError, match="source sets"):
@@ -214,9 +237,21 @@ def test_semantic_handler_requires_exact_multiple_source_approval(
     assert calls == []
 
 
-def test_deterministic_handler_remains_approval_free(tmp_path: Path) -> None:
+def test_deterministic_handler_remains_approval_free(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_cache_construction(*args: object, **kwargs: object) -> object:
+        raise AssertionError("deterministic mode constructed embedding cache")
+
+    monkeypatch.setattr(
+        "app.research.local_research_handler.FileEmbeddingCache",
+        fail_cache_construction,
+    )
     source = tmp_path / "source.md"
-    source.write_text("Grounded research connects claims to traceable evidence.", encoding="utf-8")
+    source.write_text(
+        "Grounded research connects claims to traceable evidence.", encoding="utf-8"
+    )
     output_dir = tmp_path / "reports"
     handler = LocalResearchHandler(
         id_factory=lambda: "deterministic-approval-free",
@@ -260,8 +295,9 @@ def test_handler_validates_sources_before_loading_providers(
         id_factory=lambda: "handler-invalid-source",
         settings_loader=settings_loader,  # type: ignore[arg-type]
         openai_client_factory=openai_client_factory,  # type: ignore[arg-type]
-        local_worker_settings_loader=(
-            local_worker_settings_loader
+        local_worker_settings_loader=(local_worker_settings_loader),
+        embedding_cache_directory_resolver=lambda: (
+            calls.append("cache") or tmp_path / "cache"
         ),
     )
 
@@ -326,13 +362,11 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
         )
 
     monkeypatch.setattr(
-        "app.research.local_research_handler."
-        "build_local_research_pipeline",
+        "app.research.local_research_handler.build_local_research_pipeline",
         fake_build_local_research_pipeline,
     )
     monkeypatch.setattr(
-        "app.research.local_research_handler."
-        "build_hybrid_bounded_research_workers",
+        "app.research.local_research_handler.build_hybrid_bounded_research_workers",
         fake_build_hybrid_bounded_research_workers,
     )
     paths = ResearchResultPaths(
@@ -353,9 +387,9 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
             openai_model="gpt-5",
         ),  # type: ignore[arg-type]
         openai_client_factory=lambda _settings: fake_client,  # type: ignore[arg-type]
-        local_worker_settings_loader=lambda: worker_settings(
-            provider
-        ),
+        local_worker_settings_loader=lambda: worker_settings(provider),
+        embedding_cache_directory_resolver=lambda: tmp_path / "embedding-cache",
+        parsed_cache_directory_resolver=lambda: tmp_path / "parsed-cache",
     )
 
     status = handler(
@@ -390,10 +424,13 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
         semantic_extractor._shortlister,
         EmbeddingSemanticEvidenceShortlister,
     )
-    assert isinstance(
-        semantic_extractor._shortlister.embedding_provider,
-        OpenAIEmbeddingProvider,
-    )
+    caching_provider = semantic_extractor._shortlister.embedding_provider
+    assert isinstance(caching_provider, CachingEmbeddingProvider)
+    assert isinstance(caching_provider._provider, OpenAIEmbeddingProvider)
+    assert isinstance(caching_provider._cache, FileEmbeddingCache)
+    assert caching_provider._cache.directory == (tmp_path / "embedding-cache").resolve()
+    assert caching_provider.model_name == "text-embedding-3-small"
+    assert caching_provider.dimensions == 1536
     assert isinstance(
         semantic_extractor._reranker,
         SemanticEvidenceReranker,
@@ -402,10 +439,7 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
         semantic_extractor._reranker.evaluator,
         OpenAIEvidenceRelevanceEvaluator,
     )
-    assert (
-        semantic_extractor._reranker.budget
-        == LOCAL_EVIDENCE_RELEVANCE_BUDGET
-    )
+    assert semantic_extractor._reranker.budget == LOCAL_EVIDENCE_RELEVANCE_BUDGET
 
     claim_builder = captured_pipeline["claim_builder"]
     assert isinstance(claim_builder, GenerativePipelineClaimBuilder)
@@ -415,14 +449,8 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
     )
     assert claim_builder._budget == LOCAL_CLAIM_GENERATION_BUDGET
     assert captured_pipeline["semantic_citation_verifier"] is verifier
-    assert (
-        captured_pipeline["claim_relevance_evaluator"]
-        is relevance_evaluator
-    )
-    assert (
-        captured_pipeline["answer_coverage_evaluator"]
-        is coverage_evaluator
-    )
+    assert captured_pipeline["claim_relevance_evaluator"] is relevance_evaluator
+    assert captured_pipeline["answer_coverage_evaluator"] is coverage_evaluator
 
     role_policy = captured_workers["role_policy"]
     for role in (
@@ -439,14 +467,9 @@ def test_handler_wires_semantic_analysis_and_bounded_workers(
         role_policy.provider_for(HybridResearchRole.CLAIM_GENERATION)
         is ResearchExecutionProvider.OPENAI
     )
-    assert (
-        captured_workers["claim_relevance_budget"]
-        == LOCAL_CLAIM_RELEVANCE_BUDGET
-    )
+    assert captured_workers["claim_relevance_budget"] == LOCAL_CLAIM_RELEVANCE_BUDGET
     assert pipeline.calls[0][1] == "handler-001-workspace"
     assert guardrail.calls == [(result, "handler-001")]
-    assert writer.calls == [
-        (result, tmp_path / "reports", "handler-001")
-    ]
+    assert writer.calls == [(result, tmp_path / "reports", "handler-001")]
     assert "AIRA report:" in stdout.getvalue()
     assert "AIRA result:" in stdout.getvalue()

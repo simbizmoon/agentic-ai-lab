@@ -13,10 +13,15 @@ from openai import OpenAI
 
 from app.budget import ExecutionBudget
 from app.config import Settings, load_settings
+from app.rag.caching_embedding_provider import CachingEmbeddingProvider
+from app.rag.embedding_cache_directory import resolve_embedding_cache_directory
+from app.rag.file_embedding_cache import FileEmbeddingCache
 from app.rag.openai_embedding_provider import OpenAIEmbeddingProvider
+from app.research.caching_local_document_parser import CachingLocalDocumentParser
 from app.research.embedding_semantic_evidence_shortlister import (
     EmbeddingSemanticEvidenceShortlister,
 )
+from app.research.file_parsed_document_cache import FileParsedDocumentCache
 from app.research.generative_pipeline_claim_builder import (
     GenerativePipelineClaimBuilder,
 )
@@ -43,6 +48,7 @@ from app.research.local_document_adapter import (
     LocalDocumentAdapter,
     LocalDocumentBundle,
 )
+from app.research.local_document_parser import LocalDocumentParser
 from app.research.local_external_send_approval import (
     INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
     LocalExternalSendApproval,
@@ -59,6 +65,10 @@ from app.research.openai_evidence_relevance_evaluator import (
     OpenAIEvidenceRelevanceEvaluator,
 )
 from app.research.paragraph_evidence_extractor import ParagraphEvidenceExtractor
+from app.research.parsed_document_cache import ParsedDocumentCache
+from app.research.parsed_document_cache_directory import (
+    resolve_parsed_document_cache_directory,
+)
 from app.research.pipeline_analysis_adapters import (
     PipelineEvidenceExtractorAdapter,
 )
@@ -113,6 +123,10 @@ class IntegratedResearchHandler:
         settings_loader: Callable[[], Settings] | None = None,
         openai_client_factory: Callable[[Settings], OpenAI] | None = None,
         local_worker_settings_loader: Callable[[], LocalWorkerSettings] | None = None,
+        embedding_cache_directory_resolver: Callable[[], Path] | None = None,
+        parsed_cache_directory_resolver: Callable[[], Path] | None = None,
+        local_document_parser_factory: Callable[[], LocalDocumentParser] | None = None,
+        parsed_cache_factory: Callable[[Path], ParsedDocumentCache] | None = None,
         document_adapter: LocalDocumentAdapter | None = None,
         writer: ResearchResultWriter | None = None,
         guardrail: ResearchResultGuardrail | None = None,
@@ -125,7 +139,19 @@ class IntegratedResearchHandler:
         self._local_worker_settings_loader = (
             local_worker_settings_loader or load_local_worker_settings
         )
-        self._document_adapter = document_adapter or LocalDocumentAdapter()
+        self._embedding_cache_directory_resolver = (
+            embedding_cache_directory_resolver or resolve_embedding_cache_directory
+        )
+        self._parsed_cache_directory_resolver = (
+            parsed_cache_directory_resolver or resolve_parsed_document_cache_directory
+        )
+        self._local_document_parser_factory = (
+            local_document_parser_factory or LocalDocumentParser
+        )
+        self._parsed_cache_factory = parsed_cache_factory or (
+            lambda directory: FileParsedDocumentCache(directory=directory)
+        )
+        self._document_adapter = document_adapter
         self._writer = writer or ResearchResultWriter()
         self._guardrail = guardrail or ResearchResultGuardrail()
         self._stdout = stdout or sys.stdout
@@ -153,7 +179,6 @@ class IntegratedResearchHandler:
             sources,
             purpose=INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
         )
-        bundle = self._document_adapter.load_validated(sources)
         access_gate = LocalDocumentAccessGate(access_policy)
         fresh_sources = tuple(
             access_gate.validate(source.resolved_path) for source in sources
@@ -161,6 +186,15 @@ class IntegratedResearchHandler:
         approval_gate.validate(
             approval,
             fresh_sources,
+            purpose=INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
+        )
+        bundle = self._load_documents(fresh_sources)
+        provider_sources = tuple(
+            access_gate.validate(source.resolved_path) for source in fresh_sources
+        )
+        approval_gate.validate(
+            approval,
+            provider_sources,
             purpose=INTEGRATED_WEB_LOCAL_RESEARCH_PURPOSE,
         )
 
@@ -189,6 +223,21 @@ class IntegratedResearchHandler:
         print(f"AIRA integrated result: {paths.result_path}", file=self._stdout)
         return 0
 
+    def _load_documents(
+        self,
+        sources: tuple[LocalDocumentAccessResult, ...],
+    ) -> LocalDocumentBundle:
+        """Load Local records through persistent parsing after fresh access checks."""
+
+        if self._document_adapter is not None:
+            return self._document_adapter.load_validated(sources)
+        cache = self._parsed_cache_factory(self._parsed_cache_directory_resolver())
+        parser = CachingLocalDocumentParser(
+            parser=self._local_document_parser_factory(),
+            cache=cache,
+        )
+        return LocalDocumentAdapter(parser=parser).load_validated(sources)
+
     def _build_pipeline(
         self,
         *,
@@ -198,6 +247,9 @@ class IntegratedResearchHandler:
         objective: str,
         maximum_bytes: int,
     ) -> SingleResearchAgentPipeline:
+        embedding_cache = FileEmbeddingCache(
+            directory=self._embedding_cache_directory_resolver()
+        )
         search_config = self._config_loader()
         settings = self._settings_loader()
         openai_client = self._openai_client_factory(settings)
@@ -218,7 +270,10 @@ class IntegratedResearchHandler:
                 objective=objective,
                 paragraph_extractor=ParagraphEvidenceExtractor(),
                 shortlister=EmbeddingSemanticEvidenceShortlister(
-                    embedding_provider=OpenAIEmbeddingProvider(client=openai_client)
+                    embedding_provider=CachingEmbeddingProvider(
+                        provider=OpenAIEmbeddingProvider(client=openai_client),
+                        cache=embedding_cache,
+                    )
                 ),
                 reranker=SemanticEvidenceReranker(
                     evaluator=OpenAIEvidenceRelevanceEvaluator(

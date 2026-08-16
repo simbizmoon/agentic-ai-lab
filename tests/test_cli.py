@@ -17,6 +17,11 @@ from tests.test_local_hwpx_text_extractor import write_hwpx
 from tests.test_local_pdf_text_extractor import write_pdf
 
 
+@pytest.fixture(autouse=True)
+def isolate_runtime_caches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg-cache"))
+
+
 def test_parser_accepts_research_command(
     tmp_path: Path,
 ) -> None:
