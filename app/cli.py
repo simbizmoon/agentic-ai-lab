@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import Counter
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
+from app.persistent_cache_maintenance import (
+    PersistentCacheMaintenanceService,
+    PersistentCachePruneError,
+)
+from app.rag.embedding_cache_directory import resolve_embedding_cache_directory
 from app.research.integrated_research_handler import IntegratedResearchHandler
 from app.research.live_research_handler import (
     LiveResearchHandler,
@@ -25,6 +31,15 @@ from app.research.local_research_handler import (
     DEFAULT_MAXIMUM_LOCAL_SOURCE_BYTES,
     LocalResearchHandler,
     SemanticLocalResearchHandler,
+)
+from app.research.parsed_document_cache_directory import (
+    resolve_parsed_document_cache_directory,
+)
+from app.schemas.persistent_cache_status import (
+    CacheKind,
+    CachePruneOutcome,
+    CachePrunePlan,
+    CacheStatus,
 )
 
 ResearchHandler = Callable[
@@ -239,6 +254,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory in which live research results are stored.",
     )
 
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Inspect or prune persistent AIRA caches.",
+        description="Inspect or prune persistent embedding and parsed caches.",
+    )
+    cache_subparsers = cache_parser.add_subparsers(
+        dest="cache_command",
+        required=True,
+    )
+    cache_subparsers.add_parser(
+        "status",
+        help="Display read-only persistent cache inventory.",
+    )
+    prune_parser = cache_subparsers.add_parser(
+        "prune",
+        help="Plan or execute oldest-successful-write-first cache pruning.",
+    )
+    prune_kind = prune_parser.add_mutually_exclusive_group(required=True)
+    prune_kind.add_argument(
+        "--embedding",
+        action="store_true",
+        help="Prune valid final embedding cache entries.",
+    )
+    prune_kind.add_argument(
+        "--parsed",
+        action="store_true",
+        help="Prune valid final parsed-document cache entries.",
+    )
+    prune_parser.add_argument(
+        "--target-bytes",
+        required=True,
+        type=int,
+        metavar="BYTES",
+        help="Target total bytes for valid final cache entries.",
+    )
+    prune_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Display the deterministic plan without deleting entries.",
+    )
+
     return parser
 
 
@@ -353,6 +409,125 @@ def validate_positive_integer(
         raise ValueError(f"{name} must be greater than zero")
 
     return value
+
+
+def validate_nonnegative_integer(value: int, *, name: str) -> int:
+    """Require a nonnegative CLI integer without boolean coercion."""
+
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"{name} must be an integer")
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+    return value
+
+
+def run_cache_status_command(
+    *, maintenance_service: PersistentCacheMaintenanceService
+) -> int:
+    """Display read-only inventory for both persistent caches."""
+
+    for cache_kind, directory in (
+        (CacheKind.EMBEDDING, resolve_embedding_cache_directory()),
+        (CacheKind.PARSED, resolve_parsed_document_cache_directory()),
+    ):
+        status = maintenance_service.status(
+            cache_kind=cache_kind,
+            directory=directory,
+        )
+        _print_cache_status(status)
+    return 0
+
+
+def run_cache_prune_command(
+    namespace: argparse.Namespace,
+    *,
+    maintenance_service: PersistentCacheMaintenanceService,
+) -> int:
+    """Plan or execute pruning through the maintenance domain service."""
+
+    target_bytes = validate_nonnegative_integer(
+        namespace.target_bytes,
+        name="target_bytes",
+    )
+    cache_kind = CacheKind.EMBEDDING if namespace.embedding else CacheKind.PARSED
+    directory = (
+        resolve_embedding_cache_directory()
+        if cache_kind is CacheKind.EMBEDDING
+        else resolve_parsed_document_cache_directory()
+    )
+    status = maintenance_service.status(cache_kind=cache_kind, directory=directory)
+    plan = maintenance_service.plan_prune(
+        status=status,
+        target_entry_bytes_total=target_bytes,
+    )
+    if namespace.dry_run:
+        print(f"AIRA cache prune dry-run plan: {cache_kind.value}")
+        _print_prune_plan(plan)
+        print("files_deleted=0")
+        return 0
+
+    try:
+        result = maintenance_service.execute_prune(plan=plan)
+    except PersistentCachePruneError as error:
+        state = "partial-failure" if error.deleted_entry_count else "failure"
+        print(f"AIRA cache prune {state}: {cache_kind.value}", file=sys.stderr)
+        print(
+            f"deleted_entries={error.deleted_entry_count}",
+            file=sys.stderr,
+        )
+        print(f"deleted_bytes={error.deleted_entry_bytes}", file=sys.stderr)
+        raise
+
+    post_status = maintenance_service.status(
+        cache_kind=cache_kind,
+        directory=directory,
+    )
+    print(f"AIRA cache prune result: {cache_kind.value}")
+    print(f"planned_entries={result.planned_entry_count}")
+    print(f"planned_bytes={result.planned_entry_bytes}")
+    print(f"deleted_entries={result.deleted_entry_count}")
+    print(f"deleted_bytes={result.deleted_entry_bytes}")
+    print(f"skipped_entries={result.skipped_entry_count}")
+    outcomes = Counter(item.outcome for item in result.items)
+    for outcome in CachePruneOutcome:
+        print(f"outcome_{outcome.value}={outcomes[outcome]}")
+    print(f"post_valid_entries={post_status.valid_entry_count}")
+    print(f"post_valid_bytes={post_status.valid_entry_bytes}")
+    return 0
+
+
+def _print_cache_status(status: CacheStatus) -> None:
+    print(f"AIRA cache status: {status.cache_kind.value}")
+    print(f"directory={status.directory}")
+    print(f"directory_exists={str(status.directory_exists).lower()}")
+    print(f"valid_entries={status.valid_entry_count}")
+    print(f"valid_bytes={status.valid_entry_bytes}")
+    print(f"corrupt_entries={status.corrupt_entry_count}")
+    print(f"corrupt_bytes={status.corrupt_entry_bytes}")
+    print(f"lock_files={status.lock_file_count}")
+    print(f"lock_bytes={status.lock_file_bytes}")
+    print(f"temporary_files={status.temporary_file_count}")
+    print(f"temporary_bytes={status.temporary_file_bytes}")
+    print(f"unknown_targets={status.unknown_target_count}")
+    print(f"unknown_bytes={status.unknown_target_bytes}")
+    oldest = status.oldest_valid_entry_mtime_ns
+    newest = status.newest_valid_entry_mtime_ns
+    oldest_value = str(oldest) if oldest is not None else "none"
+    newest_value = str(newest) if newest is not None else "none"
+    print(f"oldest_valid_entry_mtime_ns={oldest_value}")
+    print(f"newest_valid_entry_mtime_ns={newest_value}")
+
+
+def _print_prune_plan(plan: CachePrunePlan) -> None:
+    print(f"observed_valid_entries={plan.observed_valid_entry_count}")
+    print(f"observed_valid_bytes={plan.observed_valid_entry_bytes}")
+    print(f"target_bytes={plan.target_entry_bytes_total}")
+    print(f"selected_entries={plan.selected_entry_count}")
+    print(f"selected_bytes={plan.selected_entry_bytes}")
+    print(
+        f"expected_remaining_valid_entries={plan.expected_remaining_valid_entry_count}"
+    )
+    print(f"expected_remaining_valid_bytes={plan.expected_remaining_valid_entry_bytes}")
 
 
 def run_research_command(
@@ -477,6 +652,7 @@ def main(
     semantic_research_handler: ResearchHandler | None = None,
     live_research_handler: (LiveResearchHandlerType | None) = None,
     integrated_research_handler: (IntegratedResearchHandlerType | None) = None,
+    cache_maintenance_service: PersistentCacheMaintenanceService | None = None,
 ) -> int:
     """Run the AIRA command-line interface."""
 
@@ -507,6 +683,20 @@ def main(
                 namespace,
                 live_research_handler=(live_research_handler or LiveResearchHandler()),
             )
+
+        if namespace.command == "cache":
+            maintenance_service = (
+                cache_maintenance_service or PersistentCacheMaintenanceService()
+            )
+            if namespace.cache_command == "status":
+                return run_cache_status_command(
+                    maintenance_service=maintenance_service,
+                )
+            if namespace.cache_command == "prune":
+                return run_cache_prune_command(
+                    namespace,
+                    maintenance_service=maintenance_service,
+                )
 
         parser.error(f"unsupported command: {namespace.command}")
     except (RuntimeError, ValueError) as error:

@@ -14,6 +14,7 @@ from typing import Any, Final
 
 from pydantic import ValidationError
 
+from app.report_integrity import is_valid_sha256_digest
 from app.research.parsed_document_cache import (
     PARSED_DOCUMENT_CACHE_SCHEMA_VERSION,
     ParsedDocumentCache,
@@ -100,6 +101,24 @@ class FileParsedDocumentCache(ParsedDocumentCache):
         with self._entry_lock(identity.cache_key, exclusive=True):
             yield _FileParsedDocumentCacheEntryAccess(self, identity)
 
+    @classmethod
+    @contextmanager
+    def exclusive_maintenance_entry_lock(
+        cls, *, directory: Path, cache_key: str
+    ) -> Iterator[None]:
+        """Reuse one existing per-key lock for external entry maintenance."""
+
+        if not isinstance(directory, Path):
+            raise TypeError("directory must be a Path")
+        if not isinstance(cache_key, str) or not is_valid_sha256_digest(cache_key):
+            raise ValueError("cache_key must be a lowercase SHA-256 digest")
+        lock_fd = cls._open_lock_for_directory(directory, cache_key)
+        try:
+            cls._lock(lock_fd, exclusive=True)
+            yield
+        finally:
+            cls._close_lock(lock_fd)
+
     def _get_unlocked(
         self, identity: ParsedDocumentCacheIdentity
     ) -> ParsedLocalDocument | None:
@@ -176,8 +195,12 @@ class FileParsedDocumentCache(ParsedDocumentCache):
             self._close_lock(lock_fd)
 
     def _open_lock(self, cache_key: str) -> int:
-        lock_path = self._lock_path(cache_key)
-        self._validate_optional_regular_target(
+        return self._open_lock_for_directory(self._directory, cache_key)
+
+    @classmethod
+    def _open_lock_for_directory(cls, directory: Path, cache_key: str) -> int:
+        lock_path = directory / f".{cache_key}.lock"
+        cls._validate_optional_regular_target(
             lock_path,
             unsafe_message="parsed-document cache lock path is unsafe",
         )

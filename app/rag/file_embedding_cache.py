@@ -6,6 +6,9 @@ import fcntl
 import hmac
 import json
 import os
+import stat
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -170,6 +173,20 @@ class FileEmbeddingCache(EmbeddingCache):
 
         return self._directory
 
+    @classmethod
+    @contextmanager
+    def exclusive_maintenance_lock(cls, directory: Path) -> Iterator[None]:
+        """Reuse the cache global lock for external entry maintenance."""
+
+        if not isinstance(directory, Path):
+            raise TypeError("directory must be a Path")
+        lock_fd = cls._open_lock_for_directory(directory)
+        try:
+            cls._lock(lock_fd, exclusive=True)
+            yield
+        finally:
+            cls._close_lock(lock_fd)
+
     def _identity(
         self,
         *,
@@ -198,17 +215,32 @@ class FileEmbeddingCache(EmbeddingCache):
         return self._directory / f"{cache_key}.json"
 
     def _open_lock(self) -> int:
-        lock_path = self._directory / _LOCK_FILENAME
+        return self._open_lock_for_directory(self._directory)
+
+    @staticmethod
+    def _open_lock_for_directory(directory: Path) -> int:
+        lock_path = directory / _LOCK_FILENAME
         if lock_path.is_symlink() or lock_path.is_dir():
             raise EmbeddingCacheError("embedding cache lock path is unsafe")
         try:
+            flags = os.O_RDWR | os.O_CREAT
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
             fd = os.open(
                 lock_path,
-                os.O_RDWR | os.O_CREAT,
+                flags,
                 EMBEDDING_CACHE_FILE_MODE,
             )
-            os.chmod(lock_path, EMBEDDING_CACHE_FILE_MODE)
+            try:
+                os.fchmod(fd, EMBEDDING_CACHE_FILE_MODE)
+                if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    raise EmbeddingCacheError("embedding cache lock path is unsafe")
+            except BaseException:
+                os.close(fd)
+                raise
             return fd
+        except EmbeddingCacheError:
+            raise
         except OSError as error:
             raise EmbeddingCacheError(
                 "embedding cache lock could not be opened"
