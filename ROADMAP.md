@@ -3168,12 +3168,51 @@ changed Python format      = PASS
 git diff --check           = PASS
 ```
 
-## 34.8 다음 작업
+## 34.8 Step 3B1 — PatentSearchQueryPlan contract 완료
 
 ```text
-Step 3B — Patent query/planning and technical-relevance integration boundary
+PatentResearchRequest
++ 1..2 caller-supplied CQL candidates
+→ PatentSearchQueryPlanner
+→ PRIMARY
+→ optional ALTERNATE
+→ PatentSearchQueryPlan
 ```
 
-다음 단계에서는 자연어 request를 structured patent search와 어떻게 연결할지 별도 contract로 설계한다. Step 3A Handler에 암묵적 CQL 추론을 넣지 않는다.
+Step 3B1은 `FINAL PASS`다.
+
+확정된 경계:
+
+- 기존 일반 `ResearchSearchQueryPlanner`/`ResearchSearchQuerySet`에 Patent CQL을 넣지 않는다.
+- Patent query planning은 별도 domain contract를 사용한다.
+- CQL candidate는 1~2개로 제한한다.
+- 첫 candidate는 `PRIMARY`, 두 번째가 있으면 `ALTERNATE`다.
+- planner는 caller-supplied CQL을 rewrite하지 않는다.
+- duplicate는 outer whitespace만 제거한 exact match만 차단한다.
+- case/semantic/CQL grammar canonicalization은 하지 않는다.
+- blank, control character, 512자를 넘는 CQL은 거부한다.
+- 512자는 EPO 공식 한도가 아니라 AIRA first-slice local safety bound다.
+- bare `str`을 candidate sequence로 허용하지 않는다.
+- `ALTERNATE`는 아직 자동 두 번째 provider call을 뜻하지 않는다.
+- execution budget/fallback 정책은 후속 integration에서 결정한다.
+
+검증:
+
+```text
+focused final              = 45 passed
+Patent affected regression = 154 passed
+full repository regression = 5195 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+```
+
+## 34.9 다음 작업
+
+```text
+Step 3B2 — natural-language patent request → bounded technical search concepts
+```
+
+3B2에서도 최종 CQL 실행은 Step 3B1의 validated plan과 Step 3A Handler 경계를 통과하도록 유지한다.
 
 첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.

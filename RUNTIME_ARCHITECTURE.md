@@ -321,9 +321,23 @@ Handler는 composition/orchestration layer이며 provider transport/parser를 �
 
 Selected candidate failure는 현재 fail-fast다. Error taxonomy가 missing abstract와 MIME/XML/identity/provider failure를 충분히 구분하지 않으므로 자동 skip은 허용하지 않는다.
 
-### 12.4 아직 runtime에 미연결
+### 12.4 Patent Query Planning Development Boundary
 
-- natural-language request → CQL planning
+현재 runtime 실행 전 단계의 bounded query-plan contract는 구현되어 있다.
+
+```text
+PatentResearchRequest
++ 1..2 explicit CQL candidates
+→ PatentSearchQueryPlanner
+→ PatentSearchQueryPlan
+```
+
+이 contract는 일반 `ResearchSearchQuerySet`과 분리되어 있으며 CQL을 rewrite하지 않는다. PRIMARY/ALTERNATE는 planning role이며 아직 runtime execution semantics가 아니다.
+
+### 12.5 아직 runtime에 미연결
+
+- natural-language request → technical search concepts / CQL generation
+- PatentSearchQueryPlan → handler execution-budget/fallback policy
 - `PatentResearchRequest.maximum_bytes` → `EpoOpsConfig.maximum_response_bytes`
 - technical-relevance evidence/synthesis
 - result/report writer integration
@@ -332,7 +346,7 @@ Selected candidate failure는 현재 fail-fast다. Error taxonomy가 missing abs
 
 따라서 현재 `aira research-live` 및 `aira research-integrated` 실행 경로는 변경되지 않는다.
 
-### 12.5 설계 원칙
+### 12.6 설계 원칙
 
 - orchestration과 planning을 분리한다.
 - provider-specific parsing과 generic patent identity를 분리한다.

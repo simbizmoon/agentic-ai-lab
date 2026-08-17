@@ -2158,3 +2158,28 @@ exact request binding, provider record-count bound, selected candidate와 verifi
 - Ruff / format / diff-check: PASS
 
 다음 학습 목표는 자연어 patent request를 structured patent query와 연결하는 planning/integration boundary다.
+
+## 2026-08-17 — Patent Query Planning: provider query language를 일반 검색어와 분리한다
+
+### 1. 같은 문자열 타입이어도 같은 abstraction은 아니다
+일반 Web query의 `query_text`와 EPO CQL은 둘 다 문자열이지만 의미와 validation contract가 다르다.
+
+### 2. 생성 전에 안전한 출력 계약을 먼저 만든다
+자연어→CQL generation보다 먼저 `PatentSearchQueryPlan`을 만들었다.
+
+### 3. 모르는 semantics를 과도하게 normalize하지 않는다
+outer whitespace exact duplicate만 차단하고 case/semantic normalization은 하지 않았다.
+
+### 4. type hint만으로 runtime contract가 보장되지는 않는다
+`Sequence[str]`에 Python `str`도 포함되므로 bare string을 별도로 거부했다.
+
+### 5. 테스트 fixture도 검증 대상이다
+초기 control-character 테스트는 escaping 실수로 실제 제어문자가 아니라 literal backslash sequence를 만들었다. 실패 원인을 validator와 fixture로 분리하여 수정했다.
+
+### 검증
+- focused final: `45 passed`
+- Patent affected regression: `154 passed`
+- full repository: `5195 passed`
+- Ruff / format / diff-check: PASS
+
+다음 학습 목표는 natural-language patent request에서 bounded technical search concepts를 생성하되, 최종 실행 전에 Step 3B1 plan contract를 통과시키는 것이다.

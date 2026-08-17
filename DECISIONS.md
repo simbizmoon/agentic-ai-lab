@@ -3666,3 +3666,33 @@ Exact request/result binding을 강제하고, 반환 record 수는 `maximum_sear
 현재 OPS abstract error taxonomy는 missing abstract와 MIME/XML/identity/provider-contract failure를 안전하게 분리하지 못하므로 selected candidate failure는 skip하지 않고 fail-fast한다.
 
 `PatentResearchRequest.maximum_bytes`는 Handler가 transport를 만들지 않으므로 Step 3A에서 직접 소비하지 않는다. 후속 EPO runtime/factory composition에서 `EpoOpsConfig.maximum_response_bytes`와의 binding을 명시적으로 설계한다.
+
+## D-064 — Patent CQL은 일반 ResearchSearchQuery가 아니라 별도 bounded PatentSearchQueryPlan contract로 관리한다
+
+- 상태: 확정
+- 날짜: 2026-08-17
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3B1
+
+### 결정
+
+일반 Research query model은 `ResearchRequest`, `ResearchTaskGraph`, source preference, focused/official/primary-source query purpose와 결합되어 있다. EPO CQL은 provider-specific structured query language이므로 동일 `query_text` abstraction에 넣지 않는다.
+
+```text
+PatentResearchRequest
++ 1..2 explicit CQL candidates
+→ PatentSearchQueryPlanner
+→ PatentSearchQueryPlan
+```
+
+- query 1은 `PRIMARY`
+- query 2가 있으면 `ALTERNATE`
+- caller CQL은 rewrite하지 않는다.
+- outer-trim exact duplicate만 거부한다.
+- case/semantic/full-CQL canonicalization은 하지 않는다.
+- blank/control-character/512자 초과를 거부한다.
+- 512자는 EPO 공식 protocol limit가 아니라 AIRA local first-slice bound다.
+- bare string은 candidate sequence로 허용하지 않는다.
+
+`ALTERNATE`의 존재는 자동 실행을 의미하지 않는다. query별/plan별 search-result budget, fallback, sequential/parallel policy는 runtime integration에서 별도 결정한다.
+
+자연어→technical concept→CQL 생성은 Step 3B1 밖의 후속 planning capability다.

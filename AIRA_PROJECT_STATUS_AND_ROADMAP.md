@@ -1828,9 +1828,11 @@ workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
 ```text
 Stage 4 Local Document Expansion baseline → COMPLETE
 Stage 5 Internet Research Expansion        → IN PROGRESS
-Patent Research Vertical Slice             → Step 3A COMPLETE
+Patent Research Vertical Slice             → Step 3B1 COMPLETE
 EPO provider foundation                    → COMPLETE
 PatentResearchHandler                      → IMPLEMENTED / FINAL PASS
+PatentSearchQueryPlan                      → IMPLEMENTED / FINAL PASS
+Natural-language patent query generation   → NOT YET IMPLEMENTED
 Patent CLI/runtime                         → NOT YET IMPLEMENTED
 ```
 
@@ -1862,4 +1864,8 @@ Step 3A Handler는 explicit CQL을 받아 exact request-bound EPO search result�
 
 현재 검증은 focused `63 passed`, Patent/EPO affected `159 passed`, full repository `5170 passed`, Ruff/format/diff-check PASS이며 기존 real EPO smoke도 PASS다.
 
-다음 즉시 설계 과제는 `Step 3B — Patent query/planning and technical-relevance integration boundary`이다.
+Step 3B1은 일반 Research query model과 EPO CQL을 분리하고, 1~2개의 explicit CQL candidate를 PRIMARY/ALTERNATE로 보존하는 bounded `PatentSearchQueryPlan` contract를 추가했다.
+
+현재 Step 3B1 검증은 focused `45 passed`, Patent affected `154 passed`, full repository `5195 passed`, Ruff/format/diff-check PASS다.
+
+다음 즉시 설계 과제는 `Step 3B2 — natural-language patent request → bounded technical search concepts`이다.

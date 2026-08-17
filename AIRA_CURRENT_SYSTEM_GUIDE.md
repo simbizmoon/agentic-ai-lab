@@ -1447,4 +1447,27 @@ full repository regression = 5170 passed
 Ruff / format / diff-check = PASS
 ```
 
-다음은 `Step 3B — Patent query/planning and technical-relevance integration boundary`다.
+## 33.8 PatentSearchQueryPlan 개발 상태
+
+```text
+explicit CQL candidate(s)
+→ PatentSearchQueryPlanner
+→ PRIMARY
+→ optional ALTERNATE
+→ PatentSearchQueryPlan
+```
+
+현재 contract는 1~2개 candidate, exact duplicate rejection, control-character rejection, local 512-character bound 및 bare-string rejection을 제공한다. CQL은 rewrite하지 않으며 case/semantic/full grammar canonicalization도 하지 않는다.
+
+`ALTERNATE`는 아직 자동 provider call을 의미하지 않는다. 자연어→technical concept/CQL generation과 query execution budget은 후속 단계다.
+
+현재 Step 3B1 검증:
+
+```text
+focused final              = 45 passed
+Patent affected regression = 154 passed
+full repository regression = 5195 passed
+Ruff / format / diff-check = PASS
+```
+
+다음은 `Step 3B2 — natural-language patent request → bounded technical search concepts`다.
