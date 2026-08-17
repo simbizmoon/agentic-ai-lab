@@ -1828,8 +1828,10 @@ workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
 ```text
 Stage 4 Local Document Expansion baseline → COMPLETE
 Stage 5 Internet Research Expansion        → IN PROGRESS
-Patent Research Vertical Slice             → EPO provider foundation COMPLETE
-PatentResearchHandler                      → NOT YET IMPLEMENTED
+Patent Research Vertical Slice             → Step 3A COMPLETE
+EPO provider foundation                    → COMPLETE
+PatentResearchHandler                      → IMPLEMENTED / FINAL PASS
+Patent CLI/runtime                         → NOT YET IMPLEMENTED
 ```
 
 Patent/EPO 단계:
@@ -1856,6 +1858,8 @@ WIPO HTML = no first-slice parser
 
 첫 slice의 법적 경계는 bounded prior-art technical relevance다. Novelty/invalidity/obviousness/infringement/FTO/legal-status definitive conclusion은 아직 구현 범위가 아니다.
 
-현재 검증은 Patent affected regression `150 passed`, Ruff/format/diff-check PASS, real EPO smoke PASS다. 마지막 full-repository accepted baseline은 `5028 passed`이며 새 full regression은 checkpoint commit 전에 실행한다.
+Step 3A Handler는 explicit CQL을 받아 exact request-bound EPO search result를 검증하고 `maximum_search_results`/`maximum_sources` bound 안에서 selected candidate를 동일 identity/order의 VERIFIED EPO record로 만든다. 자연어→CQL planning, technical-relevance synthesis, partial recovery, CLI/runtime은 아직 포함하지 않는다.
 
-다음 즉시 구현 과제는 `Step 3A — PatentResearchHandler`이다.
+현재 검증은 focused `63 passed`, Patent/EPO affected `159 passed`, full repository `5170 passed`, Ruff/format/diff-check PASS이며 기존 real EPO smoke도 PASS다.
+
+다음 즉시 설계 과제는 `Step 3B — Patent query/planning and technical-relevance integration boundary`이다.

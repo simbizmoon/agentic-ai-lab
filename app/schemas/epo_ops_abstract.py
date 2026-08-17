@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.schemas.patent_source_metadata import PatentSourceMetadata
+from app.schemas.patent_source_metadata import (
+    PatentMetadataVerificationState,
+    PatentSourceFamily,
+    PatentSourceMetadata,
+)
 
 
 class EpoOpsAbstractRecord(BaseModel):
@@ -44,6 +48,13 @@ class EpoOpsVerifiedPatentRecord(BaseModel):
 
     @model_validator(mode="after")
     def validate_record(self) -> EpoOpsVerifiedPatentRecord:
+        if self.metadata.source_family is not PatentSourceFamily.EPO_OPS:
+            raise ValueError("verified OPS record must use the EPO OPS source family")
+        if (
+            self.metadata.metadata_verification_state
+            is not PatentMetadataVerificationState.VERIFIED
+        ):
+            raise ValueError("verified OPS record must use VERIFIED metadata")
         if not self.abstract_text.strip():
             raise ValueError("abstract_text must not be blank")
         if self.abstract_language is not None and not self.abstract_language.strip():

@@ -786,7 +786,7 @@ Rewrite가 아니라 Integration-first
 
 - [~] 진행 중
 - Patent Research Vertical Slice의 EPO OPS structured provider foundation은 2026-08-17 bounded live smoke까지 완료했다.
-- Stage 5 전체 완료를 의미하지 않는다. PatentResearchHandler, 학술자료, 다중 patent provider, claims/legal-status workflow는 후속 범위다.
+- Stage 5 전체 완료를 의미하지 않는다. Patent query/planning, technical-relevance synthesis/report integration, Patent CLI/runtime, 학술자료, 다중 patent provider, claims/legal-status workflow는 후속 범위다.
 
 ## Work Items
 
@@ -3126,12 +3126,54 @@ Ruff / format / diff-check  = PASS
 EPO bounded live smoke      = PASS
 ```
 
-마지막 accepted full-repository baseline은 Stage 4의 `5028 passed`이다. Patent/EPO 변경 전체를 포함한 full regression은 checkpoint commit 전에 다시 실행한다.
+현재 Step 3A accepted 검증 기준선은 Patent/EPO affected regression `159 passed`, full repository `5170 passed`, Ruff/format/diff-check PASS 및 기존 bounded EPO live smoke PASS다.
 
-## 34.7 다음 작업
+## 34.7 Step 3A — PatentResearchHandler / orchestration 완료
 
 ```text
-Step 3A — PatentResearchHandler / orchestration
+PatentResearchRequest
++ explicit caller-supplied CQL
+→ exact EpoOpsSearchRequest
+→ exact request-bound EPO bibliographic result
+→ records <= maximum_search_results
+→ first maximum_sources candidates
+→ abstract retrieval
+→ exact VERIFIED EPO mapping
+→ same selected identity/order
+→ PatentResearchCollectionResult
 ```
 
-첫 product scenario는 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 아직 범위 밖이다.
+Step 3A는 `FINAL PASS`다.
+
+확정된 경계:
+
+- `PatentResearchHandler`는 orchestration-only다.
+- 자연어 question/objective를 CQL로 자동 변환하지 않는다.
+- 검색 결과는 exact `EpoOpsSearchRequest`와 binding되어야 한다.
+- provider result가 `maximum_search_results`를 초과하면 실패한다.
+- successful fail-fast collection은 선택된 후보를 빠짐없이 동일 순서로 VERIFIED해야 한다.
+- selected candidate의 abstract/identity/provider-contract 오류는 현재 skip하지 않고 fail-fast한다.
+- `EpoOpsVerifiedPatentRecord`는 EPO OPS + VERIFIED metadata를 schema에서 강제한다.
+- `maximum_bytes`의 EPO transport composition은 후속 runtime/factory 단계에서 연결한다.
+- technical-relevance synthesis, legal conclusion, CLI/runtime command는 아직 포함되지 않는다.
+
+검증:
+
+```text
+focused final              = 63 passed
+Patent/EPO affected        = 159 passed
+full repository regression = 5170 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+```
+
+## 34.8 다음 작업
+
+```text
+Step 3B — Patent query/planning and technical-relevance integration boundary
+```
+
+다음 단계에서는 자연어 request를 structured patent search와 어떻게 연결할지 별도 contract로 설계한다. Step 3A Handler에 암묵적 CQL 추론을 넣지 않는다.
+
+첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.

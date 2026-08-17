@@ -284,3 +284,59 @@ Phase 11 live smoke에서 default source read concurrency 2로 두 개의 선택
 - small local model은 role-specific eval을 통과한 bounded 역할에만 사용한다.
 - parallelism은 dependency와 shared state가 안전한 경계에서만 사용한다.
 - benchmark 수치는 해당 fixture/workload 범위 밖으로 무리하게 일반화하지 않는다.
+
+## 12. 2026-08-17 Patent Development Runtime Boundary
+
+> 현재 구현된 Patent Research 개발 경계다. 아직 사용자-facing CLI runtime은 아니다.
+
+### 12.1 Structured Patent Provider Foundation
+
+```text
+EpoOpsConfig
+→ EpoOpsClient
+→ EpoOpsBibliographicSearcher
+→ EpoOpsAbstractRetriever
+→ build_verified_epo_patent_record
+```
+
+Provider layer는 OAuth, exact OPS HTTPS boundary, timeout/byte bound, no redirects, CQL `/search/biblio`, `X-OPS-Range`, safe XML, DOCDB identity, abstract identity verification, VERIFIED EPO mapping을 담당한다.
+
+### 12.2 Thin PatentResearchHandler
+
+```text
+PatentResearchRequest
++ explicit CQL
+→ exact EpoOpsSearchRequest
+→ request/result binding check
+→ maximum_search_results bound
+→ first maximum_sources candidates
+→ abstract retrieval
+→ VERIFIED adapter
+→ PatentResearchCollectionResult
+```
+
+Handler는 composition/orchestration layer이며 provider transport/parser를 재구현하지 않고 별도 `SingleResearchAgentPipeline`을 만들지 않는다.
+
+### 12.3 Failure policy
+
+Selected candidate failure는 현재 fail-fast다. Error taxonomy가 missing abstract와 MIME/XML/identity/provider failure를 충분히 구분하지 않으므로 자동 skip은 허용하지 않는다.
+
+### 12.4 아직 runtime에 미연결
+
+- natural-language request → CQL planning
+- `PatentResearchRequest.maximum_bytes` → `EpoOpsConfig.maximum_response_bytes`
+- technical-relevance evidence/synthesis
+- result/report writer integration
+- CLI command
+- multi-provider federation
+
+따라서 현재 `aira research-live` 및 `aira research-integrated` 실행 경로는 변경되지 않는다.
+
+### 12.5 설계 원칙
+
+- orchestration과 planning을 분리한다.
+- provider-specific parsing과 generic patent identity를 분리한다.
+- request bound는 provider response에서도 재검증한다.
+- VERIFIED semantics는 adapter뿐 아니라 schema invariant로도 보호한다.
+- error classification 없이 broad exception skip을 도입하지 않는다.
+- legal conclusion과 technical relevance를 분리한다.

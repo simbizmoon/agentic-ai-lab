@@ -3640,3 +3640,29 @@ AIRA는 `technically relevant`, `potentially relevant prior art`, `cited excerpt
 하지만 현재 slice에서는 novelty destroyed/anticipation, invalidity, obviousness, infringement, FTO 또는 authoritative current legal status를 definitive legal conclusion으로 말하지 않는다.
 
 Generic `ResearchClaim`도 patent legal claim과 동일한 개념으로 사용하지 않는다. Claim-element comparison은 별도 domain model과 검증 절차가 필요한 후속 slice다.
+
+## D-063 — PatentResearchHandler는 explicit CQL 기반의 얇은 fail-fast orchestration layer로 유지한다
+
+- 상태: 확정
+- 날짜: 2026-08-17
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3A
+
+### 결정
+
+```text
+PatentResearchRequest
++ explicit CQL
+→ EpoOpsBibliographicSearcher
+→ bounded bibliographic candidates
+→ EpoOpsAbstractRetriever
+→ build_verified_epo_patent_record
+→ PatentResearchCollectionResult
+```
+
+Handler는 자연어→CQL 생성, OAuth/HTTP/XML 재구현, 새 patent pipeline, technical-relevance synthesis, 법률 결론, 자동 partial recovery를 수행하지 않는다.
+
+Exact request/result binding을 강제하고, 반환 record 수는 `maximum_search_results`를 넘을 수 없으며, successful fail-fast result는 앞쪽 `maximum_sources` candidate를 동일 identity/order로 모두 VERIFIED해야 한다.
+
+현재 OPS abstract error taxonomy는 missing abstract와 MIME/XML/identity/provider-contract failure를 안전하게 분리하지 못하므로 selected candidate failure는 skip하지 않고 fail-fast한다.
+
+`PatentResearchRequest.maximum_bytes`는 Handler가 transport를 만들지 않으므로 Step 3A에서 직접 소비하지 않는다. 후속 EPO runtime/factory composition에서 `EpoOpsConfig.maximum_response_bytes`와의 binding을 명시적으로 설계한다.

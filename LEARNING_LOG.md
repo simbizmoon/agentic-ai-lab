@@ -2133,3 +2133,28 @@ EPO live smoke = PASS
 마지막 full-repository accepted baseline은 `5028 passed`이며, 새 full regression은 checkpoint commit 전에 실행한다.
 
 다음 목표는 `PatentResearchHandler` orchestration이다.
+
+## 2026-08-17 — PatentResearchHandler: orchestration과 planning을 분리한다
+
+### 1. Handler는 manager이지 provider/parser가 아니다
+이미 검증된 searcher → abstract retriever → verified adapter를 얇게 연결했다. OAuth, XML parsing, DOCDB verification을 Handler에서 다시 구현하지 않았다.
+
+### 2. 자연어 → CQL은 orchestration이 아니다
+`PatentResearchRequest`에는 question/objective가 있지만 EPO searcher는 explicit CQL을 요구한다. 이 간극을 Handler 안에서 임의 변환하지 않고 다음 planning contract로 남겼다.
+
+### 3. bounded는 input과 output 모두의 invariant다
+exact request binding, provider record-count bound, selected candidate와 verified result의 identity/order 일치를 모두 검증한다.
+
+### 4. VERIFIED 이름은 schema invariant로 보호한다
+`EpoOpsVerifiedPatentRecord`가 EPO OPS source family와 VERIFIED state를 직접 강제한다.
+
+### 5. partial recovery는 error taxonomy 뒤에 온다
+현재 abstract error가 여러 failure type을 묶고 있으므로 broad `except: continue`를 도입하지 않았다.
+
+### 검증
+- focused final: `63 passed`
+- Patent/EPO affected: `159 passed`
+- full repository: `5170 passed`
+- Ruff / format / diff-check: PASS
+
+다음 학습 목표는 자연어 patent request를 structured patent query와 연결하는 planning/integration boundary다.

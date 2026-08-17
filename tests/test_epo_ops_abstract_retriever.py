@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.research.epo_ops_abstract_retriever import (
     EPO_OPS_ABSTRACT_ACCEPT,
@@ -183,4 +184,40 @@ def test_verified_mapping_rejects_mismatched_publication() -> None:
         build_verified_epo_patent_record(
             bibliographic=bibliographic(publication_number="EPOTHER0001A1"),
             abstract=abstract,
+        )
+
+
+def test_verified_record_schema_rejects_non_epo_or_unverified_metadata() -> None:
+    from app.schemas.epo_ops_abstract import EpoOpsVerifiedPatentRecord
+    from app.schemas.patent_source_metadata import PatentSourceMetadata
+
+    with pytest.raises(ValidationError, match="EPO OPS source family"):
+        EpoOpsVerifiedPatentRecord(
+            metadata=PatentSourceMetadata(
+                source_family=PatentSourceFamily.WIPO_PATENTSCOPE,
+                publication_number="EPTEST0001A1",
+                title="Test optical apparatus",
+                source_url="https://patentscope.wipo.int/search/en/detail.jsf",
+                metadata_verification_state=PatentMetadataVerificationState.VERIFIED,
+                publication_date=date(2024, 1, 31),
+            ),
+            abstract_text="Technical abstract.",
+            abstract_language="en",
+        )
+
+    with pytest.raises(ValidationError, match="VERIFIED metadata"):
+        EpoOpsVerifiedPatentRecord(
+            metadata=PatentSourceMetadata(
+                source_family=PatentSourceFamily.EPO_OPS,
+                publication_number="EPTEST0001A1",
+                title="Test optical apparatus",
+                source_url=(
+                    "https://ops.epo.org/3.2/rest-services/published-data/"
+                    "publication/docdb/EP.TEST0001.A1/abstract"
+                ),
+                metadata_verification_state=PatentMetadataVerificationState.UNVERIFIED,
+                publication_date=date(2024, 1, 31),
+            ),
+            abstract_text="Technical abstract.",
+            abstract_language="en",
         )

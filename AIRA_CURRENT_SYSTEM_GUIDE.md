@@ -1373,7 +1373,7 @@ git diff --check = passed
 
 # 33. 2026-08-17 Patent Research Development Capability — EPO OPS
 
-> 현재 구현된 patent-provider development capability다. 아직 일반 사용자용 PatentResearchHandler/CLI는 없다.
+> 현재 EPO provider foundation과 개발용 `PatentResearchHandler` orchestration까지 구현되어 있다. 아직 일반 사용자용 Patent CLI/runtime command는 없다.
 
 ## 33.1 현재 flow
 
@@ -1418,12 +1418,33 @@ verification_state = verified
 RESULT = PASS
 ```
 
-## 33.5 아직 일반 사용자 기능이 아닌 이유
+## 33.5 PatentResearchHandler 현재 상태
 
-`PatentResearchHandler`, patent-specific orchestration, technical-relevance synthesis, report integration, CLI/runtime command, multi-provider federation이 아직 없다.
+```text
+PatentResearchRequest
++ explicit CQL
+→ exact EpoOpsSearchRequest
+→ bounded EPO candidates
+→ abstract
+→ VERIFIED records
+→ PatentResearchCollectionResult
+```
 
-따라서 현재 `aira research-live`나 `aira research-integrated`가 자동으로 EPO patent research를 수행한다고 해석하면 안 된다.
+현재 Handler는 exact request/result binding, `maximum_search_results` bound, 앞쪽 `maximum_sources` 처리, selected identity/order 보존, fail-fast를 강제한다. `EpoOpsVerifiedPatentRecord`는 EPO OPS + VERIFIED state를 schema에서 강제한다.
 
-## 33.6 다음 구현 경계
+## 33.6 아직 일반 사용자 기능이 아닌 이유
 
-`PatentResearchRequest → EPO search → bounded candidates → abstract → VERIFIED records`를 얇은 `PatentResearchHandler`로 묶고 기존 AIRA pipeline capability를 가능한 한 재사용한다.
+아직 자연어→CQL planning, technical-relevance synthesis/report integration, patent CLI/runtime, partial recovery, multi-provider federation은 없다.
+
+따라서 현재 `aira research-live`나 `aira research-integrated`가 자동으로 EPO patent research를 수행한다고 해석하면 안 된다. `maximum_bytes`의 EPO transport binding도 후속 runtime/factory composition에서 연결한다.
+
+## 33.7 현재 검증과 다음 경계
+
+```text
+focused final              = 63 passed
+Patent/EPO affected        = 159 passed
+full repository regression = 5170 passed
+Ruff / format / diff-check = PASS
+```
+
+다음은 `Step 3B — Patent query/planning and technical-relevance integration boundary`다.
