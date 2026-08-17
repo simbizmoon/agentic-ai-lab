@@ -2183,3 +2183,35 @@ outer whitespace exact duplicate만 차단하고 case/semantic normalization은 
 - Ruff / format / diff-check: PASS
 
 다음 학습 목표는 natural-language patent request에서 bounded technical search concepts를 생성하되, 최종 실행 전에 Step 3B1 plan contract를 통과시키는 것이다.
+
+## 2026-08-17 — Patent Technical Concept Planning: 생성보다 grounding을 먼저 강제한다
+
+### 1. natural-language planning이 반드시 자유 생성일 필요는 없다
+첫 slice에서는 LLM에게 동의어, 번역어, classification, CQL을 만들게 하지 않고 사용자의 request 안에 이미 있는 technical terminology만 구조화해 선택하도록 제한했다.
+
+### 2. structured output 뒤에도 deterministic validation이 필요하다
+`PatentTechnicalConceptSelection`이 schema-valid해도 최종 `PatentTechnicalConceptPlan`은 모든 term이 원래 `question`/`objective`에 실제 존재하는지 로컬에서 다시 확인한다.
+
+### 3. domain contract와 provider adapter를 분리한다
+OpenAI Responses Structured Outputs는 `OpenAIPatentTechnicalConceptGenerator` 안에 머문다. Domain plan은 OpenAI response object를 포함하지 않는다.
+
+### 4. fake API fixture는 실제 helper contract를 먼저 읽어야 한다
+초기 refusal test는 `type="refusal"`을 가정해 두 번 실패했다. 실제 `has_refusal()` 구현은 `content_item.refusal` truthiness를 검사했고, 기존 passing test의 fixture shape를 확인한 뒤 수정했다.
+
+### 5. atomic patch는 실패 전에 모든 anchor를 검증해야 한다
+첫 test-hardening script는 anchor mismatch로 쓰기 전에 중단했고 repo state를 보존했다. 이후 더 단순한 anchor로 다시 실행했다.
+
+### 6. strict schema는 실제 JSON path로도 검증해야 한다
+Python enum 객체를 직접 넣은 fake test만 믿지 않고 `model_validate_json()`으로 `"role": "primary"` / `"alternate"` structured-output JSON parsing을 추가 검증했다.
+
+### 7. live validation은 correctness와 efficiency를 분리해서 본다
+실제 `gpt-5` 1-call smoke는 PASS했지만 작은 concept-selection 작업에 1599 tokens, 20.426초가 사용되었다. 이것은 Step 3B2 correctness blocker는 아니며 후속 optimization 관찰값이다.
+
+### 검증
+- focused final: `66 passed`
+- Patent/OpenAI affected regression: `212 passed`
+- full repository: `5224 passed`
+- Ruff / changed-file format / diff-check: PASS
+- bounded OpenAI Structured Outputs live smoke: PASS
+
+다음 학습 목표는 grounded technical concepts를 bounded EPO CQL candidate로 변환하되, CQL syntax generation과 D-064 `PatentSearchQueryPlan` validation/execution semantics를 분리하는 것이다.

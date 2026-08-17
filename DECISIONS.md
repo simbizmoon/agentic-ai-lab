@@ -3696,3 +3696,40 @@ PatentResearchRequest
 `ALTERNATE`의 존재는 자동 실행을 의미하지 않는다. query별/plan별 search-result budget, fallback, sequential/parallel policy는 runtime integration에서 별도 결정한다.
 
 자연어→technical concept→CQL 생성은 Step 3B1 밖의 후속 planning capability다.
+
+## D-065 — Patent natural-language planning의 첫 단계는 자유로운 query expansion이 아니라 request-grounded technical concept selection으로 제한한다
+
+- 상태: 확정
+- 날짜: 2026-08-17
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3B2
+
+### 결정
+
+```text
+PatentResearchRequest
+→ OpenAI structured concept selection
+→ PatentTechnicalConceptSelection
+→ local grounding validation
+→ PatentTechnicalConceptPlan
+```
+
+Step 3B2는 사용자의 `question`/`objective`에 이미 존재하는 technical terminology만 선택한다.
+
+- concept는 1~2개로 제한한다.
+- 첫 concept는 `PRIMARY`, optional second concept는 `ALTERNATE`다.
+- concept당 term은 1~4개다.
+- 모든 term은 원래 request text에 case-insensitive contiguous substring으로 존재해야 한다.
+- synonym invention과 terminology expansion을 하지 않는다.
+- 입력에 없는 번역어를 만들지 않는다.
+- EPO CQL을 생성하지 않는다.
+- IPC/CPC classification을 생성하지 않는다.
+- patent number/publication/applicant/date metadata를 발명하지 않는다.
+- novelty/anticipation/obviousness/validity/infringement/FTO 등 법률 결론을 생성하지 않는다.
+
+OpenAI는 structured concept selector의 provider adapter일 뿐이며, `PatentTechnicalConceptPlan` domain contract는 provider-neutral로 유지한다. 모델 output은 Pydantic structured schema를 통과한 뒤에도 request-grounding을 로컬에서 다시 검증한다.
+
+이 grounding은 semantic-quality proof가 아니라 hallucinated terminology를 막기 위한 first-slice safety boundary다. concept quality/recall expansion은 별도 evaluator 또는 후속 evidence-driven capability로 다룬다.
+
+Step 3B2 bounded live smoke는 실제 `gpt-5` Structured Outputs 호출 1회에서 PASS했다. latency/token 사용량은 correctness와 분리하여 후속 optimization 대상으로만 기록한다.
+
+다음 Step 3B3에서 grounded concept를 provider-specific EPO CQL candidate로 변환하되, 최종 실행 전에는 D-064의 `PatentSearchQueryPlan` contract를 반드시 통과시킨다.

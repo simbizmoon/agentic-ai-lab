@@ -323,7 +323,17 @@ Selected candidate failure는 현재 fail-fast다. Error taxonomy가 missing abs
 
 ### 12.4 Patent Query Planning Development Boundary
 
-현재 runtime 실행 전 단계의 bounded query-plan contract는 구현되어 있다.
+현재 runtime 실행 전 단계에는 두 개의 bounded planning contract가 구현되어 있다.
+
+```text
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptSelection
+→ local request-grounding validation
+→ PatentTechnicalConceptPlan
+```
+
+그리고 explicit CQL boundary:
 
 ```text
 PatentResearchRequest
@@ -332,11 +342,11 @@ PatentResearchRequest
 → PatentSearchQueryPlan
 ```
 
-이 contract는 일반 `ResearchSearchQuerySet`과 분리되어 있으며 CQL을 rewrite하지 않는다. PRIMARY/ALTERNATE는 planning role이며 아직 runtime execution semantics가 아니다.
+Technical concept plan은 provider-neutral이며 request에 이미 존재하는 terminology만 허용한다. CQL plan은 일반 `ResearchSearchQuerySet`과 분리되어 있으며 caller CQL을 rewrite하지 않는다. PRIMARY/ALTERNATE는 planning role이며 아직 runtime execution semantics가 아니다.
 
 ### 12.5 아직 runtime에 미연결
 
-- natural-language request → technical search concepts / CQL generation
+- PatentTechnicalConceptPlan → provider-specific EPO CQL generation
 - PatentSearchQueryPlan → handler execution-budget/fallback policy
 - `PatentResearchRequest.maximum_bytes` → `EpoOpsConfig.maximum_response_bytes`
 - technical-relevance evidence/synthesis

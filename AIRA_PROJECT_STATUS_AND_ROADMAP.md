@@ -1828,11 +1828,12 @@ workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
 ```text
 Stage 4 Local Document Expansion baseline → COMPLETE
 Stage 5 Internet Research Expansion        → IN PROGRESS
-Patent Research Vertical Slice             → Step 3B1 COMPLETE
+Patent Research Vertical Slice             → Step 3B2 COMPLETE
 EPO provider foundation                    → COMPLETE
 PatentResearchHandler                      → IMPLEMENTED / FINAL PASS
 PatentSearchQueryPlan                      → IMPLEMENTED / FINAL PASS
-Natural-language patent query generation   → NOT YET IMPLEMENTED
+Grounded technical concept planning        → IMPLEMENTED / FINAL PASS
+Natural-language → EPO CQL generation      → NOT YET IMPLEMENTED
 Patent CLI/runtime                         → NOT YET IMPLEMENTED
 ```
 
@@ -1868,4 +1869,8 @@ Step 3B1은 일반 Research query model과 EPO CQL을 분리하고, 1~2개의 ex
 
 현재 Step 3B1 검증은 focused `45 passed`, Patent affected `154 passed`, full repository `5195 passed`, Ruff/format/diff-check PASS다.
 
-다음 즉시 설계 과제는 `Step 3B2 — natural-language patent request → bounded technical search concepts`이다.
+Step 3B2는 natural-language `PatentResearchRequest`에서 자유로운 synonym/query expansion을 하지 않고, request에 이미 존재하는 technical terminology를 1~2개의 bounded `PatentTechnicalConcept`로 선택한다. 모든 term은 question/objective에 실제로 존재해야 하며, synonym invention, translation, CQL, IPC/CPC generation, patent metadata invention 및 legal conclusion을 허용하지 않는다.
+
+Step 3B2 검증은 focused `66 passed`, Patent/OpenAI affected `212 passed`, full repository `5224 passed`, Ruff/format/diff-check PASS다. 실제 `gpt-5` Structured Outputs 1-call live smoke도 PASS했으며 2개 concept, request-grounding, response/request id 및 token usage 보존을 확인했다. Live smoke는 1599 total tokens, 20.426초를 기록했으며 이는 correctness blocker가 아닌 후속 optimization 관찰값으로 남긴다.
+
+다음 즉시 설계 과제는 `Step 3B3 — grounded technical concepts → bounded EPO CQL plan`이다.

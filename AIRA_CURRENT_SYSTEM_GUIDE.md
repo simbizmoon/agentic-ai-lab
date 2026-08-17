@@ -1459,7 +1459,7 @@ explicit CQL candidate(s)
 
 현재 contract는 1~2개 candidate, exact duplicate rejection, control-character rejection, local 512-character bound 및 bare-string rejection을 제공한다. CQL은 rewrite하지 않으며 case/semantic/full grammar canonicalization도 하지 않는다.
 
-`ALTERNATE`는 아직 자동 provider call을 의미하지 않는다. 자연어→technical concept/CQL generation과 query execution budget은 후속 단계다.
+`ALTERNATE`는 아직 자동 provider call을 의미하지 않는다. query execution budget/fallback semantics는 후속 runtime integration 단계다.
 
 현재 Step 3B1 검증:
 
@@ -1470,4 +1470,43 @@ full repository regression = 5195 passed
 Ruff / format / diff-check = PASS
 ```
 
-다음은 `Step 3B2 — natural-language patent request → bounded technical search concepts`다.
+## 33.9 Step 3B2 — Grounded Technical Concept Planning
+
+```text
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptSelection
+→ local request-grounding validation
+→ PatentTechnicalConceptPlan
+```
+
+Step 3B2는 `FINAL PASS`다.
+
+현재 first-slice contract는 자유로운 query expansion이 아니라 사용자 `question`/`objective`에 이미 존재하는 technical terminology를 bounded structured concept로 선택한다.
+
+- concept는 1~2개다.
+- 첫 concept는 `PRIMARY`, 두 번째가 있으면 `ALTERNATE`다.
+- concept당 term은 1~4개다.
+- 모든 term은 원래 request text에 case-insensitive contiguous substring으로 실제 존재해야 한다.
+- synonym invention, translation, EPO CQL, IPC/CPC generation, patent metadata invention, legal conclusion을 허용하지 않는다.
+- OpenAI Structured Outputs는 provider adapter 안에만 있고 domain plan은 provider-neutral schema다.
+- refusal/incomplete/status/parse/provider failure를 기존 AIRA structured-analysis error contract와 호환되게 처리한다.
+- token usage와 response/request id를 결과에 보존한다.
+
+검증:
+
+```text
+focused final              = 66 passed
+Patent/OpenAI affected     = 212 passed
+full repository regression = 5224 passed
+Ruff / format / diff-check = PASS
+bounded OpenAI live smoke  = PASS
+live model                 = gpt-5
+live concept count         = 2
+live total tokens          = 1599
+live elapsed seconds       = 20.426
+```
+
+Live smoke에서는 `pressure sensors` / `seat occupancy`를 PRIMARY로, `automatic state detection` / `seat occupancy`를 ALTERNATE로 선택했고 모든 term이 request-grounding contract를 통과했다.
+
+다음은 `Step 3B3 — grounded technical concepts → bounded EPO CQL plan`이다. Step 3B3에서도 provider-specific CQL 생성과 Step 3B1 `PatentSearchQueryPlan` validation을 분리한다.

@@ -3207,12 +3207,63 @@ changed Python format      = PASS
 git diff --check           = PASS
 ```
 
-## 34.9 다음 작업
+## 34.9 Step 3B2 — Grounded Technical Concept Planning 완료
 
 ```text
-Step 3B2 — natural-language patent request → bounded technical search concepts
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptSelection
+→ local request-grounding validation
+→ PatentTechnicalConceptPlan
 ```
 
-3B2에서도 최종 CQL 실행은 Step 3B1의 validated plan과 Step 3A Handler 경계를 통과하도록 유지한다.
+Step 3B2는 `FINAL PASS`다.
+
+확정된 경계:
+
+- 자유로운 query expansion을 하지 않는다.
+- request 안에 이미 존재하는 technical terminology만 선택한다.
+- concept는 1~2개다.
+- 첫 concept는 `PRIMARY`, 두 번째가 있으면 `ALTERNATE`다.
+- concept당 term은 1~4개다.
+- 모든 term은 원래 question/objective에 case-insensitive contiguous substring으로 실제 존재해야 한다.
+- synonym invention과 translation을 하지 않는다.
+- EPO CQL과 IPC/CPC code를 생성하지 않는다.
+- patent metadata를 발명하지 않는다.
+- legal conclusion을 생성하지 않는다.
+- OpenAI Structured Outputs adapter와 provider-neutral domain plan을 분리한다.
+- refusal/incomplete/status/parse/provider failure는 기존 AIRA structured-analysis 경계에 맞춘다.
+- token usage와 response/request id를 결과에 보존한다.
+
+검증:
+
+```text
+focused final              = 66 passed
+Patent/OpenAI affected     = 212 passed
+full repository regression = 5224 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+OpenAI bounded live smoke  = PASS
+```
+
+Live smoke:
+- model: `gpt-5`
+- concept count: 2
+- PRIMARY: `pressure sensors`, `seat occupancy`
+- ALTERNATE: `automatic state detection`, `seat occupancy`
+- grounded request binding: PASS
+- total tokens: 1599
+- elapsed: 20.426s
+
+Latency/token cost는 correctness blocker가 아니라 후속 optimization 관찰값으로 유지한다.
+
+## 34.10 다음 작업
+
+```text
+Step 3B3 — grounded technical concepts → bounded EPO CQL plan
+```
+
+Step 3B3에서는 concept→provider-specific CQL 변환을 설계하되, 최종 CQL은 반드시 Step 3B1 `PatentSearchQueryPlan` validation을 통과시킨다. Query execution budget/fallback semantics와 Step 3A Handler integration은 별도 runtime integration 단계에서 결정한다.
 
 첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.
