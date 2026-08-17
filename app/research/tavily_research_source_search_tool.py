@@ -66,9 +66,7 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
         client: httpx.Client | None = None,
         name: str = "tavily_source_search",
         provider: str = "tavily",
-        source_type_classifier: (
-            ResearchSourceTypeClassifier | None
-        ) = None,
+        source_type_classifier: (ResearchSourceTypeClassifier | None) = None,
     ) -> None:
         if not name.strip():
             raise ValueError("name must not be blank")
@@ -80,8 +78,7 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
         self._name = name
         self._provider = provider
         self._source_type_classifier = (
-            source_type_classifier
-            or ResearchSourceTypeClassifier()
+            source_type_classifier or ResearchSourceTypeClassifier()
         )
 
     @property
@@ -198,6 +195,8 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
             payload["start_date"] = query.start_date.isoformat()
         if query.end_date is not None:
             payload["end_date"] = query.end_date.isoformat()
+        if self._config.include_domains:
+            payload["include_domains"] = list(self._config.include_domains)
 
         if self._client is not None:
             return self._client.post(
@@ -261,11 +260,7 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
                     query_id=query.query_id,
                     title=item.title.strip(),
                     url=item.url.strip(),
-                    source_type=(
-                        self._source_type_classifier.classify(
-                            item.url
-                        )
-                    ),
+                    source_type=(self._source_type_classifier.classify(item.url)),
                     snippet=item.content.strip(),
                     rank=rank,
                     metadata=metadata,
@@ -381,10 +376,7 @@ class TavilyResearchSourceSearchTool(ResearchSourceSearchTool):
             return False
 
         parsed = urlsplit(url.strip())
-        return (
-            parsed.scheme.casefold() in {"http", "https"}
-            and bool(parsed.netloc)
-        )
+        return parsed.scheme.casefold() in {"http", "https"} and bool(parsed.netloc)
 
     @staticmethod
     def _normalized_url(url: str) -> str:

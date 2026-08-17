@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<ops:world-patent-data xmlns:ops="http://ops.epo.org" xmlns="http://www.epo.org/exchange">
+  <ops:biblio-search><ops:search-result><exchange-documents>
+    <exchange-document><bibliographic-data><invention-title lang="en">Missing identity</invention-title></bibliographic-data></exchange-document>
+  </exchange-documents></ops:search-result></ops:biblio-search>
+</ops:world-patent-data>

@@ -78,9 +78,7 @@ def tool_for(
 
 def test_tool_maps_successful_response() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, json=response_payload(), request=request
-        )
+        lambda request: httpx.Response(200, json=response_payload(), request=request)
     )
 
     result = tool_for(transport).search(query())
@@ -102,12 +100,8 @@ def test_tool_builds_expected_request() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["headers"] = dict(request.headers)
-        captured["payload"] = json.loads(
-            request.content.decode("utf-8")
-        )
-        return httpx.Response(
-            200, json=response_payload(), request=request
-        )
+        captured["payload"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json=response_payload(), request=request)
 
     result = tool_for(
         httpx.MockTransport(handler),
@@ -132,6 +126,7 @@ def test_tool_builds_expected_request() -> None:
     assert payload["max_results"] == 3
     assert payload["start_date"] == "2025-01-01"
     assert payload["end_date"] == "2026-01-01"
+    assert "include_domains" not in payload
 
     headers = captured["headers"]
     assert isinstance(headers, dict)
@@ -139,13 +134,29 @@ def test_tool_builds_expected_request() -> None:
     assert headers["x-project-id"] == "project-001"
 
 
+def test_tool_emits_configured_include_domains() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(200, json=response_payload(), request=request)
+
+    result = tool_for(
+        httpx.MockTransport(handler),
+        value=config(include_domains=("patentscope.wipo.int",)),
+    ).search(query())
+
+    assert result.status is ResearchSourceSearchStatus.SUCCEEDED
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["include_domains"] == ["patentscope.wipo.int"]
+
+
 def test_tool_returns_no_results() -> None:
     payload = response_payload()
     payload["results"] = []
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, json=payload, request=request
-        )
+        lambda request: httpx.Response(200, json=payload, request=request)
     )
 
     result = tool_for(transport).search(query())
@@ -178,9 +189,7 @@ def test_tool_removes_duplicate_and_invalid_urls() -> None:
         },
     ]
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, json=payload, request=request
-        )
+        lambda request: httpx.Response(200, json=payload, request=request)
     )
 
     result = tool_for(transport).search(query())
@@ -223,9 +232,7 @@ def test_tool_maps_timeout_and_network_errors() -> None:
     def timeout_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timeout", request=request)
 
-    timeout_result = tool_for(
-        httpx.MockTransport(timeout_handler)
-    ).search(query())
+    timeout_result = tool_for(httpx.MockTransport(timeout_handler)).search(query())
 
     assert timeout_result.error is not None
     assert timeout_result.error.error_type == "SearchTimeout"
@@ -233,9 +240,7 @@ def test_tool_maps_timeout_and_network_errors() -> None:
     def network_handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("network", request=request)
 
-    network_result = tool_for(
-        httpx.MockTransport(network_handler)
-    ).search(query())
+    network_result = tool_for(httpx.MockTransport(network_handler)).search(query())
 
     assert network_result.error is not None
     assert network_result.error.error_type == "SearchNetworkError"
@@ -243,16 +248,11 @@ def test_tool_maps_timeout_and_network_errors() -> None:
 
 def test_tool_rejects_invalid_json_and_schema() -> None:
     invalid_json = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, content=b"not-json", request=request
-        )
+        lambda request: httpx.Response(200, content=b"not-json", request=request)
     )
     result = tool_for(invalid_json).search(query())
     assert result.error is not None
-    assert (
-        result.error.error_type
-        == "SearchResponseValidationError"
-    )
+    assert result.error.error_type == "SearchResponseValidationError"
 
     invalid_schema = httpx.MockTransport(
         lambda request: httpx.Response(
@@ -263,10 +263,7 @@ def test_tool_rejects_invalid_json_and_schema() -> None:
     )
     result = tool_for(invalid_schema).search(query())
     assert result.error is not None
-    assert (
-        result.error.error_type
-        == "SearchResponseValidationError"
-    )
+    assert result.error.error_type == "SearchResponseValidationError"
 
 
 def test_tool_error_does_not_expose_api_key() -> None:
@@ -290,9 +287,7 @@ def test_tool_error_does_not_expose_api_key() -> None:
 
 def test_tool_satisfies_existing_contract() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, json=response_payload(), request=request
-        )
+        lambda request: httpx.Response(200, json=response_payload(), request=request)
     )
     value = tool_for(transport)
     search_query = query()
@@ -307,9 +302,7 @@ def test_tool_satisfies_existing_contract() -> None:
 
 def test_source_ids_are_deterministic() -> None:
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200, json=response_payload(), request=request
-        )
+        lambda request: httpx.Response(200, json=response_payload(), request=request)
     )
     value = tool_for(transport)
     search_query = query()
@@ -327,10 +320,7 @@ def test_tool_classifies_injected_trusted_host() -> None:
     payload["results"] = [
         {
             "title": "OpenAI Agents SDK",
-            "url": (
-                "https://openai.github.io/"
-                "openai-agents-python/"
-            ),
+            "url": ("https://openai.github.io/openai-agents-python/"),
             "content": "Official SDK documentation.",
             "score": 0.95,
         }
@@ -347,9 +337,7 @@ def test_tool_classifies_injected_trusted_host() -> None:
         client=httpx.Client(transport=transport),
         source_type_classifier=(
             ResearchSourceTypeClassifier(
-                official_documentation_hosts=(
-                    frozenset({"openai.github.io"})
-                )
+                official_documentation_hosts=(frozenset({"openai.github.io"}))
             )
         ),
     )

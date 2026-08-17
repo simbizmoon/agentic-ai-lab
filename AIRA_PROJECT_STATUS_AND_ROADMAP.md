@@ -1820,3 +1820,42 @@ Patent Research Vertical Slice
 
 Real patent inputs가 OCR, HWP, table identity, hostile/shared filesystem 또는 강화된 privacy
 workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
+
+# 38. 2026-08-17 최신 상태 — EPO Patent Provider Foundation live validation 완료
+
+> 이 섹션은 Patent Research Vertical Slice의 최신 authoritative project status이다.
+
+```text
+Stage 4 Local Document Expansion baseline → COMPLETE
+Stage 5 Internet Research Expansion        → IN PROGRESS
+Patent Research Vertical Slice             → EPO provider foundation COMPLETE
+PatentResearchHandler                      → NOT YET IMPLEMENTED
+```
+
+Patent/EPO 단계:
+
+```text
+Step 1   FINAL PASS
+Step 2A  FINAL PASS
+Step 2B  FINAL PASS
+Step 2C  FINAL PASS
+Step 2D  FINAL PASS
+```
+
+실제 provider chain은 `OAuth → bounded CQL → /search/biblio → DOCDB identity → abstract → exact identity match → VERIFIED PatentSourceMetadata`까지 live-validated 되었다.
+
+Provider 정책:
+
+```text
+EPO OPS = first structured patent provider
+Tavily = supplementary Web context/discovery
+KIPRIS Plus = Korean-specialized second-provider candidate
+USPTO ODP = deferred
+WIPO HTML = no first-slice parser
+```
+
+첫 slice의 법적 경계는 bounded prior-art technical relevance다. Novelty/invalidity/obviousness/infringement/FTO/legal-status definitive conclusion은 아직 구현 범위가 아니다.
+
+현재 검증은 Patent affected regression `150 passed`, Ruff/format/diff-check PASS, real EPO smoke PASS다. 마지막 full-repository accepted baseline은 `5028 passed`이며 새 full regression은 checkpoint commit 전에 실행한다.
+
+다음 즉시 구현 과제는 `Step 3A — PatentResearchHandler`이다.

@@ -1370,3 +1370,60 @@ full regression = 5028 passed
 Ruff = All checks passed
 git diff --check = passed
 ```
+
+# 33. 2026-08-17 Patent Research Development Capability — EPO OPS
+
+> 현재 구현된 patent-provider development capability다. 아직 일반 사용자용 PatentResearchHandler/CLI는 없다.
+
+## 33.1 현재 flow
+
+```text
+CQL
+→ EPO OPS bibliographic search
+→ DOCDB identity / title / publication date
+→ publication-specific abstract
+→ exact identity verification
+→ VERIFIED PatentSourceMetadata
+```
+
+## 33.2 VERIFIED 의미
+
+`VERIFIED`는 accepted EPO source-specific metadata contract 통과를 뜻한다. Novelty, validity, obviousness, infringement, FTO 또는 current legal status 판정을 뜻하지 않는다.
+
+## 33.3 Security / transport
+
+- exact HTTPS `ops.epo.org` and `/3.2/` boundary
+- OAuth Client Credentials
+- Consumer Key/Secret과 access token secret-safe handling
+- token memory-only
+- redirects disabled
+- bounded timeout and response bytes
+- documented `X-Rejection-Reason` fair-use mapping
+- XML MIME check + `defusedxml`
+- credentials are not committed to Git
+
+Smoke에서는 현재 shell의 `EPO_OPS_CONSUMER_KEY`, `EPO_OPS_CONSUMER_SECRET` 환경변수만 사용했다.
+
+## 33.4 실제 Live validation
+
+```text
+query = ab=energy
+maximum_results = 1
+publication_number = US20260238012A1
+publication_docdb = US.20260238012.A1
+publication_date = 2026-08-13
+abstract_language = en
+abstract_chars = 878
+verification_state = verified
+RESULT = PASS
+```
+
+## 33.5 아직 일반 사용자 기능이 아닌 이유
+
+`PatentResearchHandler`, patent-specific orchestration, technical-relevance synthesis, report integration, CLI/runtime command, multi-provider federation이 아직 없다.
+
+따라서 현재 `aira research-live`나 `aira research-integrated`가 자동으로 EPO patent research를 수행한다고 해석하면 안 된다.
+
+## 33.6 다음 구현 경계
+
+`PatentResearchRequest → EPO search → bounded candidates → abstract → VERIFIED records`를 얇은 `PatentResearchHandler`로 묶고 기존 AIRA pipeline capability를 가능한 한 재사용한다.

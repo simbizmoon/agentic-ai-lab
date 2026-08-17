@@ -3577,3 +3577,66 @@ Patent/academic/Web expansion은 Stage 5이며 Stage 4 closure가 Stage 5/6 완�
 
 D-054부터 D-058까지의 cache, artifact 및 lifecycle 경계를 유지한다. Stage 4 baseline을
 accepted/verified로 완료하고 다음 product step을 Patent Research Vertical Slice로 정한다.
+
+## D-060 — 첫 Structured Patent Provider는 EPO OPS로 채택한다
+
+- 상태: 확정
+- 날짜: 2026-08-17
+- 적용 범위: Stage 5 — Patent Research Vertical Slice
+
+### 결정
+
+- 첫 structured patent provider는 EPO OPS로 한다.
+- Primary structured patent search는 OPS CQL search로 한다.
+- Tavily는 supplementary Web context/discovery에 남기며 Tavily result만으로 VERIFIED metadata를 만들지 않는다.
+- KIPRIS Plus는 한국 특허 특화 second-provider 후보로 유지한다.
+- USPTO ODP는 deterministic technical-text path가 충분히 확정될 때 재검토한다.
+- WIPO PATENTSCOPE HTML parser는 first slice에서 구현하지 않는다.
+- EPO DOCDB aggregated non-EP record를 issuing-office certification과 동일하게 취급하지 않는다.
+
+### 근거
+
+WIPO detail HTML은 dynamic/JSF shell이었고, USPTO ODP는 first-slice technical-text path가 불명확했다. EPO OPS는 CQL, bibliographic XML, DOCDB identity, abstract 및 후속 full-text endpoint 계약이 가장 명확했고 2026-08-17 실제 live smoke까지 통과했다.
+
+---
+
+## D-061 — Patent metadata VERIFIED는 official-domain이 아니라 source-specific exact identity binding으로 결정한다
+
+- 상태: 확정
+- 날짜: 2026-08-17
+
+### 결정
+
+```text
+structured bibliographic record
+→ complete DOCDB country + doc-number + kind
+→ publication-specific abstract endpoint
+→ abstract response identity 재확인
+→ bibliographic/abstract exact identity match
+→ VERIFIED PatentSourceMetadata
+```
+
+- Generic publication-number normalizer에 DOCDB/EPODOC provider semantics를 넣지 않는다.
+- Different kind codes는 distinct publication으로 유지한다.
+- Family member를 자동 collapse하지 않는다.
+- Publication date는 publication-reference date만 사용하고 filing/priority date나 번호에서 추론하지 않는다.
+- 현재 source_url은 verified OPS API endpoint이며 human-facing citation URL 정책은 후속 결정으로 둔다.
+
+핵심 원칙: `official source ≠ verified record`.
+
+---
+
+## D-062 — 첫 Patent Research Vertical Slice는 bounded prior-art technical relevance로 제한한다
+
+- 상태: 확정
+- 날짜: 2026-08-17
+
+### 결정
+
+첫 scenario는 `bounded prior-art technical-relevance research`로 한다.
+
+AIRA는 `technically relevant`, `potentially relevant prior art`, `cited excerpt appears to disclose feature X`처럼 기술 관련성을 설명할 수 있다.
+
+하지만 현재 slice에서는 novelty destroyed/anticipation, invalidity, obviousness, infringement, FTO 또는 authoritative current legal status를 definitive legal conclusion으로 말하지 않는다.
+
+Generic `ResearchClaim`도 patent legal claim과 동일한 개념으로 사용하지 않는다. Claim-element comparison은 별도 domain model과 검증 절차가 필요한 후속 slice다.

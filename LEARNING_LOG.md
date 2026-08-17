@@ -2074,3 +2074,62 @@ Stage 4 baseline completion은 future Local capability 전체 완료가 아니�
 
 검증 기준선은 full pytest `5028 passed`, Ruff `All checks passed`, `git diff --check` 통과,
 cache lifecycle isolated/repopulation smoke 통과 및 기존 Local/Integrated real smoke 통과이다.
+
+## 2026-08-17 — Patent Provider Foundation: Mock PASS와 External Contract PASS는 다르다
+
+### 1. Mock test는 provider의 실제 contract를 증명하지 않는다
+
+Step 2B synthetic tests가 통과한 뒤 공식 OPS contract와 다시 대조하면서 `/search → /search/biblio`, `Range query → X-OPS-Range`, space `+ → %20` 차이를 발견했다.
+
+```text
+mock PASS ≠ external API contract PASS
+```
+
+외부 Provider integration은 `official documentation + mock/unit tests + bounded real smoke`의 세 층으로 검증해야 한다.
+
+### 2. Discovery와 verification은 다르다
+
+Tavily나 official-domain URL은 candidate discovery에 유용하지만 verified record를 뜻하지 않는다. EPO에서는 bibliographic DOCDB identity와 publication-specific abstract identity가 정확히 일치해야 VERIFIED로 승격한다.
+
+### 3. Provider-specific representation을 generic identity에 섞지 않는다
+
+EPO DOCDB request representation은 EPO adapter가 보존하고 generic publication normalizer는 conservative identity 역할만 유지한다.
+
+### 4. XML safety는 transport와 parser를 함께 설계한다
+
+```text
+HTTPS exact host → OAuth → timeout/byte limit → MIME → defusedxml → namespace-aware parse
+```
+
+### 5. Live smoke가 architecture hypothesis를 실제 capability로 바꾼다
+
+```text
+query = ab=energy
+maximum_results = 1
+publication_number = US20260238012A1
+publication_docdb = US.20260238012.A1
+abstract_chars = 878
+verification_state = verified
+RESULT = PASS
+```
+
+Secret과 abstract 원문은 출력하지 않았다.
+
+### 6. Technical relevance와 legal conclusion은 별도 capability다
+
+Structured metadata/abstract verification은 novelty, invalidity, obviousness, infringement 또는 FTO 판단과 동일하지 않다.
+
+### 검증과 다음 학습 목표
+
+```text
+Step 1 / 2A / 2B / 2C / 2D = FINAL PASS
+Step 2B affected regression = 138 passed
+Step 2C focused = 73 passed
+Patent affected regression = 150 passed
+Ruff / format / diff-check = PASS
+EPO live smoke = PASS
+```
+
+마지막 full-repository accepted baseline은 `5028 passed`이며, 새 full regression은 checkpoint commit 전에 실행한다.
+
+다음 목표는 `PatentResearchHandler` orchestration이다.

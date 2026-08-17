@@ -36,12 +36,12 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 4 Local Document Expansion baseline 완료 → Patent Research Vertical Slice 준비
+- 현재 제품 단계: Stage 5 — Internet Research Expansion / Patent Research Vertical Slice 진행 중
 - 현재 상태: UTF-8 TXT/Markdown, text-based PDF 및 text-bearing HWPX Local baseline과
   Integrated Web + Local Federated Research, persistent embedding/parsed cache, private result
   artifact 및 manual cache lifecycle을 실제 smoke까지 완료했다. HWP binary, OCR 및 추가
   hardening은 evidence-driven follow-up이며 Stage 4 baseline completion blocker가 아니다.
-- 현재 기준일: 2026-08-16
+- 현재 기준일: 2026-08-17
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -784,7 +784,9 @@ Rewrite가 아니라 Integration-first
 
 ## 상태
 
-- [ ] 시작 전
+- [~] 진행 중
+- Patent Research Vertical Slice의 EPO OPS structured provider foundation은 2026-08-17 bounded live smoke까지 완료했다.
+- Stage 5 전체 완료를 의미하지 않는다. PatentResearchHandler, 학술자료, 다중 patent provider, claims/legal-status workflow는 후속 범위다.
 
 ## Work Items
 
@@ -3042,3 +3044,94 @@ persistent retrieval/index lifecycle은 Stage 6 boundary로 유지한다.
 ```text
 Patent Research Vertical Slice
 ```
+
+# 34. 2026-08-17 Patent Research Vertical Slice — EPO Provider Foundation
+
+> 이 섹션은 Stage 5 Patent Research Vertical Slice의 최신 authoritative progress이다.
+
+## 34.1 현재 상태
+
+```text
+Step 1   Patent Domain Foundation                         FINAL PASS
+Step 2A  EPO OPS OAuth / bounded HTTP transport           FINAL PASS
+Step 2B  CQL Search + Bibliographic XML parsing           FINAL PASS
+Step 2C  Abstract Retrieval + VERIFIED mapping            FINAL PASS
+Step 2D  Bounded real EPO OPS live smoke                  FINAL PASS
+```
+
+첫 structured patent provider는 `EPO Open Patent Services (OPS)`이다.
+
+## 34.2 실제 Live 검증
+
+```text
+query = ab=energy
+maximum_results = 1
+search_records = 1
+publication_number = US20260238012A1
+publication_docdb = US.20260238012.A1
+title_language = en
+publication_date = 2026-08-13
+abstract_language = en
+abstract_chars = 878
+verified_source_family = epo_ops
+verification_state = verified
+RESULT = PASS
+```
+
+Credential 값과 abstract 원문은 출력·문서화하지 않았다.
+
+## 34.3 확정된 EPO request contract
+
+```text
+OAuth → Client Credentials
+Search → /3.2/rest-services/published-data/search/biblio
+Range → X-OPS-Range: 1-N
+Search MIME → application/exchange+xml
+Abstract → /3.2/rest-services/published-data/publication/docdb/{DOCDB}/abstract
+```
+
+CQL URL의 space는 `%20`으로 인코딩한다. XML은 `defusedxml`과 명시적 namespace로 파싱한다.
+
+## 34.4 Verification boundary
+
+```text
+official domain ≠ verified patent record
+
+structured bibliographic record
++ complete DOCDB publication identity
++ publication-specific abstract response
++ exact publication/DOCDB identity match
+→ VERIFIED PatentSourceMetadata
+```
+
+`VERIFIED`는 source-specific metadata contract 통과를 뜻하며 신규성·무효·진보성·침해·FTO 같은 법률 결론을 뜻하지 않는다.
+
+## 34.5 Provider 역할 경계
+
+```text
+EPO OPS       → first structured patent provider
+Tavily        → supplementary Web context/discovery; alone cannot create VERIFIED metadata
+KIPRIS Plus   → Korean-specialized second-provider candidate
+USPTO ODP     → deferred
+WIPO HTML     → dynamic/API adapter required; no first-slice HTML parser
+```
+
+## 34.6 현재 검증 기준
+
+```text
+Step 2B affected regression = 138 passed
+Step 2C focused             = 73 passed
+Patent affected regression  = 150 passed
+Ruff / format / diff-check  = PASS
+EPO bounded live smoke      = PASS
+```
+
+마지막 accepted full-repository baseline은 Stage 4의 `5028 passed`이다. Patent/EPO 변경 전체를 포함한 full regression은 checkpoint commit 전에 다시 실행한다.
+
+## 34.7 다음 작업
+
+```text
+Step 3A — PatentResearchHandler / orchestration
+```
+
+첫 product scenario는 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 아직 범위 밖이다.

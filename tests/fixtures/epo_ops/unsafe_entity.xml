@@ -1,0 +1,3 @@
+<?xml version="1.0"?>
+<!DOCTYPE patent [<!ENTITY unsafe SYSTEM "file:///etc/passwd">]>
+<ops:world-patent-data xmlns:ops="http://ops.epo.org">&unsafe;</ops:world-patent-data>
