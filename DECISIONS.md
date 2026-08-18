@@ -3808,3 +3808,96 @@ ALTERNATE는 provider error recovery가 아니라 bounded zero-result retrieval 
 Step 3C end-to-end live smoke는 실제 `gpt-5` grounded concept selection부터 deterministic EPO CQL, EPO bibliographic search, abstract retrieval, exact VERIFIED mapping까지 PASS했다.
 
 다음 단계에서는 source identity verification과 별도로 technical-relevance evidence/evaluation/synthesis contract를 설계한다. VERIFIED는 metadata/source binding을 뜻하며 technical relevance, novelty, invalidity, obviousness, infringement, FTO 또는 legal status conclusion을 뜻하지 않는다.
+
+
+## D-068 — Patent technical relevance는 source verification과 분리하고 generic semantic evidence stack을 thin adapter로 재사용한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3D
+
+### 결정
+
+Step 3D에서 EPO OPS의 `VERIFIED` patent record를 곧바로 “관련 특허” 또는 법률상 prior art로 해석하지 않는다.
+
+```text
+EpoOpsVerifiedPatentRecord
+→ PatentResearchDocumentAdapter
+→ ResearchSourceDocumentSet
+→ existing SemanticResearchEvidenceExtractor
+→ EvidenceRelevanceJudgment
+→ traceable ResearchEvidenceSet
+```
+
+`EpoOpsVerifiedPatentRecord.abstract_text`는 얇은 patent adapter를 통해 기존 generic `ResearchSourceDocument.content`로 변환한다. 이후 paragraph candidate extraction, embedding shortlist, semantic reranking, OpenAI evidence relevance evaluation, exact character provenance는 기존 generic semantic evidence stack을 재사용한다.
+
+Patent 전용으로 별도 semantic evidence pipeline을 복제하지 않는다. Patent domain layer가 소유하는 책임은 provider/source identity와 patent metadata provenance이고, generic evidence layer는 passage가 사용자의 `question`과 `objective`에 기술적으로 얼마나 기여하는지를 평가한다.
+
+### 의미 경계
+
+```text
+VERIFIED
+= EPO OPS source-specific identity/metadata/abstract binding이 검증됨
+
+TECHNICALLY RELEVANT
+= supplied abstract passage가 supplied research question/objective에
+  실질적인 기술적 evidence value를 가짐
+
+LEGAL CONCLUSION
+= novelty, anticipation, invalidity, obviousness, infringement,
+  FTO, legal status 등 법률적 판단
+```
+
+`VERIFIED`는 technical relevance를 뜻하지 않고, technical relevance도 legal conclusion을 뜻하지 않는다.
+
+허용되는 first-slice 표현은 다음 수준으로 제한한다.
+
+- technically relevant
+- potentially relevant prior art
+- cited excerpt appears to disclose feature X
+- verified / unverified publication metadata
+
+definitive novelty destruction, anticipation, invalidity, obviousness, infringement, FTO 또는 current legal-status conclusion은 Step 3D 범위 밖이다.
+
+### Provenance와 request binding
+
+- patent publication number, source family, verification state, publication date, source URL과 실제 실행 CQL provenance를 generic candidate/document metadata에 보존한다.
+- abstract 원문을 `ResearchSourceDocument.content`로 유지하여 evidence `start_character` / `end_character`가 실제 abstract slice와 exact match하도록 한다.
+- `PatentResearchRuntime` execution과 technical-relevance result 사이의 original `PatentResearchRequest` binding을 재검증한다.
+- shared OpenAI settings/client는 composition에서 재사용할 수 있으나 EPO credential/config 경계는 기존 D-067대로 분리 유지한다.
+
+### Relevance evaluation policy
+
+기존 `OpenAIEvidenceRelevanceEvaluator`를 재사용한다.
+
+이 evaluator는 supplied question/objective/passage만 사용하고, outside knowledge, factual truth, source authority/credibility를 평가하지 않는다. same-topic 또는 keyword overlap만으로 relevance를 승격하지 않으며 `DIRECTLY_RELEVANT`, `PARTIALLY_RELEVANT`, `IRRELEVANT` 범주를 semantic evidence value 기준으로 판정한다.
+
+`IRRELEVANT`로 평가된 passage는 final evidence set에 남기지 않는다. Budget exhaustion 등으로 semantic judgment를 받지 못한 passage는 `UNEVALUATED`로만 취급하며, 이를 `DIRECTLY_RELEVANT` 또는 `PARTIALLY_RELEVANT`와 같은 기술적 relevance 판정으로 해석하지 않는다.
+
+### 검증
+
+```text
+focused affected regression = 100 passed
+full repository             = 5272 passed
+Ruff                        = PASS
+changed Python format       = PASS
+git diff --check            = PASS
+bounded live smoke          = PASS
+```
+
+Live smoke:
+
+- concept count: 2
+- generated query count: 2
+- attempted query: PRIMARY
+- verified records: 2
+- adapted documents: 2
+- final evidence: 2
+- request binding: PASS
+- `CN122100948A`: `directly_relevant`, score `0.86`, provenance `0:1066`
+- `WO2026157301A1`: `directly_relevant`, score `0.8`, provenance `0:1140`
+- final result: `PASS`
+
+### 후속 범위
+
+Step 3E에서는 Step 3D의 traceable relevance evidence를 사람이 읽을 수 있는 bounded patent synthesis/report로 구성한다. Generic `ResearchClaim`과 patent legal claim을 동일 개념으로 취급하지 않으며, claim-element comparison과 legal conclusion은 별도 domain contract 및 검증 단계로 남긴다.

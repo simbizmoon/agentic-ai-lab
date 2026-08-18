@@ -785,8 +785,8 @@ Rewrite가 아니라 Integration-first
 ## 상태
 
 - [~] 진행 중
-- Patent Research Vertical Slice의 EPO OPS structured provider foundation은 2026-08-17 bounded live smoke까지 완료했다.
-- Stage 5 전체 완료를 의미하지 않는다. Patent query/planning, technical-relevance synthesis/report integration, Patent CLI/runtime, 학술자료, 다중 patent provider, claims/legal-status workflow는 후속 범위다.
+- Patent Research Vertical Slice는 2026-08-18 Step 3D Technical Relevance Evidence / Evaluation까지 FINAL PASS다. EPO OPS structured provider, grounded concept planning, deterministic CQL, bounded execution, VERIFIED mapping 및 technical-relevance evidence runtime이 실제 live smoke로 검증되었다.
+- Stage 5 전체 완료를 의미하지 않는다. Step 3E synthesis/report, Patent CLI, 학술자료, 다중 patent provider, claims/legal-status workflow는 후속 범위다.
 
 ## Work Items
 
@@ -3359,10 +3359,88 @@ Live smoke는 실제 `gpt-5 → grounded concept → deterministic CQL → EPO O
 - verification state: VERIFIED
 - abstract characters: 1256
 
-## 34.12 다음 작업
+## 34.12 Step 3D — Technical Relevance Evidence / Evaluation 완료
+
+Step 3D는 `FINAL PASS`다.
 
 ```text
-Patent technical-relevance evidence / evaluation / synthesis
+EpoOpsVerifiedPatentRecord
+→ PatentResearchDocumentAdapter
+→ ResearchSourceDocumentSet
+→ SemanticResearchEvidenceExtractor
+→ OpenAI evidence relevance evaluation
+→ ResearchEvidenceSet
 ```
 
-다음 단계에서는 VERIFIED patent metadata/abstract를 source identity input으로 사용하되, technical relevance를 별도 evidence/evaluator contract로 판정한다. 첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.
+확정된 경계:
+
+- `VERIFIED` source identity와 technical relevance를 분리한다.
+- technical relevance와 novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion을 분리한다.
+- Patent 전용 semantic evidence pipeline을 복제하지 않고 기존 generic semantic evidence stack을 thin adapter로 재사용한다.
+- abstract 원문을 generic document content로 보존하여 exact character provenance를 유지한다.
+- patent publication number, source family, verification state, source URL, publication date와 executed CQL provenance를 metadata에 보존한다.
+- generic relevance evaluator는 question/objective/passage만 사용하고 outside knowledge, factual truth, source authority를 평가하지 않는다.
+- `IRRELEVANT` passage는 final evidence set에서 제외한다.
+- Budget exhaustion 등으로 judgment가 없는 passage는 `UNEVALUATED`로만 표시하며 technical relevance 판정으로 승격하지 않는다.
+- Patent planning/execution과 technical-relevance analysis 사이의 original request binding을 재검증한다.
+- Patent CLI/report writer와 legal synthesis는 아직 없다.
+
+구현:
+
+```text
+app/research/patent_research_document_adapter.py
+app/research/patent_technical_relevance_evidence_runtime.py
+app/research/patent_technical_relevance_runtime.py
+
+tests/test_patent_research_document_adapter.py
+tests/test_patent_technical_relevance_evidence_runtime.py
+tests/test_patent_technical_relevance_runtime.py
+```
+
+검증:
+
+```text
+focused integration           = 100 passed
+full repository regression    = 5272 passed
+Ruff                          = PASS
+changed Python format         = PASS
+git diff --check              = PASS
+bounded end-to-end live smoke = PASS
+```
+
+Live smoke:
+
+- grounded concept count: 2
+- generated query count: 2
+- attempted query: PRIMARY only
+- VERIFIED records: 2
+- adapted documents: 2
+- final relevance evidence: 2
+- request binding: PASS
+- `CN122100948A`: `directly_relevant`, score `0.86`, provenance `0:1066`
+- `WO2026157301A1`: `directly_relevant`, score `0.8`, provenance `0:1140`
+- final result: `PASS`
+
+이번 Step 3D로 D-066에서 관찰했던 “provider-valid query가 기술적으로 관련 없는 결과를 반환할 수 있다”는 문제에 downstream relevance-evaluation boundary가 실제 runtime으로 추가되었다.
+
+## 34.13 다음 작업 — Step 3E Patent Synthesis / Report
+
+다음 product step은 Step 3D의 traceable evidence를 사람이 읽을 수 있는 bounded Patent Research 결과로 합성하는 것이다.
+
+```text
+PatentTechnicalRelevanceRuntimeResult
+→ selected technical-relevance evidence
+→ bounded patent synthesis
+→ citation/provenance-preserving report
+```
+
+첫 report는 다음 수준의 표현만 허용한다.
+
+- technically relevant
+- potentially relevant prior art
+- cited excerpt appears to disclose feature X
+- verified / unverified publication metadata
+
+definitive novelty destruction, anticipation, invalidity, obviousness, infringement, FTO 또는 current legal-status conclusion은 계속 범위 밖이다.
+
+CLI integration은 Step 3E synthesis/report contract가 안정된 뒤 별도 후속 단계에서 수행한다.

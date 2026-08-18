@@ -2285,3 +2285,127 @@ concept generation plan, CQL query plan, execution collection이 모두 원래 `
 최종 live smoke는 `gpt-5` concept planning, deterministic CQL, PRIMARY execution, EPO search/abstract retrieval, VERIFIED mapping을 한 번에 통과했다.
 
 다음 학습 목표는 patent source의 technical-relevance evidence/evaluation/synthesis contract를 설계하는 것이다.
+
+
+## 2026-08-18 — Patent Technical Relevance: VERIFIED와 Relevant는 다른 판정이다
+
+### 1. VERIFIED source와 relevant evidence는 다른 상태다
+
+EPO OPS의 `VERIFIED` record는 publication identity, metadata, abstract source binding이 source-specific contract를 통과했다는 뜻이다.
+
+그 문헌이 사용자의 기술 질문에 실제로 유용한지는 별도 문제다.
+
+```text
+verified source identity
+≠ technical relevance
+≠ legal conclusion
+```
+
+Budget exhaustion 등으로 semantic judgment가 완료되지 않은 passage는
+`UNEVALUATED`로 구분하며, 이를 technical relevance 판정으로 간주하지 않는다.
+
+### 2. 새 vertical slice를 만들 때 기존 generic capability 재사용 가능성을 먼저 확인한다
+
+Patent 전용 evidence extractor와 relevance evaluator를 새로 만드는 대신 기존 generic semantic evidence stack을 audit했다.
+
+확인한 결과:
+
+- `ResearchSourceDocument`는 generic metadata와 readable content를 수용한다.
+- `ResearchEvidence`는 exact excerpt/character provenance를 강제한다.
+- `SemanticResearchEvidenceExtractor`는 paragraph candidate → embedding shortlist → semantic rerank 구조를 이미 제공한다.
+- `OpenAIEvidenceRelevanceEvaluator`는 question/objective/passage만 사용하며 truth/source authority를 평가하지 않는다.
+
+따라서 필요한 것은 새 parallel pipeline이 아니라 다음 thin adapter였다.
+
+```text
+EpoOpsVerifiedPatentRecord
+→ ResearchSourceDocument
+```
+
+### 3. Domain-specific provenance와 generic semantic analysis를 분리할 수 있다
+
+Patent adapter는 publication number, source family, verification state, publication date, source URL, executed CQL provenance를 보존한다.
+
+그 위의 generic evidence layer는 patent provider semantics를 알 필요 없이 passage가 question/objective에 기여하는지만 판단한다.
+
+### 4. Exact character provenance는 report 이전에 확보해야 한다
+
+abstract 원문을 그대로 `ResearchSourceDocument.content`에 넣었기 때문에 final evidence는 다음을 만족한다.
+
+```text
+document.content[start_character:end_character] == evidence.excerpt
+```
+
+Live smoke에서도:
+
+- `CN122100948A`: `0:1066`
+- `WO2026157301A1`: `0:1140`
+
+으로 exact provenance가 유지되었다.
+
+### 5. 테스트 fixture도 실제 production schema를 따라야 한다
+
+첫 Step 3D1 테스트는 adapter가 실행되기 전에 `EpoOpsBibliographicRecord` fixture가 실패했다.
+
+실제 schema가 요구하는 `source_endpoint`, `document_id_type`을 fixture가 빠뜨린 것이 원인이었다.
+
+교훈:
+
+> Test double과 fixture도 production schema의 consumer다.
+
+### 6. Patch utility 자체도 검증 대상이다
+
+Step 3D3 patch script에 Python 문법 오류가 있어 repo 변경 전에 실행이 중단되었다.
+
+수정본은 전달 전에 `py_compile`로 syntax validation했다.
+
+Source code뿐 아니라 migration, patch, smoke, audit utility도 실행 가능한 artifact이므로 최소 syntax/preflight 검증이 필요하다.
+
+### 7. Offline integration과 live smoke의 역할이 다르다
+
+Offline controlled test에서는 seat-occupancy abstract를 `DIRECTLY_RELEVANT`, intraocular-pressure abstract를 `IRRELEVANT`로 만들어 filtering semantics를 deterministic하게 검증했다.
+
+Live smoke에서는 실제 EPO + OpenAI 경로가 다음 결과를 냈다.
+
+```text
+concept_count     = 2
+query_count       = 2
+attempted_queries = PRIMARY
+verified_records  = 2
+document_count    = 2
+evidence_count    = 2
+request_binding   = true
+RESULT            = PASS
+```
+
+실제 evidence:
+
+- `CN122100948A`
+  - `directly_relevant`
+  - score `0.86`
+- `WO2026157301A1`
+  - `directly_relevant`
+  - score `0.8`
+
+Offline test는 policy semantics를 증명하고, live smoke는 external provider/runtime integration을 증명한다.
+
+### 8. Full regression이 vertical slice 완료를 닫는다
+
+```text
+focused affected regression = 100 passed
+full repository             = 5272 passed
+Ruff                        = PASS
+changed-file format         = PASS
+git diff --check            = PASS
+bounded live smoke          = PASS
+```
+
+이 결과로 Step 3D는 `FINAL PASS`다.
+
+### 다음 학습 목표
+
+다음은 Step 3E — Patent Synthesis / Report다.
+
+목표는 traceable technical-relevance evidence를 citation/provenance를 잃지 않고 사람이 읽을 수 있는 bounded research report로 합성하는 것이다.
+
+첫 report에서는 “technically relevant”, “potentially relevant prior art”, “cited excerpt appears to disclose …” 같은 제한적 표현만 사용하고 novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 별도 후속 capability로 남긴다.
