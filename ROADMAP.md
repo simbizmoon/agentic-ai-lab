@@ -3307,12 +3307,62 @@ Live smoke:
 
 첫 결과가 seat occupancy와 무관했다는 사실은 CQL syntax/provider acceptance와 retrieval relevance가 별도 문제임을 보여준다. Retrieval precision은 Step 3B2 concept specificity와 후속 technical-relevance evaluation에서 다룬다.
 
-## 34.11 다음 작업
+## 34.11 Step 3C — Patent Planning → Handler/Runtime Integration 완료
 
 ```text
-Step 3C — Patent planning → Handler/runtime integration
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ PatentSearchQueryPlan
+→ EpoOpsPatentRuntime
+→ PatentResearchHandler
+→ VERIFIED patent records
 ```
 
-Step 3C에서는 `PatentTechnicalConceptPlan → PatentSearchQueryPlan → PatentResearchHandler`의 composition을 연결하고, PRIMARY/ALTERNATE query execution budget/fallback semantics, `PatentResearchRequest.maximum_bytes → EpoOpsConfig.maximum_response_bytes` binding을 명시한다.
+Step 3C는 `FINAL PASS`다.
 
-첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.
+확정된 실행 semantics:
+
+- PRIMARY는 항상 먼저 실행한다.
+- PRIMARY가 정상 완료되고 VERIFIED result가 0건일 때만 ALTERNATE를 한 번 실행한다.
+- provider/transport/XML/identity/abstract error에서는 ALTERNATE fallback하지 않는다.
+- existing selected-candidate fail-fast policy를 유지한다.
+- `PatentResearchRequest.maximum_bytes`는 `EpoOpsConfig.maximum_response_bytes`에 exact binding한다.
+- OpenAI settings와 EPO credential/config는 분리한다.
+- concept generation metadata, query plan, execution result를 최종 runtime result에 보존한다.
+- 모든 composition boundary에서 original request binding을 재검증한다.
+- 기존 Live/Integrated Research runtime은 변경하지 않는다.
+- Patent CLI/report writer는 아직 없다.
+
+검증:
+
+```text
+focused integration           = 166 passed
+Patent/EPO broader regression = 178 passed
+full repository regression    = 5254 passed
+Ruff                          = PASS
+changed Python format         = PASS
+git diff --check              = PASS
+end-to-end live smoke         = PASS
+```
+
+Live smoke는 실제 `gpt-5 → grounded concept → deterministic CQL → EPO OPS → abstract → VERIFIED record`를 한 번에 실행했다.
+
+최종 PASS run:
+- attempted query: PRIMARY
+- request binding: PASS
+- verified records: 1
+- first publication: `CN121905049A`
+- first title: `Multi-modal simulation device and simulation method for intraocular pressure`
+- publication date: `2026-04-21`
+- verification state: VERIFIED
+- abstract characters: 1256
+
+## 34.12 다음 작업
+
+```text
+Patent technical-relevance evidence / evaluation / synthesis
+```
+
+다음 단계에서는 VERIFIED patent metadata/abstract를 source identity input으로 사용하되, technical relevance를 별도 evidence/evaluator contract로 판정한다. 첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.

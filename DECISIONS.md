@@ -3768,4 +3768,43 @@ First-slice rendering 규칙:
 
 Live smoke에서 비관련 intraocular-pressure 문헌이 반환된 것은 query syntax failure가 아니다. Query validity와 retrieval precision을 분리하며, relevance는 concept selection 및 후속 technical-relevance evaluation의 책임으로 둔다.
 
-다음 Step 3C에서는 `PatentTechnicalConceptPlan → PatentSearchQueryPlan → PatentResearchHandler` 실행 경로, PRIMARY/ALTERNATE 실행 budget/fallback, `maximum_bytes` transport binding을 composition/runtime에서 명시적으로 설계한다.
+이 후속 과제는 Step 3C에서 완료되었으며, 실행 경로·PRIMARY/ALTERNATE fallback semantics·`maximum_bytes` transport binding의 최종 결정은 D-067에 기록한다.
+
+## D-067 — Patent planning-to-execution은 request-bound runtime orchestration으로 연결한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3C
+
+### 결정
+
+```text
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ PatentSearchQueryPlan
+→ EpoOpsPatentRuntime
+→ PatentResearchHandler
+→ VERIFIED patent records
+```
+
+Step 3C에서 planning과 execution을 연결하되 기존 component 책임은 유지한다.
+
+- `PatentResearchHandler`는 explicit-CQL thin orchestration layer로 유지한다.
+- `PatentResearchPlanExecutor`는 PRIMARY를 항상 먼저 실행한다.
+- ALTERNATE는 PRIMARY가 정상 완료되었으나 VERIFIED result가 0건일 때만 최대 한 번 실행한다.
+- provider/transport/XML/identity/abstract failure를 query fallback으로 숨기지 않는다.
+- selected-candidate failure도 기존 D-063 fail-fast policy를 유지한다.
+- `PatentResearchRequest.maximum_bytes`는 runtime composition에서 `EpoOpsConfig.maximum_response_bytes`에 exact binding한다.
+- OpenAI settings/client creation과 EPO credential/config loading은 분리한다.
+- `PatentResearchRuntime`은 concept-generation metadata, `PatentSearchQueryPlan`, execution result를 함께 보존한다.
+- concept plan, query plan, execution collection은 모두 original `PatentResearchRequest` binding을 다시 검증한다.
+- 일반 Live/Integrated Research runtime을 변경하거나 별도 Patent `SingleResearchAgentPipeline`을 만들지 않는다.
+- Patent CLI/report writer integration과 technical-relevance synthesis는 이 결정의 범위 밖이다.
+
+ALTERNATE는 provider error recovery가 아니라 bounded zero-result retrieval fallback이다.
+
+Step 3C end-to-end live smoke는 실제 `gpt-5` grounded concept selection부터 deterministic EPO CQL, EPO bibliographic search, abstract retrieval, exact VERIFIED mapping까지 PASS했다.
+
+다음 단계에서는 source identity verification과 별도로 technical-relevance evidence/evaluation/synthesis contract를 설계한다. VERIFIED는 metadata/source binding을 뜻하며 technical relevance, novelty, invalidity, obviousness, infringement, FTO 또는 legal status conclusion을 뜻하지 않는다.

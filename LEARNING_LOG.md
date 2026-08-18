@@ -2249,3 +2249,39 @@ Upstream Step 3B2가 더 구체적인 grounded concept를 선택하고, downstre
 - maximum results: 1
 
 다음 학습 목표는 planning 결과를 `PatentResearchHandler` 실행 경로에 안전하게 연결하면서 PRIMARY/ALTERNATE budget/fallback과 transport bounds를 명시하는 것이다.
+
+## 2026-08-18 — Patent Planning-to-Execution: fallback은 실패 은폐가 아니라 bounded retrieval policy다
+
+### 1. query plan과 query execution은 별도 책임이다
+`PatentSearchQueryPlan`이 PRIMARY/ALTERNATE 역할을 정의해도 그것만으로 실행 순서가 정해지는 것은 아니다. Step 3C에서 별도 `PatentResearchPlanExecutor`를 두어 runtime semantics를 명시했다.
+
+### 2. ALTERNATE는 provider failure recovery가 아니다
+PRIMARY가 정상적으로 실행되어 VERIFIED result가 0건일 때만 ALTERNATE를 실행한다. 인증, network, rate limit, MIME/XML, identity, abstract retrieval 실패는 fallback으로 감추지 않고 그대로 fail-fast한다.
+
+### 3. request-level bound는 transport creation 시점에 binding해야 한다
+`PatentResearchRequest.maximum_bytes`를 Handler 안에서 소비하지 않고 `EpoOpsPatentRuntime`이 `EpoOpsConfig.maximum_response_bytes`로 binding한다. 이로써 request policy와 HTTP response bound가 같은 runtime execution에 묶인다.
+
+### 4. 서로 다른 provider 설정을 억지로 하나의 Settings에 넣지 않는다
+현재 `Settings`는 OpenAI 필수값과 결합되어 있다. EPO config를 여기에 강제로 포함하면 EPO-only execution에도 OpenAI 설정이 필요해지는 잘못된 coupling이 생긴다. OpenAI settings와 EPO credential/config는 분리 유지했다.
+
+### 5. end-to-end runtime도 단계별 request binding을 재검증한다
+concept generation plan, CQL query plan, execution collection이 모두 원래 `PatentResearchRequest`와 동일한지 확인한다. 단계별 component가 독립적으로 맞아도 composition에서 request drift가 생길 수 있기 때문이다.
+
+### 6. smoke script도 production schema를 추측하면 안 된다
+첫 end-to-end smoke는 실제 VERIFIED record 생성까지 성공했지만 출력 코드가 존재하지 않는 `first.abstract.abstract_text`를 읽어 마지막 줄에서 실패했다. 실제 schema를 확인해 `first.abstract_text`로 수정한 뒤 전체 PASS를 확인했다. Test/smoke utility도 production schema audit 대상이다.
+
+### 7. end-to-end PASS와 retrieval relevance는 여전히 다르다
+전체 chain이 성공해도 반환 문헌이 질문에 기술적으로 적합한지는 별도 평가 문제다. Source identity verification과 technical-relevance evaluation을 분리해야 한다.
+
+### 검증
+- focused integration: `166 passed`
+- Patent/EPO broader regression: `178 passed`
+- full repository: `5254 passed`
+- Ruff / changed-file format / diff-check: PASS
+- bounded end-to-end live smoke: PASS
+- request binding: PASS
+- VERIFIED record: PASS
+
+최종 live smoke는 `gpt-5` concept planning, deterministic CQL, PRIMARY execution, EPO search/abstract retrieval, VERIFIED mapping을 한 번에 통과했다.
+
+다음 학습 목표는 patent source의 technical-relevance evidence/evaluation/synthesis contract를 설계하는 것이다.

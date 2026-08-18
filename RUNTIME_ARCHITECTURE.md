@@ -352,21 +352,42 @@ PatentResearchRequest
 → PatentSearchQueryPlan
 ```
 
-Technical concept plan은 provider-neutral이며 request에 이미 존재하는 terminology만 허용한다. EPO renderer는 semantic expansion 없이 `ta all "<term>"` clause와 optional exclusive `pd < YYYYMMDD` retrieval bound를 만든다. 최종 CQL plan은 일반 `ResearchSearchQuerySet`과 분리되어 있으며 caller/generated CQL을 rewrite하지 않는다. PRIMARY/ALTERNATE는 planning role이며 아직 runtime execution semantics가 아니다.
+Technical concept plan은 provider-neutral이며 request에 이미 존재하는 terminology만 허용한다. EPO renderer는 semantic expansion 없이 `ta all "<term>"` clause와 optional exclusive `pd < YYYYMMDD` retrieval bound를 만든다. 최종 CQL plan은 일반 `ResearchSearchQuerySet`과 분리되어 있으며 caller/generated CQL을 rewrite하지 않는다.
 
-### 12.5 아직 runtime에 미연결
+### 12.5 Patent Planning-to-Execution Runtime
 
-- PatentSearchQueryPlan → PatentResearchHandler execution composition
-- PRIMARY/ALTERNATE query execution-budget/fallback policy
-- `PatentResearchRequest.maximum_bytes` → `EpoOpsConfig.maximum_response_bytes`
-- technical-relevance evidence/synthesis
+```text
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ PatentSearchQueryPlan
+→ EpoOpsPatentRuntime
+→ PatentResearchHandler
+→ VERIFIED patent records
+```
+
+`PatentResearchPlanExecutor`가 PRIMARY/ALTERNATE runtime semantics를 담당한다.
+
+- PRIMARY는 항상 먼저 실행한다.
+- PRIMARY가 정상 완료되었으나 VERIFIED result가 0건일 때만 ALTERNATE를 한 번 실행한다.
+- provider/transport/XML/identity/abstract failure는 fallback 대상으로 취급하지 않는다.
+- Handler의 selected-candidate fail-fast policy를 유지한다.
+- `PatentResearchRequest.maximum_bytes`는 runtime에서 `EpoOpsConfig.maximum_response_bytes`에 binding한다.
+- OpenAI settings/client와 EPO credential/config는 분리한다.
+- `PatentResearchRuntime`은 concept generation metadata, query plan, execution result를 보존한다.
+- 각 composition boundary에서 original `PatentResearchRequest` binding을 확인한다.
+
+### 12.6 아직 runtime에 미연결
+
+- technical-relevance evidence/evaluation/synthesis
 - result/report writer integration
-- CLI command
+- Patent CLI command
 - multi-provider federation
 
 따라서 현재 `aira research-live` 및 `aira research-integrated` 실행 경로는 변경되지 않는다.
 
-### 12.6 설계 원칙
+### 12.7 설계 원칙
 
 - orchestration과 planning을 분리한다.
 - provider-specific parsing과 generic patent identity를 분리한다.

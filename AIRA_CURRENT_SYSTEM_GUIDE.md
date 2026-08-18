@@ -1434,9 +1434,9 @@ PatentResearchRequest
 
 ## 33.6 아직 일반 사용자 기능이 아닌 이유
 
-아직 자연어→CQL planning, technical-relevance synthesis/report integration, patent CLI/runtime, partial recovery, multi-provider federation은 없다.
+자연어 request → grounded technical concept → deterministic EPO CQL → bounded EPO runtime execution까지의 내부 composition은 구현되어 있다. 그러나 technical-relevance synthesis/report integration, Patent CLI command, partial recovery, multi-provider federation은 아직 없다.
 
-따라서 현재 `aira research-live`나 `aira research-integrated`가 자동으로 EPO patent research를 수행한다고 해석하면 안 된다. `maximum_bytes`의 EPO transport binding도 후속 runtime/factory composition에서 연결한다.
+따라서 현재 `aira research-live`나 `aira research-integrated`가 자동으로 EPO patent research를 수행한다고 해석하면 안 된다. `maximum_bytes`의 EPO transport binding은 Step 3C에서 `EpoOpsConfig.maximum_response_bytes`와 연결되었지만, 일반 사용자용 Patent CLI/report workflow는 아직 제공하지 않는다.
 
 ## 33.7 현재 검증과 다음 경계
 
@@ -1554,4 +1554,58 @@ EPO OPS가 해당 CQL을 정상 수용했고 `request_round_trip=True`, `maximum
 
 반환된 첫 문헌은 `WO2026167534A1 — INTRAOCULAR PRESSURE SENSOR SYSTEM AND METHOD`였다. 이는 seat-occupancy 질문에는 비관련 문헌이며, 문법적으로 유효한 CQL과 retrieval precision은 별개의 문제임을 확인했다. 검색 품질은 Step 3B2 concept specificity와 후속 technical-relevance evaluation에서 다룬다.
 
-다음은 `Step 3C — Patent planning → Handler/runtime integration`이다.
+## 33.11 Step 3C — Patent Planning → Handler/Runtime Integration
+
+```text
+PatentResearchRequest
+→ OpenAIPatentTechnicalConceptGenerator
+→ PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ PatentSearchQueryPlan
+→ EpoOpsPatentRuntime
+→ PatentResearchHandler
+→ VERIFIED patent records
+```
+
+Step 3C는 `FINAL PASS`다.
+
+현재 runtime integration contract:
+
+- `PatentResearchPlanExecutor`는 PRIMARY를 항상 먼저 실행한다.
+- PRIMARY가 정상 완료되고 VERIFIED result가 0건일 때만 optional ALTERNATE를 한 번 실행한다.
+- provider/transport/XML/identity/abstract failure는 ALTERNATE fallback으로 숨기지 않고 fail-fast한다.
+- `PatentResearchRequest.maximum_bytes`는 `EpoOpsConfig.maximum_response_bytes`로 request-bound binding된다.
+- OpenAI settings와 EPO credential/config는 별도 책임으로 유지한다.
+- `PatentResearchRuntime`은 concept generation metadata, query plan, execution result를 모두 보존한다.
+- concept plan, query plan, execution collection은 모두 원래 `PatentResearchRequest`와 exact binding을 재검증한다.
+- `PatentResearchHandler`의 explicit-CQL thin orchestration contract는 그대로 유지한다.
+- 일반 `aira research-live` / `aira research-integrated` 실행 경로는 변경하지 않는다.
+- Patent CLI/report writer integration과 technical-relevance synthesis는 아직 포함하지 않는다.
+
+검증:
+
+```text
+focused integration           = 166 passed
+Patent/EPO broader regression = 178 passed
+full repository regression    = 5254 passed
+Ruff / format / diff-check    = PASS
+end-to-end live smoke         = PASS
+```
+
+Live end-to-end smoke에서는 실제로:
+
+```text
+natural-language request
+→ gpt-5 grounded concept selection
+→ deterministic EPO CQL
+→ PRIMARY execution
+→ request_binding=True
+→ verified_records=1
+→ verification_state=verified
+```
+
+를 확인했다.
+
+최종 PASS smoke의 첫 VERIFIED 문헌은 `CN121905049A — Multi-modal simulation device and simulation method for intraocular pressure`, publication date `2026-04-21`, abstract length `1256` characters였다.
+
+다음 단계는 patent source의 **technical-relevance evidence/evaluation/synthesis boundary**를 설계하는 것이다. VERIFIED metadata/abstract는 source identity contract일 뿐 technical relevance 또는 법률 결론 자체가 아니다.

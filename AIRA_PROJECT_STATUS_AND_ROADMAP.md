@@ -1821,21 +1821,22 @@ Patent Research Vertical Slice
 Real patent inputs가 OCR, HWP, table identity, hostile/shared filesystem 또는 강화된 privacy
 workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
 
-# 38. 2026-08-18 최신 상태 — Patent Query Planning live validation 완료
+# 38. 2026-08-18 최신 상태 — Patent Planning-to-Execution live validation 완료
 
 > 이 섹션은 Patent Research Vertical Slice의 최신 authoritative project status이다.
 
 ```text
 Stage 4 Local Document Expansion baseline → COMPLETE
 Stage 5 Internet Research Expansion        → IN PROGRESS
-Patent Research Vertical Slice             → Step 3B3 COMPLETE
+Patent Research Vertical Slice             → Step 3C COMPLETE
 EPO provider foundation                    → COMPLETE
 PatentResearchHandler                      → IMPLEMENTED / FINAL PASS
 PatentSearchQueryPlan                      → IMPLEMENTED / FINAL PASS
 Grounded technical concept planning        → IMPLEMENTED / FINAL PASS
 Deterministic EPO CQL planning             → IMPLEMENTED / FINAL PASS
-Patent planning → Handler/runtime           → NOT YET INTEGRATED
+Patent planning → Handler/runtime           → IMPLEMENTED / FINAL PASS
 Patent CLI/runtime                         → NOT YET IMPLEMENTED
+Technical-relevance synthesis              → NOT YET IMPLEMENTED
 ```
 
 Patent/EPO 단계:
@@ -1880,4 +1881,12 @@ Step 3B3 검증은 focused `53 passed`, Patent/EPO affected `158 passed`, full r
 
 Live smoke의 첫 결과는 seat occupancy와 무관한 intraocular pressure sensor 문헌이었다. 따라서 query syntax/provider acceptance와 retrieval relevance는 서로 다른 quality dimension으로 분리한다.
 
-다음 즉시 설계 과제는 `Step 3C — Patent planning → Handler/runtime integration`이다.
+Step 3C는 planning-to-execution runtime을 연결했다. `PatentResearchPlanExecutor`는 PRIMARY를 먼저 실행하고, PRIMARY가 정상 완료되었으나 VERIFIED result가 0건일 때만 ALTERNATE를 한 번 실행한다. provider/transport/XML/identity/abstract failure는 fallback으로 숨기지 않고 fail-fast한다.
+
+`PatentResearchRequest.maximum_bytes`는 request-bound `EpoOpsConfig.maximum_response_bytes`로 binding되며, OpenAI settings와 EPO credential/config는 분리 유지된다.
+
+Step 3C 검증은 focused integration `166 passed`, Patent/EPO broader regression `178 passed`, full repository `5254 passed`, Ruff/format/diff-check PASS다. 실제 `gpt-5 → grounded concept → deterministic CQL → EPO OPS → abstract → VERIFIED record` end-to-end live smoke도 PASS했다.
+
+최종 live smoke에서 `request_binding=True`, `verified_records=1`, `verification_state=verified`를 확인했고 첫 VERIFIED 문헌은 `CN121905049A`, publication date `2026-04-21`이었다.
+
+다음 즉시 설계 과제는 **technical-relevance evidence/evaluation/synthesis boundary**다. VERIFIED source identity와 technical relevance 또는 legal conclusion은 계속 분리한다.
