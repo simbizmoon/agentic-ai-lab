@@ -85,8 +85,8 @@
 | Research Search Provider Budget | Yes | Yes | Yes (live CLI) | Partial | Call/Credit/Latency 제한 |
 | Provider-independent Source Type Classifier | Yes | Yes | Yes (live CLI) | Partial | 재사용 |
 | Supplemental Research Replanning | Yes | Yes | Yes (conditional live path) | Partial | 최대 1회 유지 |
-| 전체 pytest 기준선 | Yes | 4431 passed in 16.41s | 해당 없음 | 해당 없음 | Step 5.12 최종 Checkpoint |
-| Ruff 기준선 | Yes | All checks passed | 해당 없음 | 해당 없음 | 기준선 고정 |
+| Step 5.12 historical pytest checkpoint | Yes | 4431 passed in 16.41s | 해당 없음 | 해당 없음 | Historical Checkpoint |
+| Step 5.12 historical Ruff checkpoint | Yes | All checks passed | 해당 없음 | 해당 없음 | Historical Checkpoint |
 
 ---
 
@@ -228,7 +228,7 @@ passed = true
 - 인터넷 + 로컬 문서 통합 전체 경로 미완료
 - PDF/HWP/HWPX 및 Integrated RAG 전체 통합 미완료
 
-### 최종 검증 Checkpoint
+### Historical Validation Checkpoint — Step 5.12
 
 ```text
 전체 pytest = 4431 passed in 16.41s
@@ -236,9 +236,9 @@ Ruff = All checks passed
 git diff --cached --check = passed
 ```
 
-### 다음 Matrix 갱신 조건
+### 당시 다음 Matrix 갱신 조건
 
-다음 Checkpoint에서 다시 갱신한다.
+당시 다음 Checkpoint에서 다시 갱신하기로 한 조건은 다음과 같다.
 
 - Semantic Relevance Blocking 정책 결정
 - Local Document + Internet 통합 Runtime 연결
@@ -309,12 +309,49 @@ Full regression
 → Ruff clean
 ```
 
-### 다음 Matrix 갱신 조건
+### 당시 다음 Matrix 갱신 조건
 
-다음 갱신은 Phase 12에서 hardware/model capacity 판단이 확정되거나 다음 중 하나가
+이 2026-08-13 checkpoint 당시에는 Phase 12에서 hardware/model capacity 판단이 확정되거나 다음 중 하나가
 실제 구현될 때 수행한다.
 
 - larger local model production role 채택
 - local worker parallelism 정책 변경
 - search concurrency 안전 구조 도입
 - integrated local-document + web RAG production path 확대
+
+## 8. 2026-08-18 Capability Matrix 갱신 — Stage 5 Patent first usable slice
+
+### Patent Research capability
+
+| Capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| EPO OPS Structured Patent Provider | Production-aligned / live validated | first structured provider |
+| PatentResearchHandler | Production-aligned | bounded, request-bound, fail-fast |
+| Grounded Patent Concept Planning | Production-aligned / live validated | request terminology only |
+| Deterministic EPO CQL Planning | Production-aligned / live validated | bounded renderer |
+| Patent Planning-to-Execution Runtime | Production-aligned / live validated | PRIMARY + bounded ALTERNATE |
+| VERIFIED Patent Metadata / Abstract | Production-aligned | source-specific exact identity binding |
+| Patent Technical Relevance Evidence | Production-aligned / live validated | generic semantic evidence stack reuse |
+| Patent Synthesis / Support Verification | Production-aligned / live validated | technical synthesis only |
+| `aira research-patent` CLI | User-facing / UAT PASS | bounded CLI first slice |
+| Patent Claim Acquisition / Parsing | Not implemented | Step 4+ |
+| Claim Element Decomposition / Claim Chart | Not implemented | Step 4+ |
+| Multi-provider Patent Federation | Not implemented | future |
+| Authoritative Patent Legal Analysis | Not implemented | definitive legal conclusions excluded |
+
+### Current product position
+
+```text
+Stage 5 — Internet Research Expansion          IN PROGRESS
+Patent Research Vertical Slice Step 3G        FINAL PASS
+Next: Step 4A — Patent Metadata Expansion
+```
+
+Step 3G accepted validation:
+
+```text
+focused patent regression  = 66 passed
+full repository regression = 5302 passed
+Ruff / format / diff-check = PASS
+live Patent UAT             = PASS
+```

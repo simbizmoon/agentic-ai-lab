@@ -2,7 +2,7 @@
 
 ## 1. 문서 목적
 
-본 문서는 2026-08-15 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된
+본 문서는 2026-08-18 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된
 AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 방법,
 현재 한계 및 후속 개선 방향을 사용자 관점에서 정리한다.
 
@@ -23,13 +23,14 @@ AIRA(Agentic Intelligence Research Assistant)의 실제 기능, 기본 사용 �
 
 # 2. 현재 AIRA의 위치
 
-현재 AIRA에는 네 가지 주요 연구 경로가 존재한다.
+현재 AIRA에는 다섯 가지 주요 연구 경로가 존재한다.
 
 ```text
 1. Local Deterministic Research
 2. Local Semantic Research
 3. Live Web Research
 4. Integrated Web + Local Research
+5. Patent Technical Research (`aira research-patent`)
 ```
 
 ## 2.1 Local Deterministic Research
@@ -1276,7 +1277,7 @@ Multi-Agent는 기본값이 아니다. 다음과 같은 workload에서만 escala
 
 단순히 agent 수를 늘리기 위해 사용하지 않는다.
 
-## 31.6 현재 검증 기준선
+## 31.6 Historical Validation Baseline — Phase 11
 
 Phase 11 final checkpoint:
 
@@ -1290,7 +1291,7 @@ git diff --check = clean
 commit = 5c30358
 ```
 
-## 31.7 현재 다음 단계
+## 31.7 Historical Checkpoint — 당시 다음 단계
 
 ```text
 Phase 12 — Hardware Upgrade Decision
@@ -1371,9 +1372,9 @@ Ruff = All checks passed
 git diff --check = passed
 ```
 
-# 33. 2026-08-17 Patent Research Development Capability — EPO OPS
+# 33. Historical Patent Research Development Checkpoint — 2026-08-17 EPO OPS
 
-> 현재 EPO provider foundation과 개발용 `PatentResearchHandler` orchestration까지 구현되어 있다. 아직 일반 사용자용 Patent CLI/runtime command는 없다.
+> 이 section은 Step 3C 이전/당시의 historical development checkpoint다. 현재 Patent 사용자/runtime 상태는 #34를 우선한다.
 
 ## 33.1 현재 flow
 
@@ -1418,7 +1419,7 @@ verification_state = verified
 RESULT = PASS
 ```
 
-## 33.5 PatentResearchHandler 현재 상태
+## 33.5 PatentResearchHandler 당시 상태
 
 ```text
 PatentResearchRequest
@@ -1432,13 +1433,13 @@ PatentResearchRequest
 
 현재 Handler는 exact request/result binding, `maximum_search_results` bound, 앞쪽 `maximum_sources` 처리, selected identity/order 보존, fail-fast를 강제한다. `EpoOpsVerifiedPatentRecord`는 EPO OPS + VERIFIED state를 schema에서 강제한다.
 
-## 33.6 아직 일반 사용자 기능이 아닌 이유
+## 33.6 당시 일반 사용자 기능이 아니었던 이유
 
 자연어 request → grounded technical concept → deterministic EPO CQL → bounded EPO runtime execution까지의 내부 composition은 구현되어 있다. 그러나 technical-relevance synthesis/report integration, Patent CLI command, partial recovery, multi-provider federation은 아직 없다.
 
 따라서 현재 `aira research-live`나 `aira research-integrated`가 자동으로 EPO patent research를 수행한다고 해석하면 안 된다. `maximum_bytes`의 EPO transport binding은 Step 3C에서 `EpoOpsConfig.maximum_response_bytes`와 연결되었지만, 일반 사용자용 Patent CLI/report workflow는 아직 제공하지 않는다.
 
-## 33.7 현재 검증과 다음 경계
+## 33.7 당시 검증과 다음 경계
 
 ```text
 focused final              = 63 passed
@@ -1609,3 +1610,83 @@ natural-language request
 최종 PASS smoke의 첫 VERIFIED 문헌은 `CN121905049A — Multi-modal simulation device and simulation method for intraocular pressure`, publication date `2026-04-21`, abstract length `1256` characters였다.
 
 다음 단계는 patent source의 **technical-relevance evidence/evaluation/synthesis boundary**를 설계하는 것이다. VERIFIED metadata/abstract는 source identity contract일 뿐 technical relevance 또는 법률 결론 자체가 아니다.
+
+# 34. 2026-08-18 Current Patent Research User Runtime
+
+> 이 section은 Patent Research에 관한 최신 authoritative user/runtime snapshot이다.
+> 앞선 #33의 "Patent CLI가 아직 없다"는 설명은 Step 3C 시점의 historical checkpoint다.
+
+## 34.1 현재 공식 제품 위치
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 3G — Patent User Acceptance Test
+Status: FINAL PASS
+```
+
+다음 제품 작업은 `Step 4A — Patent Metadata Expansion`이다.
+
+## 34.2 현재 사용자 실행 경로
+
+```text
+aira research-patent
+```
+
+현재 CLI는 자연어 `question` / `objective`와 bounded cutoff/search/source/byte 옵션을
+받아 다음 top-level runtime을 실행한다.
+
+```text
+PatentResearchRequest
+→ grounded technical concept planning
+→ deterministic EPO CQL
+→ bounded EPO OPS execution
+→ VERIFIED patent records
+→ technical relevance evidence
+→ patent-specific synthesis
+→ support verification
+→ user-visible CLI result
+```
+
+## 34.3 현재 사용자 의미
+
+Finding이 있으면:
+
+```text
+result_status=findings_available
+synthesis_accepted=true|false
+```
+
+Finding이 없으면:
+
+```text
+result_status=no_relevant_findings
+synthesis_accepted=not_applicable
+verification_status=not_applicable
+```
+
+`synthesis_accepted`는 supplied evidence가 generated technical synthesis를 지지하는지에
+대한 상태이며 novelty, invalidity, obviousness, infringement, FTO, patentability 또는
+current legal status 결론이 아니다.
+
+## 34.4 현재 제한
+
+- EPO OPS가 first structured patent provider다.
+- multi-provider federation은 아직 없다.
+- claim acquisition/decomposition과 claim chart는 아직 없다.
+- authoritative legal-analysis layer는 아직 없다.
+- selected candidate abstract/provider-contract failure는 현재 fail-fast다.
+- 한 번의 EPO OPS HTTP 404가 관찰됐으나 재현되지 않아 skip/retry 정책은 변경하지 않았다.
+
+## 34.5 최신 검증
+
+```text
+focused patent regression  = 66 passed
+full repository regression = 5302 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+Patent live UAT             = PASS
+```

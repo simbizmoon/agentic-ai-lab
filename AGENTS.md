@@ -11,17 +11,29 @@ while teaching the learner every major concept and implementation decision.
 
 ## Current Stage
 
-Phase 2 start-ready. This phase begins basic OpenAI API calls and small practice implementations.
+Authoritative current position is defined by `ROADMAP.md`.
 
-Do not implement Agent features, RAG, Memory, or Multi-Agent systems yet. API keys
-and secrets must never be stored in Git. Implement only the smallest useful step
-at a time, test it, and then move to the next step.
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 3G — Patent User Acceptance Test FINAL PASS
+
+NEXT
+Step 4A — Patent Metadata Expansion
+```
+
+Historical Phase 0~13, Stage A~I, and Local/Multi-Agent experimental phase numbers
+must not be used as the current product stage.
+
+API keys and secrets must never be stored in Git. Implement only the smallest
+accepted product work item at a time, test it, inspect the diff, and then move to
+the next step.
 
 ## Required Behavior
 
 - Read MASTER.md before proposing changes.
 - Read DECISIONS.md before choosing technologies.
-- Check ROADMAP.md to determine the current phase.
+- Check ROADMAP.md to determine the authoritative current Stage / Vertical Slice / Step.
 - Explain changes in beginner-friendly language.
 - Prefer minimal and reversible changes.
 - Do not add unrelated features.

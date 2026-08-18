@@ -2,9 +2,12 @@
 
 ## 1. 문서의 목적
 
-본 문서는 AIRA(Agentic Intelligence Research Assistant) 프로젝트의 최상위 목적, 제품 정의, 핵심 요구사항, 개발 원칙, 운영 방식, 기술 방향 및 성공 기준을 정의한다.
+본 문서는 AIRA(Agentic Intelligence Research Assistant)의 제품 목적, 제품 정의, 핵심 요구사항, 제품 범위, 기술 방향 및 성공 기준을 정의한다.
 
-본 문서는 앞으로 다음 작업의 최상위 기준으로 사용한다.
+Agentic AI Lab 전체 프로젝트의 운영·개발·학습 및 문서 관리 원칙은 `MASTER.md`를 따르며,
+본 문서는 AIRA의 제품 목표·범위·요구사항·성공 기준에 관한 최상위 제품 기준으로 사용한다.
+
+이 제품 기준은 다음 작업에 적용한다.
 
 * ChatGPT `Agentic AI Lab` 프로젝트의 총괄 관리
 * 로컬 `agentic-ai-lab` 저장소의 코드 감사

@@ -36,26 +36,56 @@ source .venv/bin/activate
 
 ## Quality Baseline
 
+Latest accepted code checkpoint (Patent Step 3G):
+
 ```text
-pytest: 4048 passed
-ruff: All checks passed
+focused patent regression: 66 passed
+full repository pytest: 5302 passed
+Ruff: PASS
+changed Python format: PASS
+git diff --check: PASS
+Patent live UAT: PASS
 ```
 
 ## Core Documents
 
-- `MASTER.md`: 최상위 목표, MVP 범위와 범위 통제
-- `DECISIONS.md`: 확정된 기술 및 운영 결정
-- `ROADMAP.md`: 현재 위치와 최종 Phase 13 계획
+- `AIRA_PROJECT_CHARTER.md`: 최종 제품 목표와 Stage 0~11 상위 제품 구조
+- `MASTER.md`: 프로젝트 운영·개발·검증 원칙과 문서 권한
+- `ROADMAP.md`: **현재 제품 위치와 다음 실행 순서의 authoritative source**
+- `DECISIONS.md`: 확정된 기술·제품·운영 결정
+- `AIRA_CURRENT_SYSTEM_GUIDE.md`: 현재 실제 사용자/runtime 기능
+- `RUNTIME_ARCHITECTURE.md`: 현재 runtime architecture
+- `AIRA_LLM_AND_AGENT_USER_MANUAL.md`: 실제 운영·사용 방법
+- `AIRA_CAPABILITY_MATRIX.md`: 구현·평가 capability snapshot
 - `CURRICULUM.md`: 교육 방식과 학습 범위
 - `AGENTS.md`: Codex와 코딩 에이전트 작업 규칙
-- `LEARNING_LOG.md`: 실제 학습 및 구현 기록
+- `LEARNING_LOG.md`: 실제 학습·구현·실패 분석 기록
+
+과거 `Phase 0~13` 및 `Stage A~I` 표현은 historical checkpoint이며 현재 제품 Stage를
+대체하지 않는다.
 
 ## Current Status
 
-- Phase 0–12: COMPLETE
-- Current Phase: Phase 13 — Practical AIRA Integration and Delivery
-- Phase 13: 최종 Phase
-- 다음 작업: AIRA MVP 사용 시나리오와 통합 경로 확정
+```text
+Stage 4 — Local Document Expansion
+→ BASELINE COMPLETE
+
+Stage 5 — Internet Research Expansion
+→ IN PROGRESS
+
+Patent Research Vertical Slice
+→ Step 3G — Patent User Acceptance Test FINAL PASS
+```
+
+현재 usable Patent first slice는 `aira research-patent` CLI까지 연결되어 있다.
+
+다음 공식 작업:
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4A — Patent Metadata Expansion
+```
 
 ## AIRA MVP
 

@@ -7,8 +7,8 @@
 
 문서 역할은 다음과 같이 구분한다.
 
-- `AIRA_PROJECT_CHARTER.md`: 최종 제품 목표와 최상위 원칙
-- `MASTER.md`: 프로젝트 운영·개발·학습 원칙
+- `MASTER.md`: 전체 프로젝트 운영·개발·학습 및 문서 관리 원칙
+- `AIRA_PROJECT_CHARTER.md`: AIRA 제품 목표·범위·요구사항·성공 기준의 최상위 제품 기준
 - `DECISIONS.md`: 확정 결정과 변경 이력
 - `ROADMAP.md`: 현재 위치와 향후 실행 순서
 - `AIRA_PROJECT_AUDIT_REPORT.md`: 실제 저장소 감사 결과
@@ -35,13 +35,18 @@
 
 ## 3. 현재 위치
 
-- 기존 학습 Phase: Phase 0부터 Phase 13까지 완료
-- 현재 제품 단계: Stage 5 — Internet Research Expansion / Patent Research Vertical Slice 진행 중
-- 현재 상태: UTF-8 TXT/Markdown, text-based PDF 및 text-bearing HWPX Local baseline과
-  Integrated Web + Local Federated Research, persistent embedding/parsed cache, private result
-  artifact 및 manual cache lifecycle을 실제 smoke까지 완료했다. HWP binary, OCR 및 추가
-  hardening은 evidence-driven follow-up이며 Stage 4 baseline completion blocker가 아니다.
-- 현재 기준일: 2026-08-17
+- 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
+- 현재 제품 단계: Stage 5 — Internet Research Expansion
+- 현재 Vertical Slice: Patent Research Vertical Slice
+- 현재 완료 지점: Step 3G — Patent User Acceptance Test `FINAL PASS`
+- 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5에서는 EPO OPS
+  structured patent provider, request-grounded concept planning, deterministic CQL, bounded
+  execution, VERIFIED patent metadata/abstract binding, technical-relevance evidence,
+  patent-specific synthesis/support verification, `aira research-patent` CLI 및 사용자 UAT까지
+  first usable Patent Technical Research slice를 완료했다.
+- Stage 5 전체 상태: `IN PROGRESS`
+- 다음 공식 작업: Patent Research Vertical Slice Step 4A — Patent Metadata Expansion
+- 현재 기준일: 2026-08-18
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -61,28 +66,27 @@
 - [x] `AIRA_INTEGRATION_PLAN.md`
 - [x] `AIRA_SEARCH_PROVIDER_DECISION.md`
 
-다음 문서 점검 순서:
+문서 점검 상태:
 
-- [ ] `CURRICULUM.md`
-- [ ] `AGENTS.md`
-- [ ] `README.md`
-- [ ] `LEARNING_LOG.md`
-- [ ] 기타 기존 핵심 문서
+- [x] `CURRICULUM.md`
+- [x] `AGENTS.md`
+- [x] `README.md`
+- [x] `LEARNING_LOG.md`
+- [x] 기타 현재 상태 관련 핵심 문서 — 2026-08-18 documentation reconciliation audit
 
 현재 검증 기준:
 
-- 기준일: 2026-08-08
+- 기준일: 2026-08-18
 - Python: `3.12.3`
 - pytest: `9.1.1`
 - Ruff: `0.16.0`
-- Step 6.5 최종 전체 Regression: `4468 passed in 10.19s`
-- Ruff: `All checks passed`
-- `git diff --cached --check`: 통과
-- Step 6.5 Checkpoint Commit: `640df8a`
-- Commit Message: `feat: add research run observability and latency metrics`
-- `origin/main` Push 완료
-- Research Run Observability, Structured Output Recovery, Evidence Semantic Usage
-  계측 및 관련 Regression을 포함한 현재 Checkpoint가 전체 검증을 통과했다.
+- Step 3G focused Patent regression: `66 passed`
+- Step 3G full repository regression: `5302 passed`
+- Ruff: `PASS`
+- changed Python format check: `PASS`
+- `git diff --check`: `PASS`
+- Patent live UAT: `PASS`
+- accepted code checkpoint: `e3e1d65e6790fa2656f25f260608e4950519052f`
 
 판정 원칙:
 
@@ -785,8 +789,15 @@ Rewrite가 아니라 Integration-first
 ## 상태
 
 - [~] 진행 중
-- Patent Research Vertical Slice는 2026-08-18 Step 3D Technical Relevance Evidence / Evaluation까지 FINAL PASS다. EPO OPS structured provider, grounded concept planning, deterministic CQL, bounded execution, VERIFIED mapping 및 technical-relevance evidence runtime이 실제 live smoke로 검증되었다.
-- Stage 5 전체 완료를 의미하지 않는다. Step 3E synthesis/report, Patent CLI, 학술자료, 다중 patent provider, claims/legal-status workflow는 후속 범위다.
+- Patent Research Vertical Slice의 first usable technical-research slice는 2026-08-18
+  Step 3G User Acceptance Test까지 `FINAL PASS`다.
+- 완료된 Patent first slice는 EPO OPS structured provider, grounded concept planning,
+  deterministic CQL, bounded execution, VERIFIED metadata/abstract binding,
+  technical-relevance evidence, patent-specific synthesis/support verification,
+  `aira research-patent` CLI와 live UAT를 포함한다.
+- Stage 5 전체 완료를 의미하지 않는다. Official Source, Public Internet PDF,
+  Academic Research, General Web completion audit, cross-source integration과
+  Patent 분석 확장은 후속 범위다.
 
 ## Work Items
 
@@ -833,14 +844,42 @@ Rewrite가 아니라 Integration-first
 - [ ] 동의어
 - [ ] 기술 구성요소
 - [ ] 분류코드
-- [ ] 특허번호
+- [x] 특허번호 — first slice에서 VERIFIED publication number identity 지원
 - [ ] 우선일
 - [ ] 출원일
-- [ ] 공개일
+- [x] 공개일 — first slice에서 VERIFIED publication date 지원
 - [ ] 출원인
 - [ ] 청구항
 - [ ] 법적 상태
 - [ ] 관련도와 위험도
+
+#### 5.5.1 현재 Patent first slice 상태
+
+```text
+Step 1~2D  Provider / domain foundation                    FINAL PASS
+Step 3A    PatentResearchHandler                           FINAL PASS
+Step 3B1   PatentSearchQueryPlan                           FINAL PASS
+Step 3B2   Grounded technical concept planning             FINAL PASS
+Step 3B3   Deterministic EPO CQL planning                  FINAL PASS
+Step 3C    Planning-to-execution runtime                   FINAL PASS
+Step 3D    Technical relevance evidence/evaluation         FINAL PASS
+Step 3E    Patent synthesis/report/support verification    FINAL PASS
+Step 3F    Patent CLI integration                          FINAL PASS
+Step 3G    Patent User Acceptance Test                     FINAL PASS
+```
+
+현재 first slice는 `VERIFIED source identity`, `TECHNICALLY RELEVANT evidence`,
+`FULLY SUPPORTED synthesis`, `LEGAL CONCLUSION`을 서로 다른 의미 층으로 유지한다.
+
+다음 공식 작업:
+
+```text
+Step 4A — Patent Metadata Expansion
+```
+
+Step 4A는 claim analysis와 prior-art comparison 이전에 patent metadata contract를
+확장하는 제품 작업이다. 세부 schema/provider 범위는 실제 EPO OPS response와 현재 code
+audit을 바탕으로 별도 설계한다.
 
 ## 완료 결과
 
@@ -3049,7 +3088,7 @@ Patent Research Vertical Slice
 
 > 이 섹션은 Stage 5 Patent Research Vertical Slice의 최신 authoritative progress이다.
 
-## 34.1 현재 상태
+## 34.1 Initial Provider-Foundation Checkpoint
 
 ```text
 Step 1   Patent Domain Foundation                         FINAL PASS
@@ -3116,7 +3155,7 @@ USPTO ODP     → deferred
 WIPO HTML     → dynamic/API adapter required; no first-slice HTML parser
 ```
 
-## 34.6 현재 검증 기준
+## 34.6 Provider-Foundation 당시 검증 기준
 
 ```text
 Step 2B affected regression = 138 passed
@@ -3672,4 +3711,43 @@ result status
 
 Stage 5 Patent Research Vertical Slice의 Step 3A~3G first usable slice는 여기까지 완료되었다.
 
-다음 단계에서는 Step 3G UAT에서 남은 minor presentation debt와 product expansion 후보를 우선순위화한다.
+Step 3G closeout 당시에는 minor presentation debt와 product expansion 후보를 후속 검토 대상으로 남겼다. 현재 다음 공식 제품 작업은 아래 34.16에서 확정한 Step 4A — Patent Metadata Expansion이다.
+
+## 34.16 Documentation Reconciliation and Next Product Step
+
+2026-08-18 문서 audit에서 숫자형 Stage 0~11과 과거 `Stage A~I`, Phase 기반
+"현재 단계" 표현이 여러 문서에 동시에 남아 있음을 확인했다.
+
+공식 진행 체계는 다음으로 고정한다.
+
+```text
+AIRA_PROJECT_CHARTER.md / ROADMAP.md
+→ Stage 0~11 numeric product stages
+
+ROADMAP.md
+→ current position / next execution order authoritative source
+
+Phase 0~13 / Stage A~I / Local-Multi-Agent phase numbering
+→ historical learning / architecture checkpoints
+```
+
+현재 공식 위치:
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 3G — Patent User Acceptance Test
+Status: FINAL PASS
+```
+
+다음 공식 제품 작업:
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4A — Patent Metadata Expansion
+```
+
+Stage 5 전체는 아직 완료하지 않는다.

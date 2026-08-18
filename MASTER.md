@@ -1080,6 +1080,20 @@ Single-Agent와 Multi-Agent, 외부 LLM과 로컬 LLM은 가능한 경우
 
 문서에 구현되었다고 적혀 있다는 이유만으로 실제 구현 상태를 단정하지 않는다.
 
+### 15.4 Stage 번호와 현재 상태의 단일 기준
+
+AIRA의 공식 제품 Stage 번호는 `AIRA_PROJECT_CHARTER.md`와 `ROADMAP.md`의
+숫자형 `Stage 0`부터 `Stage 11`까지를 사용한다.
+
+과거 문서에 존재하는 `Phase 0~13`, `Stage A~I`, Local/Multi-Agent Phase 번호는
+학습·실험·재설계의 역사적 checkpoint다. 현재 제품 Stage를 대체하지 않는다.
+
+현재 위치와 다음 실행 순서의 단일 기준은 `ROADMAP.md`다.
+
+`AIRA_PROJECT_STATUS_AND_ROADMAP.md`는 장기 상태 기록과 historical snapshot으로
+사용하며, 해당 문서의 과거 `Stage A~I` 또는 과거 "다음 단계" 표현이
+`ROADMAP.md`의 최신 authoritative section과 충돌하면 `ROADMAP.md`를 우선한다.
+
 ---
 
 ## 16. 변경 관리

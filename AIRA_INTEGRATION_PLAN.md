@@ -584,9 +584,12 @@ All checks passed
 
 ---
 
-# 14. 현재 다음 작업
+# 14. Historical Next Work Checkpoint — Search Provider Decision
 
-현재 바로 수행할 작업은 다음이다.
+> 이 section은 초기 integration planning 당시의 checkpoint다. Search Provider Decision은
+> 이미 완료된 과거 작업이며 현재 다음 작업이 아니다.
+
+당시 바로 수행할 작업은 다음이었다.
 
 ```text
 Work Item 1 — Search Provider Decision Record
@@ -600,3 +603,29 @@ Work Item 1 — Search Provider Decision Record
 4. Provider 하나 선택
 5. `DECISIONS.md`에 결정 기록
 6. Codex 구현 작업지시서 작성
+
+# 15. 2026-08-18 현재 Integration Work Item
+
+현재 authoritative product position은 `ROADMAP.md`를 따른다.
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 3G — FINAL PASS
+```
+
+다음 Integration Work Item:
+
+```text
+Step 4A — Patent Metadata Expansion
+```
+
+목표는 현재 VERIFIED publication identity/metadata/abstract baseline을
+claim analysis와 prior-art comparison에 필요한 metadata contract로 확장하는 것이다.
+
+구현 전에 반드시 실제 EPO OPS response, 현재 patent schemas/adapters/runtime,
+기존 tests를 audit한다. 지원할 필드와 verification semantics는 provider evidence 없이
+추정하지 않는다.
+
+Step 4A에서는 novelty/invalidity/obviousness/infringement/FTO 같은 definitive legal
+conclusion을 추가하지 않는다.

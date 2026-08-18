@@ -4438,3 +4438,76 @@ Step 3G 이후 Patent Vertical Slice의 CLI first slice는 사용자 수용성 �
 - provider-specific recoverable candidate-miss taxonomy
 
 이들은 Step 3G closeout과 별도의 후속 설계 대상으로 남긴다.
+
+## D-072 — 공식 제품 Stage는 숫자형 Stage 0~11로 단일화하고 ROADMAP.md를 현재 위치의 단일 기준으로 사용한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Project Documentation / Roadmap Governance
+
+### 결정
+
+AIRA의 공식 제품 Stage 번호는 `AIRA_PROJECT_CHARTER.md`와 `ROADMAP.md`의
+숫자형 `Stage 0~11`만 사용한다.
+
+과거 문서에 존재하는 다음 번호는 역사적 checkpoint로 유지한다.
+
+- Phase 0~13
+- Stage A~I
+- Local LLM / Multi-Agent 실험 Phase 번호
+
+이들은 현재 제품 Stage를 대체하지 않는다.
+
+문서 권위는 다음과 같이 역할별로 분리한다.
+
+```text
+MASTER.md
+→ Agentic AI Lab 전체 프로젝트의 운영·개발·학습·문서 관리 원칙
+
+AIRA_PROJECT_CHARTER.md
+→ AIRA 제품 목표·범위·요구사항·성공 기준의 최상위 제품 기준
+
+DECISIONS.md
+→ 확정 결정과 변경 이력
+
+ROADMAP.md
+→ 현재 제품 위치와 다음 실행 순서의 authoritative source
+```
+
+`AIRA_PROJECT_STATUS_AND_ROADMAP.md`는 historical status compilation으로 유지하며
+과거 `Stage A~I` section은 historical vNext planning proposal로 해석한다.
+
+### 현재 공식 위치
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 3G — Patent User Acceptance Test
+Status: FINAL PASS
+```
+
+### 다음 공식 작업
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4A — Patent Metadata Expansion
+```
+
+### 이유
+
+2026-08-18 documentation audit에서 같은 저장소 안에 숫자형 Stage 0~11,
+Phase 13 current-state 표현, `Stage A~I`, 과거 Multi-Agent "next focus" 및
+Patent Step 3C/3D current-state 표현이 동시에 남아 있음을 확인했다.
+
+실제 코드, 테스트, live execution, Git commit과 최신 `ROADMAP.md`는 Patent Step 3G
+완료를 지지하므로 문서의 과거 current-state 문구를 현재 상태와 분리해야 한다.
+
+### 문서 원칙
+
+- 과거 기록은 삭제하지 않고 historical checkpoint로 보존한다.
+- "현재", "다음", "authoritative" 표현은 최신 canonical section에서만 사용한다.
+- 현재 구현 상태 판단은 `MASTER.md`의 사실 확인 우선순위를 따른다.
+- Stage 전환은 `ROADMAP.md`와 필요한 경우 `DECISIONS.md`에 명시한다.

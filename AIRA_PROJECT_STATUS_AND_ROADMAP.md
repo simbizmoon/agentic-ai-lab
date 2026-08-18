@@ -1,7 +1,7 @@
 # AIRA PROJECT STATUS AND ROADMAP
 ## Agentic AI Lab — 전체 로드맵, 현재 진행상황, 향후 과제
 
-- 기준일: 2026-08-15
+- 기준일: 2026-08-18
 - 프로젝트: Agentic AI Lab
 - 제품명: AIRA (Agentic Intelligence Research Assistant)
 - 개발 경로: `/home/moon/Project/agentic-ai-lab`
@@ -914,7 +914,14 @@ AIRA vNext의 목표:
 
 ---
 
-# 16. 다음 공식 Stage A — Project Rebaseline
+# 16. Historical vNext Planning Proposal — Stage A~I
+
+> **Historical note — 2026-08-18:** 이 문서의 Stage A~I는 2026-08-13 당시의
+> vNext planning proposal이다. 현재 제품 Stage 번호가 아니다.
+> 공식 제품 Stage는 `AIRA_PROJECT_CHARTER.md`와 `ROADMAP.md`의 숫자형
+> Stage 0~11을 사용하며, 현재 위치와 다음 실행 순서는 `ROADMAP.md`가 우선한다.
+
+## Historical Stage A — Project Rebaseline
 
 상태:
 
@@ -959,7 +966,7 @@ Rebaseline 완료 기준:
 
 ---
 
-# 17. 다음 공식 Stage B — Local Document Research Vertical Slice
+## Historical Stage B — Local Document Research Vertical Slice
 
 ## 우선순위
 
@@ -1008,7 +1015,7 @@ Local File
 
 ---
 
-# 18. Stage C — Internet + Local Integrated Research
+## Historical Stage C — Internet + Local Integrated Research
 
 Local Document vertical slice 다음 단계.
 
@@ -1045,7 +1052,7 @@ Research Report
 
 ---
 
-# 19. Stage D — Patent Research Vertical Slice
+## Historical Stage D — Patent Research Vertical Slice
 
 AIRA의 첫 전문 Domain Vertical 후보로 강하게 유지한다.
 
@@ -1091,7 +1098,7 @@ AIRA의 역할은
 
 ---
 
-# 20. Stage E — Advanced Cross-Source Verification
+## Historical Stage E — Advanced Cross-Source Verification
 
 Internet + Local + Patent 등 여러 source가 결합되면
 다음 검증 기능을 강화한다.
@@ -1114,7 +1121,7 @@ Internet + Local + Patent 등 여러 source가 결합되면
 
 ---
 
-# 21. Stage F — Memory / Research Reuse
+## Historical Stage F — Memory / Research Reuse
 
 현재 Memory 학습·기반은 존재하지만
 Live Research Product에 충분히 연결되어 있지 않다.
@@ -1133,7 +1140,7 @@ Memory는 LLM의 자유로운 장기 기억이 아니라
 
 ---
 
-# 22. Stage G — Cost Ledger / Provider Routing
+## Historical Stage G — Cost Ledger / Provider Routing
 
 현재:
 
@@ -1174,7 +1181,7 @@ other provider
 
 ---
 
-# 23. Stage H — Skills / MCP / ChatGPT Integration
+## Historical Stage H — Skills / MCP / ChatGPT Integration
 
 Core Research Capability가 충분히 안정된 뒤 진행한다.
 
@@ -1194,7 +1201,7 @@ MCP / ChatGPT integration의 목표는
 
 ---
 
-# 24. Stage I — Productization
+## Historical Stage I — Productization
 
 필요성이 실제로 확인될 때 진행한다.
 
@@ -1738,11 +1745,10 @@ Hardware
 
 ---
 
-# 37. 2026-08-16 최신 상태 — Stage 4 Local Document Expansion baseline 완료
+# 37. Historical Snapshot — 2026-08-16 Stage 4 Local Document Expansion baseline 완료
 
-> 이 섹션은 Stage 4와 다음 project step에 관한 최신 authoritative summary이다.
-> 앞선 Local Document, Integrated Web + Local 또는 cache 미래형 설명은 역사적 checkpoint로
-> 보존하되 현재 상태는 이 섹션과 D-059를 우선한다.
+> 이 섹션은 Stage 4 closure 당시의 historical snapshot이다.
+> Stage 4 결과 자체는 유효하지만 현재 제품 위치와 다음 실행 순서는 #39와 `ROADMAP.md`를 우선한다.
 
 ```text
 Stage 4 Local Document Expansion baseline         COMPLETE
@@ -1821,9 +1827,9 @@ Patent Research Vertical Slice
 Real patent inputs가 OCR, HWP, table identity, hostile/shared filesystem 또는 강화된 privacy
 workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
 
-# 38. 2026-08-18 최신 상태 — Patent Planning-to-Execution live validation 완료
+# 38. Historical Snapshot — 2026-08-18 Patent Planning-to-Execution live validation 완료
 
-> 이 섹션은 Patent Research Vertical Slice의 최신 authoritative project status이다.
+> 이 섹션은 Step 3C 시점의 historical snapshot이다. 현재 상태는 #39와 `ROADMAP.md`를 우선한다.
 
 ```text
 Stage 4 Local Document Expansion baseline → COMPLETE
@@ -1890,3 +1896,61 @@ Step 3C 검증은 focused integration `166 passed`, Patent/EPO broader regressio
 최종 live smoke에서 `request_binding=True`, `verified_records=1`, `verification_state=verified`를 확인했고 첫 VERIFIED 문헌은 `CN121905049A`, publication date `2026-04-21`이었다.
 
 다음 즉시 설계 과제는 **technical-relevance evidence/evaluation/synthesis boundary**다. VERIFIED source identity와 technical relevance 또는 legal conclusion은 계속 분리한다.
+
+# 39. 2026-08-18 최신 상태 — Patent Step 3G 종료 및 문서 체계 단일화
+
+> 현재 제품 위치는 `ROADMAP.md`를 authoritative source로 사용한다.
+> 이 section은 과거 Stage A~I 계획과 #38 Step 3C snapshot 이후의 최신 상태를 기록한다.
+
+```text
+Stage 4 Local Document Expansion baseline → COMPLETE
+Stage 5 Internet Research Expansion        → IN PROGRESS
+Patent Research Vertical Slice             → Step 3G FINAL PASS
+```
+
+완료된 Patent first usable technical-research slice:
+
+```text
+EPO OPS structured provider                COMPLETE
+PatentResearchHandler                      COMPLETE
+Bounded query planning                     COMPLETE
+Grounded technical concept planning        COMPLETE
+Deterministic EPO CQL planning             COMPLETE
+Planning-to-execution runtime              COMPLETE
+VERIFIED metadata/abstract binding         COMPLETE
+Technical relevance evidence/evaluation    COMPLETE
+Patent synthesis/report verification       COMPLETE
+aira research-patent CLI                   COMPLETE
+Patent User Acceptance Test                FINAL PASS
+```
+
+최종 Step 3G 검증 기준:
+
+```text
+focused patent regression  = 66 passed
+full repository regression = 5302 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+live UAT                   = PASS
+```
+
+현재 의미 경계:
+
+```text
+result status
+≠ VERIFIED source identity
+≠ TECHNICALLY RELEVANT evidence
+≠ FULLY SUPPORTED synthesis
+≠ LEGAL CONCLUSION
+```
+
+다음 공식 작업:
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4A — Patent Metadata Expansion
+```
+
+Stage 5 전체는 아직 `IN PROGRESS`다.

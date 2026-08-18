@@ -285,9 +285,9 @@ Phase 11 live smoke에서 default source read concurrency 2로 두 개의 선택
 - parallelism은 dependency와 shared state가 안전한 경계에서만 사용한다.
 - benchmark 수치는 해당 fixture/workload 범위 밖으로 무리하게 일반화하지 않는다.
 
-## 12. 2026-08-17 Patent Development Runtime Boundary
+## 12. Historical Patent Development Runtime Boundary — 2026-08-17
 
-> 현재 구현된 Patent Research 개발 경계다. 아직 사용자-facing CLI runtime은 아니다.
+> 이 section은 Step 3C 시점의 historical Patent development boundary다. 현재 사용자-facing Patent runtime은 Section 13을 우선한다.
 
 ### 12.1 Structured Patent Provider Foundation
 
@@ -378,7 +378,7 @@ PatentResearchRequest
 - `PatentResearchRuntime`은 concept generation metadata, query plan, execution result를 보존한다.
 - 각 composition boundary에서 original `PatentResearchRequest` binding을 확인한다.
 
-### 12.6 아직 runtime에 미연결
+### 12.6 당시 runtime에 미연결
 
 - technical-relevance evidence/evaluation/synthesis
 - result/report writer integration
@@ -395,3 +395,55 @@ PatentResearchRequest
 - VERIFIED semantics는 adapter뿐 아니라 schema invariant로도 보호한다.
 - error classification 없이 broad exception skip을 도입하지 않는다.
 - legal conclusion과 technical relevance를 분리한다.
+
+## 13. 2026-08-18 Patent Technical Research User Runtime
+
+> 이 section은 Patent runtime의 최신 authoritative architecture snapshot이다.
+> Section 12의 "아직 사용자-facing CLI runtime은 아니다"와 미연결 목록은
+> Step 3C 시점의 historical boundary로 보존한다.
+
+### 13.1 Top-level flow
+
+```text
+aira research-patent
+→ CLI parsing / presentation
+→ PatentResearchRequest
+→ PatentTechnicalResearchReportRuntime
+   → OpenAIPatentTechnicalConceptGenerator
+   → EpoOpsPatentCqlPlanner
+   → PatentResearchPlanExecutor
+   → EpoOpsPatentRuntime / PatentResearchHandler
+   → VERIFIED patent records
+   → PatentTechnicalRelevanceRuntime
+   → PatentTechnicalSynthesisRuntime
+   → PatentTechnicalSynthesisVerificationRuntime
+→ bounded user-visible output
+```
+
+### 13.2 Meaning boundaries
+
+```text
+VERIFIED source identity
+≠ TECHNICALLY RELEVANT evidence
+≠ FULLY SUPPORTED synthesis
+≠ LEGAL CONCLUSION
+```
+
+### 13.3 Zero-finding presentation
+
+Zero-finding internal deterministic verification state는 사용자에게
+`overall_decision=verified`로 노출하지 않는다.
+
+```text
+result_status=no_relevant_findings
+synthesis_accepted=not_applicable
+verification_status=not_applicable
+```
+
+### 13.4 Remaining Patent architecture
+
+다음 공식 작업은 `Step 4A — Patent Metadata Expansion`이다.
+
+Claim acquisition/parsing, claim-element decomposition, claim chart,
+multi-patent comparison, legal-status verification 및 authoritative legal-analysis는
+현재 user runtime에 포함되지 않는다.

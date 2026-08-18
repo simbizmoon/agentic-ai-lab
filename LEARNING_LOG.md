@@ -3003,3 +3003,40 @@ Patent Vertical Slice의 first usable CLI slice는 Step 3G까지 닫혔다.
 - provider-specific recoverable candidate-miss taxonomy
 
 각 항목은 기존 capability 재사용 가능성, product value, safety risk, 구현 비용을 비교한 뒤 별도 결정으로 진행한다.
+
+## 2026-08-18 — Documentation Reconciliation: 역사적 roadmap과 현재 roadmap을 같은 권위로 두면 안 된다
+
+2026-08-18 전체 documentation audit에서 실제 저장소에는 다음 표현이 동시에 존재했다.
+
+```text
+Phase 13 current
+Stage A~I historical vNext planning proposal
+Stage 5 current
+Patent Step 3C current
+Patent Step 3G FINAL PASS
+```
+
+각 문장은 작성 당시에는 맞았지만 모두 "현재" 권위를 유지하면 프로젝트 상태가 모순된다.
+
+교훈:
+
+> 역사적 기록을 보존하는 것과 현재 authoritative state를 여러 곳에서 유지하는 것은 다르다.
+
+따라서 공식 제품 Stage는 숫자형 Stage 0~11로 단일화하고, 현재 위치와 다음 실행 순서는
+`ROADMAP.md`를 단일 기준으로 사용한다.
+
+현재 상태:
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 3G FINAL PASS
+```
+
+다음 작업:
+
+```text
+Step 4A — Patent Metadata Expansion
+```
+
+문서 정합성도 제품 품질의 일부이며, 실제 코드·테스트·실행·Git 상태가 오래된 설명 문서보다 우선한다.

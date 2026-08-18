@@ -1,6 +1,6 @@
 # AIRA Local LLM / OpenAI LLM / Agent 사용 매뉴얼
 
-- 기준일: 2026-08-14
+- 기준일: 2026-08-18
 - 프로젝트: Agentic AI Lab / AIRA
 - 프로젝트 경로: `/home/moon/Project/agentic-ai-lab`
 - 실험 데이터 경로: `/mnt/ai-data`
@@ -24,6 +24,7 @@
 7. OpenAI Agents SDK로 별도 Agent 실행
 8. Local Document Research 실행과 모드 선택
 9. 상태 확인, 종료, 문제 해결
+10. Patent Technical Research CLI 실행
 
 중요한 원칙:
 
@@ -1692,5 +1693,77 @@ OpenAI 공식 문서에서 다음을 확인하여 일반 OpenAI/Agent 사용법�
 - Responses API 직접 사용과 Agents SDK를 한 프로젝트에서 목적에 따라 함께 사용할 수 있음
 
 ---
+
+# 41. 2026-08-18 Patent Technical Research CLI
+
+2026-08-18 현재 Stage 5 Patent Research Vertical Slice의 first usable CLI slice는
+Step 3G User Acceptance Test까지 `FINAL PASS`다.
+
+## 41.1 도움말
+
+```bash
+cd /home/moon/Project/agentic-ai-lab
+source .venv/bin/activate
+aira research-patent --help
+```
+
+## 41.2 기본 실행 형태
+
+```bash
+aira research-patent   --question "How do patent publications describe seat occupancy detection using pressure sensors?"   --objective "Identify technically relevant patent publications and evidence."
+```
+
+필요하면 다음 bounded option을 사용한다.
+
+```text
+--prior-art-cutoff-date YYYY-MM-DD
+--maximum-search-results N
+--maximum-sources N
+--maximum-bytes N
+```
+
+`prior_art_cutoff_date`는 retrieval bound이며 법률상 prior-art 판정을 의미하지 않는다.
+
+## 41.3 출력 의미
+
+Finding이 존재할 때:
+
+```text
+result_status=findings_available
+synthesis_accepted=true|false
+```
+
+Finding이 없을 때:
+
+```text
+result_status=no_relevant_findings
+synthesis_accepted=not_applicable
+verification_status=not_applicable
+```
+
+출력은 다음 의미 층을 구분한다.
+
+```text
+VERIFIED source identity
+≠ TECHNICALLY RELEVANT evidence
+≠ FULLY SUPPORTED synthesis
+≠ LEGAL CONCLUSION
+```
+
+현재 CLI는 novelty, invalidity, obviousness, infringement, FTO, patentability 또는
+current legal status를 definitive legal conclusion으로 판정하지 않는다.
+
+## 41.4 Credential
+
+EPO credential 값은 출력하거나 Git에 commit하지 않는다.
+Production loader는 project `.env`를 읽을 수 있으나 문서에는 실제 key/secret 값을 기록하지 않는다.
+
+## 41.5 현재 다음 제품 작업
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4A — Patent Metadata Expansion
+```
 
 **문서 끝**
