@@ -2409,3 +2409,204 @@ bounded live smoke          = PASS
 목표는 traceable technical-relevance evidence를 citation/provenance를 잃지 않고 사람이 읽을 수 있는 bounded research report로 합성하는 것이다.
 
 첫 report에서는 “technically relevant”, “potentially relevant prior art”, “cited excerpt appears to disclose …” 같은 제한적 표현만 사용하고 novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 별도 후속 capability로 남긴다.
+
+## 2026-08-18 — Patent Synthesis / Report: Relevant, Supported, Legal은 서로 다른 층이다
+
+### 1. Generic evidence를 재사용해도 generic claim model을 억지로 재사용할 필요는 없다
+
+Step 3E audit 결과 `ResearchClaim`은 일반 research assertion이고, `ResearchSynthesisReport`와 `DeterministicResearchSynthesizer`는 `ResearchClaimSet`을 필수 전제로 했다.
+
+Patent domain에서는 “claim”이 특허 청구항이라는 별도 의미를 가지므로 다음 변환을 만들지 않았다.
+
+```text
+Patent evidence
+→ generic ResearchClaim
+→ generic synthesis report
+```
+
+대신:
+
+```text
+ResearchEvidenceSet
+→ PatentTechnicalFinding
+→ PatentTechnicalResearchReport
+```
+
+이라는 thin domain layer를 두었다.
+
+교훈:
+
+> 재사용은 schema까지 무조건 공유하는 것이 아니라, 책임이 실제로 같은 층까지만 공유해야 한다.
+
+### 2. VERIFIED, Relevant, Supported는 모두 별도 판정이다
+
+이번 단계까지 의미 층은 다음처럼 확장되었다.
+
+```text
+VERIFIED
+= source identity / metadata / abstract binding
+
+TECHNICALLY RELEVANT
+= passage가 supplied question/objective에 기술적으로 기여함
+
+FULLY SUPPORTED SYNTHESIS
+= 생성된 요약문이 supplied evidence보다 강하지 않음
+
+LEGAL CONCLUSION
+= novelty, obviousness, invalidity, infringement, FTO 등
+```
+
+앞 단계 성공이 뒤 단계 성공을 자동으로 의미하지 않는다.
+
+Live smoke에서 실제로:
+
+- `CN118906928A`는 `partially_relevant`
+- 하지만 그 문헌에 대한 synthesized summary는 `fully_supported`
+
+였다.
+
+이는 relevance와 support가 서로 다른 평가 축임을 실제 runtime에서 보여준다.
+
+### 3. LLM output identity는 code가 소유해야 한다
+
+각 `PatentTechnicalFinding`의 `finding_id`는 모델이 생성하지 않는다.
+
+Synthesis model은 supplied ID를 그대로 copy해야 하며 누락/추가/중복/변경 중 하나라도 발생하면 fail-fast한다.
+
+이 패턴은 기존 batch evaluator의 `item_id` ownership과 같다.
+
+### 4. Synthesis 뒤에 별도 entailment verification이 필요하다
+
+Prompt에 “evidence만 사용하라”고 적는 것만으로는 충분하지 않다.
+
+Step 3E3에서는 기존 `OpenAISemanticCitationEvaluator`를 재사용하여:
+
+```text
+technical_summary
+↔ exact evidence excerpt
+```
+
+를 다시 평가했다.
+
+Overall summary는 모든 selected evidence를 결합한 text와 비교했고, `FULLY_SUPPORTED`만 최종 accept 대상으로 두었다.
+
+### 5. zero-finding path는 deterministic해야 한다
+
+초기 구현에서는 finding이 0개여도 OpenAI synthesizer를 호출했다.
+
+Verifier는 zero-finding 상태를 exact deterministic sentence로 확인했으므로, 모델이 같은 의미를 다른 표현으로 쓰면 불필요하게 실패할 수 있었다.
+
+수정 후:
+
+```text
+finding_count == 0
+→ no LLM call
+→ deterministic zero-finding synthesis
+```
+
+로 바꾸었다.
+
+교훈:
+
+> 모델이 필요 없는 상태 설명까지 모델에게 맡기면 비결정성과 비용만 늘어난다.
+
+### 6. style validation도 patch workflow의 일부다
+
+Step 3E1~3E4 patch는 기능 테스트가 통과한 뒤에도 여러 차례 Ruff import-order / formatter failure가 발생했다.
+
+또 Step 3E3에서는 patch artifact 생성 환경에서 `ruff` 실행 권한 문제로 사전 formatter 검증을 완료하지 못했다.
+
+Step 3E4 zero-finding fix에서는 리스트 내부 implicit string concatenation이 `ISC004`에 걸렸다.
+
+교훈:
+
+- `py_compile`은 syntax만 검증한다.
+- repository patch는 Ruff import rules와 formatter까지 별도 확인해야 한다.
+- patch utility와 smoke utility도 production artifact와 같은 수준으로 검증해야 한다.
+- 사전 Ruff 실행이 불가능한 환경이면 사용자 repo에서 `ruff check --fix` / `ruff format`을 명시적인 첫 검증 단계로 둔다.
+
+### 7. bounded live smoke는 최종 의미 경계까지 검증해야 한다
+
+Step 3E5는 실제 EPO + OpenAI를 다음 전체 경로로 실행했다.
+
+```text
+natural-language PatentResearchRequest
+→ grounded technical concepts
+→ deterministic EPO CQL
+→ EPO OPS
+→ VERIFIED records
+→ semantic evidence
+→ deterministic report
+→ bounded synthesis
+→ semantic support verification
+```
+
+Live result:
+
+```text
+VERIFIED records = 2
+evidence         = 2
+findings         = 2
+unevaluated      = 0
+accepted         = True
+```
+
+문헌:
+
+- `CN118906928A`
+  - `partially_relevant`
+  - relevance score `0.620`
+  - synthesis support `fully_supported`
+- `WO2023156109A1`
+  - `directly_relevant`
+  - relevance score `0.860`
+  - synthesis support `fully_supported`
+
+Overall synthesis도 `fully_supported`, score `0.980`이었다.
+
+모든 request/report/finding binding contract가 PASS했다.
+
+### 8. accepted=True는 법률 결론이 아니다
+
+이번 Step의 가장 중요한 안전 경계:
+
+```text
+accepted=True
+= generated synthesis is fully supported by supplied evidence
+```
+
+다음을 의미하지 않는다.
+
+```text
+novel
+patentable
+non-obvious
+valid
+non-infringing
+free to operate
+```
+
+따라서 Patent Vertical Slice는 technical research assistant로 남으며, authoritative legal-analysis layer가 없는 상태에서 법률 결론을 과장하지 않는다.
+
+### 9. Full regression이 Step 3E를 닫는다
+
+최종 검증:
+
+```text
+Step 3E affected regression = 42 passed
+full repository             = 5296 passed
+Ruff                        = PASS
+changed Python format       = PASS
+git diff --check            = PASS
+bounded live EPO + OpenAI   = PASS
+```
+
+이 결과로 Step 3E — Patent Synthesis / Report는 `FINAL PASS`다.
+
+### 다음 학습 목표
+
+다음은 Step 3F — Patent CLI Integration이다.
+
+목표는 이미 검증된 top-level runtime을 CLI에 얇게 연결하고, 사용자가 verified metadata / technical relevance / provenance / synthesis / verification / scope notice를 명확히 구분해 볼 수 있도록 하는 것이다.
+
+그 다음 Step 3G에서 실제 사용자 관점 UAT를 수행한다.

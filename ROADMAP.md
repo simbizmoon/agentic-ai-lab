@@ -3423,24 +3423,108 @@ Live smoke:
 
 이번 Step 3D로 D-066에서 관찰했던 “provider-valid query가 기술적으로 관련 없는 결과를 반환할 수 있다”는 문제에 downstream relevance-evaluation boundary가 실제 runtime으로 추가되었다.
 
-## 34.13 다음 작업 — Step 3E Patent Synthesis / Report
+## 34.13 Step 3E — Patent Synthesis / Report 완료
 
-다음 product step은 Step 3D의 traceable evidence를 사람이 읽을 수 있는 bounded Patent Research 결과로 합성하는 것이다.
+Step 3E는 `FINAL PASS`다.
 
 ```text
 PatentTechnicalRelevanceRuntimeResult
-→ selected technical-relevance evidence
-→ bounded patent synthesis
-→ citation/provenance-preserving report
+→ DeterministicPatentTechnicalReportBuilder
+→ PatentTechnicalResearchReport
+→ OpenAIPatentTechnicalSynthesizer
+→ PatentTechnicalSynthesis
+→ PatentTechnicalSynthesisVerifier
+→ PatentTechnicalSynthesisVerificationResult
+→ PatentTechnicalResearchReportRuntimeResult
 ```
 
-첫 report는 다음 수준의 표현만 허용한다.
+확정된 경계:
 
-- technically relevant
-- potentially relevant prior art
-- cited excerpt appears to disclose feature X
-- verified / unverified publication metadata
+- generic `ResearchEvidenceSet`과 exact provenance는 재사용한다.
+- generic `ResearchClaim` / `ResearchClaimSet`을 Patent report의 필수 중간 표현으로 사용하지 않는다.
+- Patent finding은 `DIRECTLY_RELEVANT` 또는 `PARTIALLY_RELEVANT` evidence에서만 생성한다.
+- `UNEVALUATED` evidence는 finding으로 승격하지 않는다.
+- `IRRELEVANT` leakage는 fail-fast한다.
+- OpenAI synthesis는 supplied finding/evidence만 요약하며 outside knowledge나 새로운 technical/legal fact를 생성하지 않는다.
+- finding ID는 code-owned identity로 유지하고 LLM의 누락/추가/중복/변경을 거부한다.
+- zero-finding path는 LLM 호출 없이 deterministic synthesis를 생성한다.
+- synthesis 결과는 generic `OpenAISemanticCitationEvaluator`를 재사용해 exact evidence와 다시 비교한다.
+- `FULLY_SUPPORTED`만 `VERIFIED`이며 `PARTIALLY_SUPPORTED`는 `NEEDS_REVISION`, `UNSUPPORTED`/`CONTRADICTED`는 `REJECTED`다.
+- final `accepted=True`는 synthesis가 supplied evidence에 fully supported됨만 의미한다.
+- novelty, anticipation, obviousness, invalidity, infringement, FTO, current legal status는 계속 범위 밖이다.
+- top-level runtime이 relevance → report → synthesis → verification을 한 번에 orchestration하고 request/report binding을 재검증한다.
 
-definitive novelty destruction, anticipation, invalidity, obviousness, infringement, FTO 또는 current legal-status conclusion은 계속 범위 밖이다.
+구현:
 
-CLI integration은 Step 3E synthesis/report contract가 안정된 뒤 별도 후속 단계에서 수행한다.
+```text
+app/schemas/patent_technical_report.py
+app/schemas/patent_technical_synthesis.py
+app/schemas/patent_technical_synthesis_verification.py
+
+app/research/patent_technical_report_builder.py
+app/research/openai_patent_technical_synthesizer.py
+app/research/patent_technical_synthesis_runtime.py
+app/research/patent_technical_synthesis_verifier.py
+app/research/patent_technical_synthesis_verification_runtime.py
+app/research/patent_technical_research_report_runtime.py
+```
+
+검증:
+
+```text
+Step 3E affected regression     = 42 passed
+full repository regression      = 5296 passed
+Ruff                            = PASS
+changed Python format           = PASS
+git diff --check                = PASS
+bounded live EPO + OpenAI smoke = PASS
+```
+
+Live smoke:
+
+- query: `ta all "seat occupancy detection" and ta all "pressure sensors" and pd < 20260818`
+- VERIFIED records: 2
+- final evidence: 2
+- report findings: 2
+- unevaluated evidence: 0
+- `CN118906928A`: `partially_relevant`, score `0.620`
+- `WO2023156109A1`: `directly_relevant`, score `0.860`
+- both finding summaries: `fully_supported`
+- overall summary: `fully_supported`
+- final `accepted=True`
+- all request/report/finding binding checks: PASS
+
+Step 3E로 AIRA Patent Vertical Slice는 다음 네 의미 층을 명시적으로 분리했다.
+
+```text
+VERIFIED source identity
+≠ TECHNICALLY RELEVANT evidence
+≠ FULLY SUPPORTED synthesis
+≠ LEGAL CONCLUSION
+```
+
+## 34.14 다음 작업 — Step 3F Patent CLI Integration
+
+다음 product step은 안정화된 top-level patent report runtime을 CLI에 연결하는 것이다.
+
+목표:
+
+```text
+CLI input
+→ PatentResearchRequest
+→ PatentTechnicalResearchReportRuntime
+→ bounded user-visible result
+```
+
+CLI는 기존 runtime contract를 얇게 노출하며 business logic을 새로 복제하지 않는다.
+
+CLI output은 최소 다음을 명확히 구분해야 한다.
+
+- verified publication metadata
+- technical relevance finding
+- evidence excerpt/provenance
+- bounded synthesis
+- support-verification status
+- scope notice / legal-conclusion exclusion
+
+CLI integration 뒤 Step 3G에서 실제 사용자 관점 UAT를 수행한다.

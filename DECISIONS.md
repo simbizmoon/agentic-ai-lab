@@ -3901,3 +3901,179 @@ Live smoke:
 ### 후속 범위
 
 Step 3E에서는 Step 3D의 traceable relevance evidence를 사람이 읽을 수 있는 bounded patent synthesis/report로 구성한다. Generic `ResearchClaim`과 patent legal claim을 동일 개념으로 취급하지 않으며, claim-element comparison과 legal conclusion은 별도 domain contract 및 검증 단계로 남긴다.
+
+## D-069 — Patent synthesis/report는 generic ResearchClaim stack에 강제 결합하지 않고 patent-specific bounded report layer로 구성한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3E
+
+### 결정
+
+Step 3D의 traceable `ResearchEvidenceSet`은 재사용하되, generic `ResearchClaim`, `ResearchClaimSet`, `DeterministicResearchSynthesizer`, `ResearchSynthesisReport`를 Patent report의 필수 중간 표현으로 사용하지 않는다.
+
+```text
+PatentTechnicalRelevanceRuntimeResult
+→ DeterministicPatentTechnicalReportBuilder
+→ PatentTechnicalResearchReport
+→ OpenAIPatentTechnicalSynthesizer
+→ PatentTechnicalSynthesis
+→ PatentTechnicalSynthesisVerifier
+→ PatentTechnicalSynthesisVerificationResult
+```
+
+Patent domain에서 일반 연구의 `ResearchClaim`은 특허법상 청구항(claim)과 용어 충돌이 있고, 기존 generic synthesis schema는 `ResearchClaimSet` 존재를 전제로 한다. Step 3E에서는 불필요한 `Patent evidence → generic ResearchClaim → generic report` 변환을 만들지 않고 thin patent-specific report layer를 둔다.
+
+재사용하는 generic capability:
+
+- `ResearchEvidenceSet`
+- source/document identity와 exact excerpt provenance
+- `OpenAISemanticCitationEvaluator`의 claim/evidence entailment 평가
+- 기존 structured-output failure handling과 OpenAI client/settings composition
+
+직접 재사용하지 않는 generic component:
+
+- `ResearchClaim`
+- `ResearchClaimSet`
+- `SemanticCitationVerificationService`
+- `DeterministicResearchSynthesizer`
+- `ResearchSynthesisReport`
+
+`SemanticCitationVerificationService`는 `ResearchClaimSet`에 결합되어 있으므로, Step 3E3에서는 더 낮은 수준의 `OpenAISemanticCitationEvaluator`만 재사용한다.
+
+### Report contract
+
+`PatentTechnicalFinding`은 semantic evaluation이 완료된 다음 두 relevance level만 허용한다.
+
+- `DIRECTLY_RELEVANT`
+- `PARTIALLY_RELEVANT`
+
+`UNEVALUATED` evidence는 finding으로 승격하지 않고 `unevaluated_evidence_ids`에만 남긴다.
+
+`IRRELEVANT` evidence가 report builder에 도달하면 fail-fast한다.
+
+각 finding은 다음 provenance를 보존한다.
+
+- publication number
+- title
+- source URL
+- publication date
+- source family
+- metadata verification state
+- relevance level / score / rationale
+- evidence ID
+- source ID / document ID
+- exact excerpt
+- exact `start_character` / `end_character`
+
+### Bounded synthesis policy
+
+OpenAI synthesis는 기존 finding/evidence를 사람이 읽기 쉬운 기술 요약으로만 바꾼다.
+
+모델은 다음을 해서는 안 된다.
+
+- outside knowledge 사용
+- 새로운 patent number/date/applicant/feature/fact 생성
+- evidence보다 강한 기술 주장 생성
+- novelty 또는 lack of novelty 결론
+- anticipation 결론
+- obviousness / inventive-step 결론
+- validity / invalidity 결론
+- infringement 결론
+- freedom-to-operate 결론
+- current legal-status 결론
+
+Finding ID는 code-owned identity다. 모델 output이 finding ID를 누락, 추가, 중복, 변경하면 fail-fast한다.
+
+Finding이 0개이면 LLM을 호출하지 않고 deterministic zero-finding synthesis를 생성한다. 이는 의미가 같은 임의 문구가 verifier의 exact zero-finding contract와 충돌하는 비결정성을 제거한다.
+
+### Synthesis support verification
+
+각 `technical_summary`는 해당 finding의 exact evidence excerpt와 다시 비교한다.
+
+Overall summary는 모든 selected evidence excerpt의 결합과 비교한다.
+
+기존 semantic citation support mapping을 유지한다.
+
+```text
+FULLY_SUPPORTED
+→ VERIFIED
+
+PARTIALLY_SUPPORTED
+→ NEEDS_REVISION
+
+UNSUPPORTED
+→ REJECTED
+
+CONTRADICTED
+→ REJECTED
+```
+
+최종 `accepted=True`는 모든 finding summary와 overall summary가 `FULLY_SUPPORTED`인 경우에만 가능하다.
+
+`accepted=True`의 의미는 다음과 같다.
+
+```text
+generated technical synthesis is fully supported by supplied evidence
+```
+
+다음을 의미하지 않는다.
+
+```text
+novel
+patentable
+non-obvious
+valid
+non-infringing
+free to operate
+```
+
+### Top-level runtime
+
+Step 3E4에서 다음 end-to-end composition을 제공한다.
+
+```text
+PatentResearchRequest
+→ PatentTechnicalRelevanceRuntime
+→ PatentTechnicalSynthesisRuntime
+→ PatentTechnicalSynthesisVerificationRuntime
+→ PatentTechnicalResearchReportRuntimeResult
+```
+
+각 composition boundary에서 request ID, task ID, report ID, synthesis-result identity를 재검증한다.
+
+### 검증
+
+```text
+Step 3E focused/affected regression = 42 passed
+full repository regression          = 5296 passed
+Ruff                                = PASS
+changed Python format               = PASS
+git diff --check                    = PASS
+bounded live EPO + OpenAI E2E       = PASS
+```
+
+Live end-to-end smoke:
+
+- query purpose: `PRIMARY`
+- executed CQL: `ta all "seat occupancy detection" and ta all "pressure sensors" and pd < 20260818`
+- VERIFIED records: 2
+- evidence: 2
+- findings: 2
+- unevaluated evidence: 0
+- `CN118906928A`: `partially_relevant`, score `0.620`
+- `WO2023156109A1`: `directly_relevant`, score `0.860`
+- finding summary support: both `fully_supported`
+- overall summary support: `fully_supported`
+- final `accepted=True`
+- all request/report/finding binding checks: PASS
+
+이 live result는 기술적 relevance와 evidence-supported synthesis를 검증한 것이며 patent-law conclusion이 아니다.
+
+### 후속 범위
+
+Step 3F에서 이 안정된 report runtime을 CLI에 연결한다.
+
+Step 3G에서 사용자 관점 UAT를 수행한다.
+
+Claim-element comparison, novelty/obviousness/legal-status analysis는 별도 domain contract와 authoritative legal-analysis layer가 설계되기 전까지 범위 밖이다.
