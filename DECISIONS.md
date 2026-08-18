@@ -4229,3 +4229,212 @@ Step 3G에서 실제 사용자 관점 User Acceptance Test를 수행한다.
 UAT에서는 사용자가 CLI output을 보고 각 의미 층을 올바르게 구분할 수 있는지, 입력/오류 메시지/결과 표현이 실사용에 충분한지 평가한다.
 
 File report persistence, claim-element comparison, novelty/obviousness/legal-status analysis는 별도 후속 capability로 남긴다.
+
+## D-071 — Patent UAT는 result status와 synthesis acceptance를 분리한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3G
+
+### 결정
+
+Patent CLI는 zero-finding 상태와 synthesis support acceptance를 같은 boolean 의미로 표시하지 않는다.
+
+Step 3F에서는 top-level runtime의 `verification.accepted`를 그대로 다음처럼 노출했다.
+
+```text
+accepted=true
+```
+
+그러나 Step 3G 실제 사용자 UAT에서 zero-finding run도 deterministic report-state synthesis 때문에 내부적으로 `accepted=True`가 될 수 있음이 확인되었다.
+
+이 값은 기술적으로는 올바르지만 사용자에게 다음과 같이 오해될 수 있다.
+
+```text
+accepted=true
+→ relevant patent finding이 있었다
+→ research result가 긍정적이었다
+→ patent-law conclusion이 승인되었다
+```
+
+따라서 CLI presentation contract를 다음처럼 분리한다.
+
+Finding이 존재하는 경우:
+
+```text
+result_status=findings_available
+synthesis_accepted=true|false
+```
+
+Finding이 없는 경우:
+
+```text
+result_status=no_relevant_findings
+synthesis_accepted=not_applicable
+```
+
+Zero-finding support verification도 다음으로 표시한다.
+
+```text
+verification_status=not_applicable
+```
+
+이 경우 내부 deterministic verification state를 사용자에게 `overall_decision=verified`로 노출하지 않는다.
+
+### 의미
+
+다음 상태는 서로 다른 의미 층이다.
+
+```text
+result_status
+≠ metadata verification
+≠ technical relevance
+≠ synthesis support
+≠ legal conclusion
+```
+
+특히:
+
+```text
+result_status=no_relevant_findings
+```
+
+는 bounded run에서 semantically evaluated relevant finding이 없었다는 뜻이다.
+
+```text
+synthesis_accepted=true
+```
+
+는 generated technical synthesis가 supplied evidence에 fully supported되었다는 뜻만 가진다.
+
+novelty, anticipation, obviousness, invalidity, infringement, FTO, patentability, current legal status를 의미하지 않는다.
+
+### CLI validation error policy
+
+UAT에서는 `PatentResearchRequest` domain validation failure가 raw Pydantic dump로 노출되는 문제도 발견되었다.
+
+예:
+
+```text
+1 validation error for PatentResearchRequest
+...
+https://errors.pydantic.dev/...
+```
+
+CLI boundary는 domain validation authority를 복제하지 않되, 사용자에게는 첫 validation message만 안전하게 정규화해 표시한다.
+
+예:
+
+```text
+aira: error: maximum_sources must not exceed maximum_search_results
+```
+
+즉 domain rule은 `PatentResearchRequest`가 계속 소유하고, CLI는 presentation layer에서 implementation detail만 제거한다.
+
+### Test isolation policy
+
+EPO credentials를 project `.env`에 추가한 뒤 기존 missing-credential test가 실패했다.
+
+원인:
+
+```text
+monkeypatch.delenv(...)
+→ load_dotenv()
+→ .env credential이 다시 environment에 채워짐
+```
+
+따라서 missing-credential test는 production loader를 변경하지 않고 다음처럼 test-local empty override를 사용한다.
+
+```text
+monkeypatch.setenv(missing_name, "")
+```
+
+이 방식은 `.env` fallback을 차단하면서 production `load_dotenv()` 동작을 보존한다.
+
+### Provider 404 관찰
+
+UAT 중 한 번 다음 오류가 관찰되었다.
+
+```text
+aira: error: EPO OPS returned HTTP status 404.
+```
+
+추적 실행에서는 동일 계열 run이 정상적으로:
+
+```text
+token
+→ bibliographic search
+→ 3 publication abstract retrievals
+→ zero-finding report
+```
+
+까지 완료되어 404가 재현되지 않았다.
+
+현재 `PatentResearchHandler`는 candidate abstract error를 fail-fast한다.
+
+이번 Step 3G에서는 404를 safely skippable candidate absence로 분류할 충분한 반복 증거와 provider-specific contract가 없으므로 retry/skip policy를 변경하지 않는다.
+
+### UAT 결과
+
+Scenario 1 — zero-finding:
+
+```text
+initial: ISSUE
+accepted=true ambiguity
+→ presentation contract 수정
+→ live re-test PASS
+```
+
+Scenario 2 — normal findings:
+
+```text
+PASS
+verified metadata / relevance / provenance / synthesis / support / scope
+모두 사용자 출력에서 구분 가능
+```
+
+Scenario 3-A — invalid date:
+
+```text
+PASS
+aira: error: prior_art_cutoff_date must use YYYY-MM-DD format
+```
+
+Scenario 3-B — source bound violation:
+
+```text
+initial: ISSUE
+raw Pydantic dump
+→ one-line CLI error로 정규화
+→ live re-test PASS
+```
+
+### 최종 검증
+
+```text
+focused patent regression      = 66 passed
+full repository regression     = 5302 passed
+Ruff                           = PASS
+changed Python format          = PASS
+git diff --check               = PASS
+zero-finding live UAT          = PASS
+validation-error live UAT      = PASS
+normal-findings live UAT       = PASS
+```
+
+### 후속 범위
+
+Step 3G 이후 Patent Vertical Slice의 CLI first slice는 사용자 수용성 기준까지 통과했다.
+
+다음 단계에서는 UAT에서 관찰된 minor presentation debt와 아직 구현되지 않은 capability를 분리해서 다룬다.
+
+후속 후보:
+
+- verbose/default output 분리 여부
+- human-friendly source URL 또는 external publication link
+- report persistence
+- claim-element comparison
+- authoritative legal-analysis layer
+- provider-specific recoverable candidate-miss taxonomy
+
+이들은 Step 3G closeout과 별도의 후속 설계 대상으로 남긴다.

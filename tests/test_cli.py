@@ -1346,6 +1346,9 @@ def test_patent_research_rejects_source_bound_violation(capsys) -> None:
     )
     assert result == 2
     assert calls == []
-    assert "maximum_sources must not exceed maximum_search_results" in (
-        capsys.readouterr().err
+    error_output = capsys.readouterr().err
+    assert error_output == (
+        "aira: error: maximum_sources must not exceed maximum_search_results\n"
     )
+    assert "validation error for PatentResearchRequest" not in error_output
+    assert "pydantic.dev" not in error_output

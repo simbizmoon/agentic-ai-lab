@@ -3573,7 +3573,7 @@ VERIFIED source identity
 ≠ LEGAL CONCLUSION
 ```
 
-## 34.15 다음 작업 — Step 3G Patent User Acceptance Test
+### Step 3G 사전 UAT 계획
 
 다음 단계는 구현을 더 추가하는 것이 아니라 실제 사용자 관점에서 현재 Patent CLI가 이해 가능하고 실사용 가능한지 평가하는 것이다.
 
@@ -3589,3 +3589,87 @@ UAT 목표:
 - output verbosity가 실사용에 적절한가
 
 UAT에서 발견되는 문제는 먼저 사용성/표현/contract 문제인지, 새로운 research capability 요구인지 분리해서 평가한다.
+
+## 34.15 Step 3G — Patent User Acceptance Test 완료
+
+Step 3G는 `FINAL PASS`다.
+
+이번 단계는 새 research capability를 먼저 추가하지 않고 실제 사용자 관점에서 Patent CLI의 입력, 오류, 출력 의미, 추적 가능성, safety boundary를 검증했다.
+
+UAT 시나리오:
+
+```text
+Scenario 1  zero-finding result
+Scenario 2  normal findings result
+Scenario 3A invalid cutoff date
+Scenario 3B source/search bound violation
+```
+
+UAT에서 실제 발견한 두 문제:
+
+```text
+1. zero-finding인데 accepted=true가 표시되어 의미 혼동 가능
+2. PatentResearchRequest validation failure가 raw Pydantic dump로 노출
+```
+
+수정된 CLI contract:
+
+```text
+findings 있음
+→ result_status=findings_available
+→ synthesis_accepted=true|false
+
+findings 없음
+→ result_status=no_relevant_findings
+→ synthesis_accepted=not_applicable
+→ verification_status=not_applicable
+```
+
+Domain validation error는 `PatentResearchRequest`가 계속 authority를 가지되 CLI에서는 사용자 수정이 가능한 한 줄 메시지로 정규화한다.
+
+예:
+
+```text
+aira: error: maximum_sources must not exceed maximum_search_results
+```
+
+EPO credential을 `.env`에 넣은 뒤 기존 missing-credential test가 `.env` fallback 때문에 실패하는 test-isolation 문제도 발견했다.
+
+Production loader는 변경하지 않고 test에서:
+
+```text
+monkeypatch.setenv(missing_name, "")
+```
+
+로 `.env` fallback을 차단했다.
+
+UAT 중 EPO OPS HTTP 404가 한 번 관찰되었으나 동일 계열 trace run에서는 재현되지 않았다.
+
+현재 candidate abstract processing은 fail-fast contract이며, 이번 Step에서는 recoverable candidate-miss policy를 새로 도입하지 않았다.
+
+최종 검증:
+
+```text
+focused patent regression  = 66 passed
+full repository regression = 5302 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+zero-finding live UAT      = PASS
+normal-findings live UAT   = PASS
+validation-error live UAT  = PASS
+```
+
+Step 3G를 통해 Patent CLI first slice는 다음 사용자 의미 경계를 실제 UAT까지 통과했다.
+
+```text
+result status
+≠ VERIFIED source identity
+≠ TECHNICALLY RELEVANT evidence
+≠ FULLY SUPPORTED synthesis
+≠ LEGAL CONCLUSION
+```
+
+Stage 5 Patent Research Vertical Slice의 Step 3A~3G first usable slice는 여기까지 완료되었다.
+
+다음 단계에서는 Step 3G UAT에서 남은 minor presentation debt와 product expansion 후보를 우선순위화한다.

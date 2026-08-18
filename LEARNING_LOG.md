@@ -2780,3 +2780,226 @@ bounded live CLI smoke     = PASS
 를 평가한다.
 
 UAT 결과를 바탕으로 필요한 경우에만 CLI presentation 또는 contract를 수정한다.
+
+## 2026-08-18 — Patent User Acceptance Test: runtime correctness와 user meaning은 별도 검증 대상이다
+
+### 1. 테스트가 모두 통과해도 사용자 의미는 틀릴 수 있다
+
+Step 3F runtime과 CLI tests는 정상 통과했지만 실제 zero-finding UAT에서:
+
+```text
+No semantically evaluated relevant finding was available.
+accepted=true
+```
+
+가 함께 표시되었다.
+
+내부적으로는 deterministic zero-finding synthesis가 report state와 정확히 일치하므로 `accepted=True`가 맞다.
+
+그러나 사용자는 이를 다음처럼 해석할 수 있다.
+
+```text
+accepted
+= finding이 있었다
+= research result가 성공했다
+= patent-law conclusion이 긍정적이다
+```
+
+교훈:
+
+> 내부 contract correctness와 사용자 의미 correctness는 별도로 검증해야 한다.
+
+### 2. 하나의 boolean이 여러 의미를 맡으면 UI에서 위험해진다
+
+UAT 수정 후:
+
+```text
+result_status=no_relevant_findings
+synthesis_accepted=not_applicable
+verification_status=not_applicable
+```
+
+로 분리했다.
+
+Finding이 있을 때만:
+
+```text
+result_status=findings_available
+synthesis_accepted=true|false
+```
+
+를 표시한다.
+
+교훈:
+
+> result existence와 synthesis acceptance는 같은 상태가 아니다.
+
+### 3. Validation authority와 error presentation은 분리할 수 있다
+
+`PatentResearchRequest`가 다음 domain rule의 authority다.
+
+```text
+maximum_sources <= maximum_search_results
+```
+
+이 authority를 CLI에서 다시 구현할 필요는 없다.
+
+하지만 raw Pydantic error dump를 사용자에게 그대로 노출할 필요도 없다.
+
+UAT 수정 후:
+
+```text
+aira: error: maximum_sources must not exceed maximum_search_results
+```
+
+처럼 첫 actionable message만 표시한다.
+
+교훈:
+
+> domain validation은 model이 소유하고, error presentation은 CLI가 소유할 수 있다.
+
+### 4. `.env`를 실제로 사용하면 테스트의 숨은 환경 의존성이 드러난다
+
+EPO credentials를 `.env`에 추가한 뒤 missing-credential test가 실패했다.
+
+기존 test:
+
+```text
+monkeypatch.delenv(...)
+```
+
+Production:
+
+```text
+load_dotenv()
+```
+
+결과:
+
+```text
+test가 지운 값을 .env가 다시 채움
+```
+
+수정:
+
+```text
+monkeypatch.setenv(missing_name, "")
+```
+
+Production loader를 바꾸지 않고 test에서 `.env` fallback만 차단했다.
+
+교훈:
+
+> 환경변수 테스트는 process environment뿐 아니라 dotenv fallback도 격리해야 한다.
+
+### 5. Provider 오류 하나를 보고 즉시 recovery policy를 만들면 안 된다
+
+UAT 중 한 번:
+
+```text
+EPO OPS returned HTTP status 404
+```
+
+가 발생했다.
+
+하지만 trace rerun에서는:
+
+```text
+token
+→ search
+→ CN abstract
+→ JP abstract
+→ JP abstract
+→ 정상 zero-finding report
+```
+
+로 완료되었다.
+
+현재 handler 문서에는 candidate processing이 fail-fast라고 명시되어 있다.
+
+따라서 재현되지 않은 단일 404를 근거로 candidate skip을 추가하지 않았다.
+
+교훈:
+
+> 외부 provider recovery policy는 반복 증거와 provider-specific semantics가 있어야 한다.
+
+### 6. UAT는 정상 경로만 보는 테스트가 아니다
+
+이번 UAT는 다음 네 종류를 실제로 확인했다.
+
+```text
+zero result
+normal result
+invalid input
+operational/provider condition
+```
+
+이 과정에서 unit/integration test만으로는 보이지 않던 두 UX defect와 한 test-isolation defect가 발견되었다.
+
+교훈:
+
+> UAT는 기능 성공 여부가 아니라 사용자가 결과와 실패를 올바르게 이해하고 다음 행동을 할 수 있는지 평가한다.
+
+### 7. Semantic relevance score는 deterministic identity가 아니다
+
+같은 publication이라도 live run마다 relevance score와 경우에 따라 relevance level이 달라질 수 있었다.
+
+따라서:
+
+```text
+publication identity
+exact provenance
+```
+
+와
+
+```text
+semantic relevance score
+semantic relevance level
+```
+
+을 같은 안정성 수준으로 취급하면 안 된다.
+
+교훈:
+
+> deterministic provenance와 model judgment를 제품 화면에서도 구분해야 한다.
+
+### 8. Step 3G 최종 검증
+
+최종 결과:
+
+```text
+focused patent regression  = 66 passed
+full repository regression = 5302 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+```
+
+Live UAT:
+
+```text
+zero-finding UX            = PASS
+normal-findings UX         = PASS
+invalid-date UX            = PASS
+source-bound error UX      = PASS
+```
+
+이 결과로 Step 3G — Patent User Acceptance Test는 `FINAL PASS`다.
+
+### 다음 학습 목표
+
+Patent Vertical Slice의 first usable CLI slice는 Step 3G까지 닫혔다.
+
+다음 단계에서는 새 capability를 바로 추가하기보다 UAT에서 남은 후보를 우선순위화한다.
+
+예:
+
+- default output 간결화 / verbose mode
+- human-friendly patent publication link
+- report persistence
+- claim-element comparison
+- legal-analysis boundary
+- provider-specific recoverable candidate-miss taxonomy
+
+각 항목은 기존 capability 재사용 가능성, product value, safety risk, 구현 비용을 비교한 뒤 별도 결정으로 진행한다.

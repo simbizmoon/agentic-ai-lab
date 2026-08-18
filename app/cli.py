@@ -10,6 +10,8 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
+from pydantic import ValidationError
+
 from app.persistent_cache_maintenance import (
     PersistentCacheMaintenanceService,
     PersistentCachePruneError,
@@ -659,26 +661,34 @@ def run_patent_research_command(
 
     question = validate_question(namespace.question)
     objective = validate_objective(namespace.objective, question=question)
-    request = PatentResearchRequest(
-        question=question,
-        objective=objective,
-        prior_art_cutoff_date=validate_optional_iso_date(
-            namespace.prior_art_cutoff_date,
-            name="prior_art_cutoff_date",
-        ),
-        maximum_search_results=validate_positive_integer(
-            namespace.maximum_search_results,
-            name="maximum_search_results",
-        ),
-        maximum_sources=validate_positive_integer(
-            namespace.maximum_sources,
-            name="maximum_sources",
-        ),
-        maximum_bytes=validate_positive_integer(
-            namespace.maximum_bytes,
-            name="maximum_bytes",
-        ),
-    )
+    try:
+        request = PatentResearchRequest(
+            question=question,
+            objective=objective,
+            prior_art_cutoff_date=validate_optional_iso_date(
+                namespace.prior_art_cutoff_date,
+                name="prior_art_cutoff_date",
+            ),
+            maximum_search_results=validate_positive_integer(
+                namespace.maximum_search_results,
+                name="maximum_search_results",
+            ),
+            maximum_sources=validate_positive_integer(
+                namespace.maximum_sources,
+                name="maximum_sources",
+            ),
+            maximum_bytes=validate_positive_integer(
+                namespace.maximum_bytes,
+                name="maximum_bytes",
+            ),
+        )
+    except ValidationError as error:
+        first_error = error.errors(include_url=False)[0]
+        message = str(first_error.get("msg", "invalid patent research request"))
+        prefix = "Value error, "
+        message = message.removeprefix(prefix)
+        raise ValueError(message) from error
+
     return patent_research_handler(request)
 
 

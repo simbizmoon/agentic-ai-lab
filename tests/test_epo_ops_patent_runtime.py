@@ -194,7 +194,7 @@ def test_load_epo_ops_config_rejects_missing_credentials(
 ) -> None:
     monkeypatch.setenv(EPO_OPS_CONSUMER_KEY_ENV, "consumer-key")
     monkeypatch.setenv(EPO_OPS_CONSUMER_SECRET_ENV, "consumer-secret")
-    monkeypatch.delenv(missing_name, raising=False)
+    monkeypatch.setenv(missing_name, "")
 
     with pytest.raises(RuntimeError, match=f"{missing_name} is required"):
         load_epo_ops_config(4096)

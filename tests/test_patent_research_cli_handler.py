@@ -157,6 +157,8 @@ def test_handler_renders_separated_patent_result_sections(capsys) -> None:
     output = capsys.readouterr().out
     assert value == 0
     assert runtime.calls == [(request, "request-001")]
+    assert "result_status=findings_available" in output
+    assert "synthesis_accepted=true" in output
     assert "=== VERIFIED METADATA / TECHNICAL RELEVANCE ===" in output
     assert "publication_number=WO2023156109A1" in output
     assert "relevance_level=directly_relevant" in output
@@ -167,3 +169,72 @@ def test_handler_renders_separated_patent_result_sections(capsys) -> None:
     assert "overall_support_level=fully_supported" in output
     assert "=== SCOPE NOTICE ===" in output
     assert "no patent-law conclusion" in output
+
+
+def test_handler_renders_zero_finding_as_not_applicable(capsys) -> None:
+    report = PatentTechnicalResearchReport(
+        report_id="report-zero",
+        request_id="request-zero",
+        task_id="patent-technical-relevance",
+        question="How does an unavailable mechanism work?",
+        objective="Identify technically relevant patent publications.",
+        prior_art_cutoff_date=date(2026, 8, 18),
+        title="Patent Technical Relevance Report",
+        findings=[],
+        unevaluated_evidence_ids=[],
+        finding_count=0,
+        source_count=0,
+        document_count=0,
+        verified_record_count=0,
+        input_evidence_count=0,
+        executed_query_purpose="primary",
+        executed_cql='ta all "unavailable mechanism"',
+        scope_notice="Technical relevance only; no patent-law conclusion.",
+        builder="deterministic-patent-technical-report-builder",
+    )
+    synthesis = PatentTechnicalSynthesis(
+        overall_summary=("No semantically evaluated relevant finding was available."),
+        finding_summaries=[],
+        limitations=[],
+    )
+    verification = PatentTechnicalSynthesisVerificationResult(
+        request_id="request-zero",
+        report_id="report-zero",
+        finding_verifications=[],
+        overall_verification=PatentTechnicalOverallSummaryVerification(
+            decision=ResearchCitationDecision.VERIFIED,
+            support_level=None,
+            entailment_score=1.0,
+            rationale=("The zero-finding summary is deterministic report-state text."),
+            issues=[],
+            response_id=None,
+            deterministic=True,
+        ),
+        accepted=True,
+    )
+    runtime = FakeRuntime(
+        SimpleNamespace(
+            synthesis=SimpleNamespace(
+                report=report,
+                synthesis=SimpleNamespace(synthesis=synthesis),
+            ),
+            verification=SimpleNamespace(verification=verification),
+        )
+    )
+    request = PatentResearchRequest(
+        question="How does an unavailable mechanism work?",
+        objective="Identify technically relevant patent publications.",
+    )
+
+    value = PatentResearchCliHandler(
+        runtime_factory=lambda: runtime,  # type: ignore[arg-type]
+        request_id_factory=lambda: "request-zero",
+    )(request)
+
+    output = capsys.readouterr().out
+    assert value == 0
+    assert "result_status=no_relevant_findings" in output
+    assert "synthesis_accepted=not_applicable" in output
+    assert "verification_status=not_applicable" in output
+    assert "accepted=true" not in output
+    assert "overall_decision=verified" not in output

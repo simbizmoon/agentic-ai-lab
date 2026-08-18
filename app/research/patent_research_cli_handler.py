@@ -41,7 +41,12 @@ class PatentResearchCliHandler:
         print("AIRA patent technical research")
         print(f"request_id={report.request_id}")
         print(f"report_id={report.report_id}")
-        print(f"accepted={str(verification.accepted).lower()}")
+        if report.findings:
+            print("result_status=findings_available")
+            print(f"synthesis_accepted={str(verification.accepted).lower()}")
+        else:
+            print("result_status=no_relevant_findings")
+            print("synthesis_accepted=not_applicable")
         print()
 
         print("=== VERIFIED METADATA / TECHNICAL RELEVANCE ===")
@@ -99,14 +104,17 @@ class PatentResearchCliHandler:
 
         print("=== SUPPORT VERIFICATION ===")
         overall = verification.overall_verification
-        support_level = (
-            overall.support_level.value
-            if overall.support_level is not None
-            else "not_applicable"
-        )
-        print(f"overall_decision={overall.decision.value}")
-        print(f"overall_support_level={support_level}")
-        print(f"overall_entailment_score={overall.entailment_score:.3f}")
+        if report.findings:
+            support_level = (
+                overall.support_level.value
+                if overall.support_level is not None
+                else "not_applicable"
+            )
+            print(f"overall_decision={overall.decision.value}")
+            print(f"overall_support_level={support_level}")
+            print(f"overall_entailment_score={overall.entailment_score:.3f}")
+        else:
+            print("verification_status=not_applicable")
         print(f"overall_rationale={overall.rationale}")
 
         for item in verification.finding_verifications:
@@ -118,7 +126,7 @@ class PatentResearchCliHandler:
         print("=== SCOPE NOTICE ===")
         print(report.scope_notice)
         print(
-            "accepted=true means only that the generated technical synthesis "
-            "is fully supported by the supplied evidence."
+            "synthesis_accepted describes only whether generated technical "
+            "synthesis is fully supported by the supplied evidence."
         )
         return 0
