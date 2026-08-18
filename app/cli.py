@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections import Counter
 from collections.abc import Callable, Sequence
+from datetime import date
 from pathlib import Path
 from typing import Final
 
@@ -35,6 +36,8 @@ from app.research.local_research_handler import (
 from app.research.parsed_document_cache_directory import (
     resolve_parsed_document_cache_directory,
 )
+from app.research.patent_research_cli_handler import PatentResearchCliHandler
+from app.schemas.patent_research_request import PatentResearchRequest
 from app.schemas.persistent_cache_status import (
     CacheKind,
     CachePruneOutcome,
@@ -70,6 +73,8 @@ IntegratedResearchHandlerType = Callable[
     ],
     int,
 ]
+
+PatentResearchHandlerType = Callable[[PatentResearchRequest], int]
 
 _SUPPORTED_SOURCE_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
@@ -254,6 +259,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory in which live research results are stored.",
     )
 
+    patent_parser = subparsers.add_parser(
+        "research-patent",
+        help="Run bounded technical-relevance research over patent publications.",
+        description=(
+            "Search EPO patent publications, evaluate technical relevance, "
+            "synthesize evidence-supported findings, and verify the synthesis. "
+            "This command does not make patent-law conclusions."
+        ),
+    )
+    patent_parser.add_argument("--question", required=True)
+    patent_parser.add_argument("--objective")
+    patent_parser.add_argument("--prior-art-cutoff-date", metavar="YYYY-MM-DD")
+    patent_parser.add_argument(
+        "--maximum-search-results", type=int, default=8, metavar="COUNT"
+    )
+    patent_parser.add_argument(
+        "--maximum-sources", type=int, default=4, metavar="COUNT"
+    )
+    patent_parser.add_argument(
+        "--maximum-bytes", type=int, default=1_000_000, metavar="BYTES"
+    )
+
     cache_parser = subparsers.add_parser(
         "cache",
         help="Inspect or prune persistent AIRA caches.",
@@ -396,6 +423,24 @@ def validate_output_dir(value: str) -> Path:
         raise ValueError(f"output path is not a directory: {output_dir}")
 
     return output_dir.resolve()
+
+
+def validate_optional_iso_date(
+    value: str | None,
+    *,
+    name: str,
+) -> date | None:
+    """Parse an optional ISO date."""
+
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError(f"{name} must not be blank")
+    try:
+        return date.fromisoformat(normalized)
+    except ValueError as error:
+        raise ValueError(f"{name} must use YYYY-MM-DD format") from error
 
 
 def validate_positive_integer(
@@ -605,6 +650,38 @@ def run_live_research_command(
     )
 
 
+def run_patent_research_command(
+    namespace: argparse.Namespace,
+    *,
+    patent_research_handler: PatentResearchHandlerType,
+) -> int:
+    """Validate and execute one bounded patent technical research command."""
+
+    question = validate_question(namespace.question)
+    objective = validate_objective(namespace.objective, question=question)
+    request = PatentResearchRequest(
+        question=question,
+        objective=objective,
+        prior_art_cutoff_date=validate_optional_iso_date(
+            namespace.prior_art_cutoff_date,
+            name="prior_art_cutoff_date",
+        ),
+        maximum_search_results=validate_positive_integer(
+            namespace.maximum_search_results,
+            name="maximum_search_results",
+        ),
+        maximum_sources=validate_positive_integer(
+            namespace.maximum_sources,
+            name="maximum_sources",
+        ),
+        maximum_bytes=validate_positive_integer(
+            namespace.maximum_bytes,
+            name="maximum_bytes",
+        ),
+    )
+    return patent_research_handler(request)
+
+
 def run_integrated_research_command(
     namespace: argparse.Namespace,
     *,
@@ -652,6 +729,7 @@ def main(
     semantic_research_handler: ResearchHandler | None = None,
     live_research_handler: (LiveResearchHandlerType | None) = None,
     integrated_research_handler: (IntegratedResearchHandlerType | None) = None,
+    patent_research_handler: (PatentResearchHandlerType | None) = None,
     cache_maintenance_service: PersistentCacheMaintenanceService | None = None,
 ) -> int:
     """Run the AIRA command-line interface."""
@@ -682,6 +760,14 @@ def main(
             return run_live_research_command(
                 namespace,
                 live_research_handler=(live_research_handler or LiveResearchHandler()),
+            )
+
+        if namespace.command == "research-patent":
+            return run_patent_research_command(
+                namespace,
+                patent_research_handler=(
+                    patent_research_handler or PatentResearchCliHandler()
+                ),
             )
 
         if namespace.command == "cache":

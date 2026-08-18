@@ -2610,3 +2610,173 @@ bounded live EPO + OpenAI   = PASS
 목표는 이미 검증된 top-level runtime을 CLI에 얇게 연결하고, 사용자가 verified metadata / technical relevance / provenance / synthesis / verification / scope notice를 명확히 구분해 볼 수 있도록 하는 것이다.
 
 그 다음 Step 3G에서 실제 사용자 관점 UAT를 수행한다.
+
+## 2026-08-18 — Patent CLI Integration: CLI는 runtime의 창이지 새로운 reasoning layer가 아니다
+
+### 1. CLI integration은 새 business logic을 만들 이유가 없다
+
+Step 3E에서 이미 top-level Patent runtime이 완성되었으므로 Step 3F의 역할은 다음뿐이다.
+
+```text
+CLI input
+→ validated PatentResearchRequest
+→ existing runtime
+→ user-visible output
+```
+
+Query planning, provider search, source verification, relevance evaluation, synthesis, verification을 CLI에서 다시 구현하지 않았다.
+
+교훈:
+
+> 잘 설계된 runtime이 있으면 CLI는 얇아야 한다.
+
+### 2. Domain validation을 CLI에서 복제하지 않는다
+
+CLI는 positive integer와 ISO date 같은 presentation-level validation만 수행한다.
+
+다음 bounded policy는 `PatentResearchRequest`가 계속 소유한다.
+
+```text
+maximum_search_results <= 8
+maximum_sources <= 4
+maximum_sources <= maximum_search_results
+```
+
+실제 test에서도 `maximum_search_results=1`, `maximum_sources=2`를 주면 handler 호출 전에 domain validation error가 발생했다.
+
+### 3. 아직 존재하지 않는 persistence 기능을 CLI가 발명하면 안 된다
+
+기존 Local/Live research command에는 `--output-dir`이 있지만 Patent Step 3E에는 별도 report writer/file persistence가 구현되어 있지 않다.
+
+따라서 일관성을 가장한 가짜 기능을 추가하지 않고 first CLI slice는 stdout 전용으로 유지했다.
+
+교훈:
+
+> UI/CLI symmetry보다 실제 capability contract가 우선이다.
+
+### 4. 의미 경계는 내부 schema뿐 아니라 사용자 화면에서도 보여야 한다
+
+CLI는 다음 섹션을 분리했다.
+
+```text
+VERIFIED METADATA / TECHNICAL RELEVANCE
+EVIDENCE / PROVENANCE
+SYNTHESIS
+SUPPORT VERIFICATION
+SCOPE NOTICE
+```
+
+내부적으로 의미가 분리되어 있어도 사용자 출력에서 다시 섞이면 제품 수준에서는 경계가 무너진다.
+
+### 5. credential fail-fast도 정상 동작의 일부다
+
+첫 live CLI 실행은 다음으로 종료되었다.
+
+```text
+aira: error: EPO_OPS_CONSUMER_KEY is required
+```
+
+이는 CLI failure가 아니라 provider credential이 없는 shell 상태를 runtime이 정확히 드러낸 것이다.
+
+Credential을 로컬에서 설정한 뒤 같은 command가 성공했다.
+
+교훈:
+
+- secret이 없으면 fail-fast한다.
+- secret 값을 오류 메시지에 노출하지 않는다.
+- provider failure를 fallback이나 빈 결과로 위장하지 않는다.
+- operational configuration failure도 live validation scenario에 포함한다.
+
+### 6. Live CLI smoke는 runtime 성공뿐 아니라 presentation contract도 확인해야 한다
+
+실제 command:
+
+```text
+aira research-patent
+```
+
+결과:
+
+```text
+VERIFIED findings = 2
+accepted          = true
+```
+
+문헌:
+
+- `CN118906928A`
+  - metadata: `verified`
+  - relevance: `partially_relevant`
+  - score: `0.720`
+  - synthesis support: `fully_supported`
+- `WO2023156109A1`
+  - metadata: `verified`
+  - relevance: `directly_relevant`
+  - score: `0.840`
+  - synthesis support: `fully_supported`
+
+Overall synthesis support는 `fully_supported`, entailment score `0.950`이었다.
+
+Evidence ID, source ID, document ID, exact character range, excerpt도 stdout에서 확인 가능했다.
+
+### 7. 같은 문헌도 relevance score는 run마다 달라질 수 있다
+
+Step 3E5와 Step 3F live run은 같은 두 publication을 찾았지만 semantic relevance score가 달랐다.
+
+예:
+
+```text
+CN118906928A
+Step 3E5 = 0.620
+Step 3F  = 0.720
+```
+
+이는 LLM semantic evaluation score가 deterministic identity가 아니라 model judgment라는 점을 보여준다.
+
+따라서 publication identity/provenance처럼 exact deterministic contract와 semantic score를 같은 안정성 수준으로 취급하면 안 된다.
+
+### 8. accepted=true를 명시적으로 설명해야 한다
+
+CLI 마지막에는 다음 문구를 출력한다.
+
+```text
+accepted=true means only that the generated technical synthesis
+is fully supported by the supplied evidence.
+```
+
+그리고 scope notice에서 novelty, anticipation, obviousness, invalidity, infringement, FTO, current legal status를 명시적으로 제외한다.
+
+이중 안내는 사용자가 acceptance를 patent-law approval로 오해하지 않도록 하기 위한 제품-level safety boundary다.
+
+### 9. Full regression으로 Step 3F를 닫는다
+
+최종 검증:
+
+```text
+focused CLI tests          = 55 passed
+affected regression        = 73 passed
+full repository regression = 5301 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+CLI help                   = PASS
+bounded live CLI smoke     = PASS
+```
+
+이 결과로 Step 3F — Patent CLI Integration은 `FINAL PASS`다.
+
+### 다음 학습 목표
+
+다음은 Step 3G — Patent User Acceptance Test다.
+
+이 단계에서는 새 기능을 먼저 만들지 않고 실제 사용자 입장에서:
+
+- 입력이 이해 가능한지
+- 오류가 actionable한지
+- 결과가 읽기 쉬운지
+- provenance를 추적할 수 있는지
+- relevance/support/legal boundary가 명확한지
+
+를 평가한다.
+
+UAT 결과를 바탕으로 필요한 경우에만 CLI presentation 또는 contract를 수정한다.

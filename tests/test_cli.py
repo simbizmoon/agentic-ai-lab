@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from app.cli import (
     validate_sources,
 )
 from app.research.local_document_access_policy import LocalDocumentAccessResult
+from app.schemas.patent_research_request import PatentResearchRequest
 from tests.test_local_hwpx_text_extractor import write_hwpx
 from tests.test_local_pdf_text_extractor import write_pdf
 
@@ -1267,3 +1269,83 @@ def test_integrated_command_enforces_raw_size_limit(
     assert result == 2
     assert calls == []
     assert "maximum file size" in capsys.readouterr().err
+
+
+def test_parser_accepts_patent_research_command() -> None:
+    namespace = build_parser().parse_args(
+        [
+            "research-patent",
+            "--question",
+            "How do pressure sensors detect seat occupancy?",
+        ]
+    )
+    assert namespace.command == "research-patent"
+    assert namespace.maximum_search_results == 8
+    assert namespace.maximum_sources == 4
+    assert namespace.maximum_bytes == 1_000_000
+
+
+def test_main_calls_injected_patent_research_handler() -> None:
+    captured: list[PatentResearchRequest] = []
+    result = main(
+        [
+            "research-patent",
+            "--question",
+            "How do pressure sensors detect seat occupancy?",
+            "--objective",
+            "Identify technically relevant patent publications.",
+            "--prior-art-cutoff-date",
+            "2026-08-18",
+            "--maximum-search-results",
+            "2",
+            "--maximum-sources",
+            "1",
+            "--maximum-bytes",
+            "2048",
+        ],
+        patent_research_handler=lambda request: captured.append(request) or 0,
+    )
+    assert result == 0
+    request = captured[0]
+    assert request.prior_art_cutoff_date == date(2026, 8, 18)
+    assert request.maximum_search_results == 2
+    assert request.maximum_sources == 1
+    assert request.maximum_bytes == 2048
+
+
+def test_patent_research_rejects_invalid_cutoff_before_handler(capsys) -> None:
+    calls: list[object] = []
+    result = main(
+        [
+            "research-patent",
+            "--question",
+            "How do pressure sensors detect seat occupancy?",
+            "--prior-art-cutoff-date",
+            "2026/08/18",
+        ],
+        patent_research_handler=lambda request: calls.append(request) or 0,
+    )
+    assert result == 2
+    assert calls == []
+    assert "must use YYYY-MM-DD format" in capsys.readouterr().err
+
+
+def test_patent_research_rejects_source_bound_violation(capsys) -> None:
+    calls: list[object] = []
+    result = main(
+        [
+            "research-patent",
+            "--question",
+            "How do pressure sensors detect seat occupancy?",
+            "--maximum-search-results",
+            "1",
+            "--maximum-sources",
+            "2",
+        ],
+        patent_research_handler=lambda request: calls.append(request) or 0,
+    )
+    assert result == 2
+    assert calls == []
+    assert "maximum_sources must not exceed maximum_search_results" in (
+        capsys.readouterr().err
+    )

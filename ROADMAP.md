@@ -3503,28 +3503,89 @@ VERIFIED source identity
 ≠ LEGAL CONCLUSION
 ```
 
-## 34.14 다음 작업 — Step 3F Patent CLI Integration
+## 34.14 Step 3F — Patent CLI Integration 완료
 
-다음 product step은 안정화된 top-level patent report runtime을 CLI에 연결하는 것이다.
-
-목표:
+Step 3F는 `FINAL PASS`다.
 
 ```text
-CLI input
+aira research-patent
+→ CLI parsing / validation
 → PatentResearchRequest
+→ PatentResearchCliHandler
 → PatentTechnicalResearchReportRuntime
-→ bounded user-visible result
+→ bounded stdout result
 ```
 
-CLI는 기존 runtime contract를 얇게 노출하며 business logic을 새로 복제하지 않는다.
+확정된 경계:
 
-CLI output은 최소 다음을 명확히 구분해야 한다.
+- 기존 `aira = "app.cli:main"` entrypoint를 그대로 사용한다.
+- Patent CLI는 새 business logic을 만들지 않고 top-level runtime을 thin adapter로 노출한다.
+- command 이름은 `research-patent`다.
+- `question`, `objective`, cutoff date, search/source/byte bound를 CLI에서 입력한다.
+- cutoff date는 `YYYY-MM-DD`만 허용하며 retrieval bound일 뿐 legal prior-art determination이 아니다.
+- `PatentResearchRequest`가 source/search bound의 최종 domain authority다.
+- 별도 patent report writer가 아직 없으므로 `--output-dir`을 추가하지 않는다.
+- provider credential/runtime error는 숨기지 않고 fail-fast한다.
+- CLI output은 verified metadata, technical relevance, evidence provenance, synthesis, support verification, scope notice를 분리한다.
+- `accepted=true`는 supplied evidence가 synthesis를 fully support한다는 뜻일 뿐 legal conclusion이 아니다.
 
-- verified publication metadata
-- technical relevance finding
-- evidence excerpt/provenance
-- bounded synthesis
-- support-verification status
-- scope notice / legal-conclusion exclusion
+구현:
 
-CLI integration 뒤 Step 3G에서 실제 사용자 관점 UAT를 수행한다.
+```text
+app/cli.py
+app/research/patent_research_cli_handler.py
+
+tests/test_cli.py
+tests/test_patent_research_cli_handler.py
+```
+
+검증:
+
+```text
+focused CLI tests          = 55 passed
+affected regression        = 73 passed
+full repository regression = 5301 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+CLI help                   = PASS
+bounded live CLI smoke     = PASS
+```
+
+Live smoke:
+
+- 첫 실행: EPO credential 누락 → `EPO_OPS_CONSUMER_KEY is required` fail-fast
+- credential 설정 후 동일 command 정상 완료
+- VERIFIED findings: 2
+- `CN118906928A`: `partially_relevant`, score `0.720`
+- `WO2023156109A1`: `directly_relevant`, score `0.840`
+- both finding summaries: `fully_supported`
+- overall support: `fully_supported`, score `0.950`
+- final `accepted=true`
+- scope notice / legal-conclusion exclusion 출력: PASS
+
+CLI에서 다음 의미 층이 실제 사용자 출력으로 분리되었다.
+
+```text
+VERIFIED source identity
+≠ TECHNICALLY RELEVANT evidence
+≠ FULLY SUPPORTED synthesis
+≠ LEGAL CONCLUSION
+```
+
+## 34.15 다음 작업 — Step 3G Patent User Acceptance Test
+
+다음 단계는 구현을 더 추가하는 것이 아니라 실제 사용자 관점에서 현재 Patent CLI가 이해 가능하고 실사용 가능한지 평가하는 것이다.
+
+UAT 목표:
+
+- 자연어 question/objective 입력이 직관적인가
+- cutoff/search/source bound가 이해 가능한가
+- credential failure 메시지가 actionable한가
+- verified metadata와 technical relevance가 구분되는가
+- evidence/provenance를 사용자가 추적할 수 있는가
+- synthesis와 support verification의 차이를 이해할 수 있는가
+- `accepted=true`를 legal conclusion으로 오해하지 않도록 충분히 안내하는가
+- output verbosity가 실사용에 적절한가
+
+UAT에서 발견되는 문제는 먼저 사용성/표현/contract 문제인지, 새로운 research capability 요구인지 분리해서 평가한다.

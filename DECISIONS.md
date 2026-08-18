@@ -4077,3 +4077,155 @@ Step 3F에서 이 안정된 report runtime을 CLI에 연결한다.
 Step 3G에서 사용자 관점 UAT를 수행한다.
 
 Claim-element comparison, novelty/obviousness/legal-status analysis는 별도 domain contract와 authoritative legal-analysis layer가 설계되기 전까지 범위 밖이다.
+
+## D-070 — Patent CLI는 top-level patent runtime을 얇게 노출하고 의미 층을 사용자 출력에서 분리한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3F
+
+### 결정
+
+Step 3F에서 Patent CLI는 새로운 research business logic을 만들지 않고 이미 검증된 top-level runtime을 thin adapter로 노출한다.
+
+```text
+aira research-patent
+→ CLI argument parsing / validation
+→ PatentResearchRequest
+→ PatentResearchCliHandler
+→ PatentTechnicalResearchReportRuntime
+→ bounded stdout rendering
+```
+
+CLI entrypoint는 기존 `aira = "app.cli:main"`을 그대로 사용하며 별도 executable 또는 별도 application layer를 만들지 않는다.
+
+### Command contract
+
+추가 command:
+
+```text
+aira research-patent
+```
+
+지원 입력:
+
+- `--question`
+- `--objective`
+- `--prior-art-cutoff-date YYYY-MM-DD`
+- `--maximum-search-results`
+- `--maximum-sources`
+- `--maximum-bytes`
+
+`--objective`가 생략되면 기존 CLI의 `default_objective()` / `validate_objective()` contract를 재사용한다.
+
+`--prior-art-cutoff-date`는 ISO `YYYY-MM-DD` 형식만 허용한다. 이 값은 exclusive publication-date retrieval bound이며 legal prior-art determination이 아니다.
+
+`PatentResearchRequest`의 domain validation을 최종 authority로 유지한다.
+
+```text
+maximum_search_results <= 8
+maximum_sources <= 4
+maximum_sources <= maximum_search_results
+```
+
+CLI는 이 domain contract를 우회하거나 중복 구현하지 않는다.
+
+### Handler boundary
+
+`PatentResearchCliHandler`의 책임:
+
+- request ID 생성
+- top-level runtime 실행
+- runtime result를 사람이 읽을 수 있는 stdout으로 렌더링
+
+Handler는 다음을 수행하지 않는다.
+
+- EPO query planning 재구현
+- source verification 재구현
+- relevance evaluation 재구현
+- synthesis 재구현
+- support verification 재구현
+- file persistence 또는 report writer 기능 발명
+
+현재 Step 3F에서는 별도 `--output-dir`을 추가하지 않는다. Patent report writer/file persistence가 아직 별도 capability로 존재하지 않기 때문이다.
+
+### User-visible semantic separation
+
+CLI output은 다음 섹션을 명시적으로 분리한다.
+
+```text
+VERIFIED METADATA / TECHNICAL RELEVANCE
+EVIDENCE / PROVENANCE
+SYNTHESIS
+SUPPORT VERIFICATION
+SCOPE NOTICE
+```
+
+이 분리를 통해 사용자가 다음 상태를 같은 의미로 오해하지 않도록 한다.
+
+```text
+verified source identity
+≠ technical relevance
+≠ evidence-supported synthesis
+≠ legal conclusion
+```
+
+CLI의 `accepted=true`는 다음만 의미한다.
+
+```text
+generated technical synthesis is fully supported by supplied evidence
+```
+
+novelty, anticipation, obviousness, invalidity, infringement, FTO, patentability, current legal status를 의미하지 않는다.
+
+### Credential / provider failure policy
+
+Patent CLI는 provider credential 또는 runtime failure를 숨기지 않는다.
+
+실제 첫 live 실행에서 EPO credential이 없는 shell에서:
+
+```text
+aira: error: EPO_OPS_CONSUMER_KEY is required
+```
+
+로 fail-fast했다.
+
+Credential을 로컬 shell에서 설정한 뒤 동일 command가 정상 완료되었다.
+
+CLI는 secret 값을 출력하지 않고 기존 runtime error propagation을 유지한다.
+
+### 검증
+
+```text
+focused CLI tests             = 55 passed
+affected regression           = 73 passed
+full repository regression    = 5301 passed
+Ruff                          = PASS
+changed Python format         = PASS
+git diff --check              = PASS
+CLI help                      = PASS
+bounded live CLI smoke        = PASS
+```
+
+Live CLI smoke:
+
+- command: `aira research-patent`
+- VERIFIED records/findings: 2
+- `CN118906928A`: `partially_relevant`, score `0.720`
+- `WO2023156109A1`: `directly_relevant`, score `0.840`
+- exact evidence/provenance 출력: PASS
+- bounded synthesis 출력: PASS
+- both finding summaries: `fully_supported`
+- overall summary: `fully_supported`, score `0.950`
+- final `accepted=true`
+- scope notice: PASS
+
+이 결과는 technical research CLI integration의 correctness를 확인한 것이며 patent-law conclusion이 아니다.
+
+### 후속 범위
+
+Step 3G에서 실제 사용자 관점 User Acceptance Test를 수행한다.
+
+UAT에서는 사용자가 CLI output을 보고 각 의미 층을 올바르게 구분할 수 있는지, 입력/오류 메시지/결과 표현이 실사용에 충분한지 평가한다.
+
+File report persistence, claim-element comparison, novelty/obviousness/legal-status analysis는 별도 후속 capability로 남긴다.
