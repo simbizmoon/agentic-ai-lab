@@ -1509,4 +1509,49 @@ live elapsed seconds       = 20.426
 
 Live smoke에서는 `pressure sensors` / `seat occupancy`를 PRIMARY로, `automatic state detection` / `seat occupancy`를 ALTERNATE로 선택했고 모든 term이 request-grounding contract를 통과했다.
 
-다음은 `Step 3B3 — grounded technical concepts → bounded EPO CQL plan`이다. Step 3B3에서도 provider-specific CQL 생성과 Step 3B1 `PatentSearchQueryPlan` validation을 분리한다.
+## 33.10 Step 3B3 — Deterministic EPO CQL Planning
+
+```text
+PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ deterministic EPO CQL candidate(s)
+→ PatentSearchQueryPlanner
+→ PatentSearchQueryPlan
+```
+
+Step 3B3는 `FINAL PASS`다.
+
+현재 first-slice EPO rendering contract:
+
+- concept 하나당 CQL candidate 하나를 만든다.
+- concept 내부 term은 `ta all "<term>"` clause로 렌더링한다.
+- 한 concept 안의 term clause는 `and`로 결합한다.
+- `prior_art_cutoff_date`가 있으면 exclusive publication-date retrieval bound인 `pd < YYYYMMDD`를 추가한다.
+- 이 날짜 bound는 retrieval filter이며 법률상 prior-art 판정이 아니다.
+- CQL syntax는 LLM이 자유 생성하지 않고 deterministic renderer가 만든다.
+- 최종 CQL은 반드시 Step 3B1 `PatentSearchQueryPlan` contract를 다시 통과한다.
+- `"`, `*`, `?`, `#`가 포함된 term은 first-slice에서 fail-fast한다.
+- non-ASCII grounded term은 EPO의 프로토콜 금지 때문이 아니라 AIRA가 자동 번역을 아직 허용하지 않는 현재 first-slice 정책 때문에 fail-fast한다.
+- 동일 input은 동일 query plan을 생성한다.
+
+검증:
+
+```text
+focused contract            = 53 passed
+Patent/EPO affected         = 158 passed
+full repository regression  = 5234 passed
+Ruff / format / diff-check  = PASS
+bounded EPO OPS live smoke  = PASS
+```
+
+Live smoke에서 실제 생성된 query:
+
+```text
+ta all "pressure sensor" and pd < 20260818
+```
+
+EPO OPS가 해당 CQL을 정상 수용했고 `request_round_trip=True`, `maximum_results=1`, parsed bibliographic result 1건을 확인했다.
+
+반환된 첫 문헌은 `WO2026167534A1 — INTRAOCULAR PRESSURE SENSOR SYSTEM AND METHOD`였다. 이는 seat-occupancy 질문에는 비관련 문헌이며, 문법적으로 유효한 CQL과 retrieval precision은 별개의 문제임을 확인했다. 검색 품질은 Step 3B2 concept specificity와 후속 technical-relevance evaluation에서 다룬다.
+
+다음은 `Step 3C — Patent planning → Handler/runtime integration`이다.

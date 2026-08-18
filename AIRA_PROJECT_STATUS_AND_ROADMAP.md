@@ -1821,19 +1821,20 @@ Patent Research Vertical Slice
 Real patent inputs가 OCR, HWP, table identity, hostile/shared filesystem 또는 강화된 privacy
 workflow의 필요성을 입증하면 해당 follow-up을 다시 연다.
 
-# 38. 2026-08-17 최신 상태 — EPO Patent Provider Foundation live validation 완료
+# 38. 2026-08-18 최신 상태 — Patent Query Planning live validation 완료
 
 > 이 섹션은 Patent Research Vertical Slice의 최신 authoritative project status이다.
 
 ```text
 Stage 4 Local Document Expansion baseline → COMPLETE
 Stage 5 Internet Research Expansion        → IN PROGRESS
-Patent Research Vertical Slice             → Step 3B2 COMPLETE
+Patent Research Vertical Slice             → Step 3B3 COMPLETE
 EPO provider foundation                    → COMPLETE
 PatentResearchHandler                      → IMPLEMENTED / FINAL PASS
 PatentSearchQueryPlan                      → IMPLEMENTED / FINAL PASS
 Grounded technical concept planning        → IMPLEMENTED / FINAL PASS
-Natural-language → EPO CQL generation      → NOT YET IMPLEMENTED
+Deterministic EPO CQL planning             → IMPLEMENTED / FINAL PASS
+Patent planning → Handler/runtime           → NOT YET INTEGRATED
 Patent CLI/runtime                         → NOT YET IMPLEMENTED
 ```
 
@@ -1873,4 +1874,10 @@ Step 3B2는 natural-language `PatentResearchRequest`에서 자유로운 synonym/
 
 Step 3B2 검증은 focused `66 passed`, Patent/OpenAI affected `212 passed`, full repository `5224 passed`, Ruff/format/diff-check PASS다. 실제 `gpt-5` Structured Outputs 1-call live smoke도 PASS했으며 2개 concept, request-grounding, response/request id 및 token usage 보존을 확인했다. Live smoke는 1599 total tokens, 20.426초를 기록했으며 이는 correctness blocker가 아닌 후속 optimization 관찰값으로 남긴다.
 
-다음 즉시 설계 과제는 `Step 3B3 — grounded technical concepts → bounded EPO CQL plan`이다.
+Step 3B3는 `PatentTechnicalConceptPlan`을 deterministic한 EPO CQL candidate로 렌더링한 뒤 기존 `PatentSearchQueryPlanner`를 통해 `PatentSearchQueryPlan`으로 재검증한다. term은 `ta all "<term>"`로 렌더링하고 concept 내부 clause는 `and`로 결합한다. `prior_art_cutoff_date`는 법률 판단이 아닌 exclusive publication-date retrieval filter `pd < YYYYMMDD`로만 사용한다.
+
+Step 3B3 검증은 focused `53 passed`, Patent/EPO affected `158 passed`, full repository `5234 passed`, Ruff/format/diff-check PASS다. 실제 EPO OPS bounded live smoke도 PASS했으며 generated CQL `ta all "pressure sensor" and pd < 20260818`, `request_round_trip=True`, maximum result 1 및 bibliographic XML parsing을 확인했다.
+
+Live smoke의 첫 결과는 seat occupancy와 무관한 intraocular pressure sensor 문헌이었다. 따라서 query syntax/provider acceptance와 retrieval relevance는 서로 다른 quality dimension으로 분리한다.
+
+다음 즉시 설계 과제는 `Step 3C — Patent planning → Handler/runtime integration`이다.

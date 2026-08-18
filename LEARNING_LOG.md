@@ -2215,3 +2215,37 @@ Python enum 객체를 직접 넣은 fake test만 믿지 않고 `model_validate_j
 - bounded OpenAI Structured Outputs live smoke: PASS
 
 다음 학습 목표는 grounded technical concepts를 bounded EPO CQL candidate로 변환하되, CQL syntax generation과 D-064 `PatentSearchQueryPlan` validation/execution semantics를 분리하는 것이다.
+
+## 2026-08-18 — Deterministic EPO CQL Planning: 문법 생성과 검색 품질을 분리한다
+
+### 1. provider query syntax를 LLM에게 맡길 필요가 없다
+Step 3B2에서 term이 이미 request-grounded되어 있으므로 Step 3B3는 deterministic renderer만으로 EPO CQL을 만들 수 있다.
+
+### 2. 같은 입력은 같은 query를 만들어야 한다
+`EpoOpsPatentCqlPlanner`는 concept order와 term order를 그대로 보존하고 hidden rewrite나 semantic normalization을 하지 않는다.
+
+### 3. provider-specific syntax 뒤에도 domain contract를 다시 통과시킨다
+생성된 CQL은 바로 실행하지 않고 D-064 `PatentSearchQueryPlanner`를 통해 `PatentSearchQueryPlan`으로 검증한다.
+
+### 4. 날짜 filter와 법률 판단을 섞지 않는다
+`prior_art_cutoff_date`는 `pd < YYYYMMDD`라는 exclusive publication-date retrieval bound로만 사용한다. 이것만으로 법률상 prior art 여부를 확정하지 않는다.
+
+### 5. fail-fast policy는 의미를 명확히 해야 한다
+`"`, `*`, `?`, `#`는 CQL metacharacter ambiguity 때문에 first-slice에서 차단한다. non-ASCII 차단은 EPO의 protocol restriction이 아니라 automatic translation을 아직 허용하지 않는 AIRA local policy다.
+
+### 6. 문법적으로 유효한 query가 좋은 검색 결과를 보장하지 않는다
+Live smoke의 `ta all "pressure sensor" and pd < 20260818`은 EPO에서 정상 실행됐지만 seat occupancy와 무관한 intraocular pressure sensor 문헌을 반환했다. Syntax correctness와 retrieval precision은 서로 다른 evaluation 대상이다.
+
+### 7. retrieval precision은 upstream와 downstream이 함께 책임진다
+Upstream Step 3B2가 더 구체적인 grounded concept를 선택하고, downstream technical-relevance evaluator가 실제 evidence relevance를 판정해야 한다.
+
+### 검증
+- focused contract: `53 passed`
+- Patent/EPO affected regression: `158 passed`
+- full repository: `5234 passed`
+- Ruff / changed-file format / diff-check: PASS
+- bounded EPO OPS live smoke: PASS
+- request round-trip: PASS
+- maximum results: 1
+
+다음 학습 목표는 planning 결과를 `PatentResearchHandler` 실행 경로에 안전하게 연결하면서 PRIMARY/ALTERNATE budget/fallback과 transport bounds를 명시하는 것이다.

@@ -323,7 +323,7 @@ Selected candidate failure는 현재 fail-fast다. Error taxonomy가 missing abs
 
 ### 12.4 Patent Query Planning Development Boundary
 
-현재 runtime 실행 전 단계에는 두 개의 bounded planning contract가 구현되어 있다.
+현재 runtime 실행 전 단계에는 세 개의 bounded planning capability가 구현되어 있다.
 
 ```text
 PatentResearchRequest
@@ -333,7 +333,17 @@ PatentResearchRequest
 → PatentTechnicalConceptPlan
 ```
 
-그리고 explicit CQL boundary:
+그리고 deterministic EPO CQL rendering:
+
+```text
+PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ deterministic EPO CQL candidate(s)
+→ PatentSearchQueryPlanner
+→ PatentSearchQueryPlan
+```
+
+Explicit caller-supplied CQL boundary도 유지한다:
 
 ```text
 PatentResearchRequest
@@ -342,12 +352,12 @@ PatentResearchRequest
 → PatentSearchQueryPlan
 ```
 
-Technical concept plan은 provider-neutral이며 request에 이미 존재하는 terminology만 허용한다. CQL plan은 일반 `ResearchSearchQuerySet`과 분리되어 있으며 caller CQL을 rewrite하지 않는다. PRIMARY/ALTERNATE는 planning role이며 아직 runtime execution semantics가 아니다.
+Technical concept plan은 provider-neutral이며 request에 이미 존재하는 terminology만 허용한다. EPO renderer는 semantic expansion 없이 `ta all "<term>"` clause와 optional exclusive `pd < YYYYMMDD` retrieval bound를 만든다. 최종 CQL plan은 일반 `ResearchSearchQuerySet`과 분리되어 있으며 caller/generated CQL을 rewrite하지 않는다. PRIMARY/ALTERNATE는 planning role이며 아직 runtime execution semantics가 아니다.
 
 ### 12.5 아직 runtime에 미연결
 
-- PatentTechnicalConceptPlan → provider-specific EPO CQL generation
-- PatentSearchQueryPlan → handler execution-budget/fallback policy
+- PatentSearchQueryPlan → PatentResearchHandler execution composition
+- PRIMARY/ALTERNATE query execution-budget/fallback policy
 - `PatentResearchRequest.maximum_bytes` → `EpoOpsConfig.maximum_response_bytes`
 - technical-relevance evidence/synthesis
 - result/report writer integration

@@ -3258,12 +3258,61 @@ Live smoke:
 
 Latency/token cost는 correctness blocker가 아니라 후속 optimization 관찰값으로 유지한다.
 
-## 34.10 다음 작업
+## 34.10 Step 3B3 — Deterministic EPO CQL Planning 완료
 
 ```text
-Step 3B3 — grounded technical concepts → bounded EPO CQL plan
+PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ deterministic EPO CQL candidate(s)
+→ PatentSearchQueryPlanner
+→ PatentSearchQueryPlan
 ```
 
-Step 3B3에서는 concept→provider-specific CQL 변환을 설계하되, 최종 CQL은 반드시 Step 3B1 `PatentSearchQueryPlan` validation을 통과시킨다. Query execution budget/fallback semantics와 Step 3A Handler integration은 별도 runtime integration 단계에서 결정한다.
+Step 3B3는 `FINAL PASS`다.
+
+확정된 경계:
+
+- CQL syntax를 LLM이 자유 생성하지 않는다.
+- grounded concept 하나당 CQL candidate 하나를 만든다.
+- term은 `ta all "<term>"`로 렌더링한다.
+- 동일 concept의 term clause는 `and`로 결합한다.
+- `prior_art_cutoff_date`는 optional `pd < YYYYMMDD` exclusive retrieval filter다.
+- cutoff filter는 법률상 prior-art conclusion이 아니다.
+- generated CQL은 반드시 Step 3B1 `PatentSearchQueryPlan` validation을 통과한다.
+- `"`, `*`, `?`, `#` metacharacter를 first-slice에서 fail-fast한다.
+- non-ASCII term은 automatic translation이 아직 없으므로 local policy로 fail-fast한다.
+- renderer는 synonym/translation/classification/semantic expansion을 하지 않는다.
+- 같은 input은 같은 query plan을 생성한다.
+
+검증:
+
+```text
+focused contract             = 53 passed
+Patent/EPO affected          = 158 passed
+full repository regression   = 5234 passed
+Ruff                         = PASS
+changed Python format        = PASS
+git diff --check             = PASS
+EPO OPS bounded live smoke   = PASS
+```
+
+Live smoke:
+- generated CQL: `ta all "pressure sensor" and pd < 20260818`
+- request round-trip: PASS
+- maximum results: 1
+- parsed records: 1
+- first publication: `WO2026167534A1`
+- first title: `INTRAOCULAR PRESSURE SENSOR SYSTEM AND METHOD`
+- publication date: `2026-08-13`
+
+첫 결과가 seat occupancy와 무관했다는 사실은 CQL syntax/provider acceptance와 retrieval relevance가 별도 문제임을 보여준다. Retrieval precision은 Step 3B2 concept specificity와 후속 technical-relevance evaluation에서 다룬다.
+
+## 34.11 다음 작업
+
+```text
+Step 3C — Patent planning → Handler/runtime integration
+```
+
+Step 3C에서는 `PatentTechnicalConceptPlan → PatentSearchQueryPlan → PatentResearchHandler`의 composition을 연결하고, PRIMARY/ALTERNATE query execution budget/fallback semantics, `PatentResearchRequest.maximum_bytes → EpoOpsConfig.maximum_response_bytes` binding을 명시한다.
 
 첫 product scenario는 계속 bounded prior-art technical relevance이며, definitive novelty/invalidity/obviousness/infringement/FTO/legal-status conclusion은 범위 밖이다.

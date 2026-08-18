@@ -3733,3 +3733,39 @@ OpenAI는 structured concept selector의 provider adapter일 뿐이며, `PatentT
 Step 3B2 bounded live smoke는 실제 `gpt-5` Structured Outputs 호출 1회에서 PASS했다. latency/token 사용량은 correctness와 분리하여 후속 optimization 대상으로만 기록한다.
 
 다음 Step 3B3에서 grounded concept를 provider-specific EPO CQL candidate로 변환하되, 최종 실행 전에는 D-064의 `PatentSearchQueryPlan` contract를 반드시 통과시킨다.
+
+## D-066 — Grounded patent concept의 EPO CQL 변환은 LLM 자유 생성이 아니라 deterministic renderer가 수행한다
+
+- 상태: 확정
+- 날짜: 2026-08-18
+- 적용 범위: Stage 5 — Patent Research Vertical Slice Step 3B3
+
+### 결정
+
+```text
+PatentTechnicalConceptPlan
+→ EpoOpsPatentCqlPlanner
+→ deterministic CQL candidate(s)
+→ PatentSearchQueryPlanner
+→ PatentSearchQueryPlan
+```
+
+Step 3B3에서 LLM은 EPO CQL syntax를 직접 생성하지 않는다. Step 3B2에서 이미 request-grounded된 technical term만 deterministic renderer에 전달한다.
+
+First-slice rendering 규칙:
+
+- 각 grounded concept는 CQL candidate 하나가 된다.
+- 각 term은 `ta all "<term>"` clause가 된다.
+- 같은 concept 안의 term clause는 `and`로 결합한다.
+- `prior_art_cutoff_date`가 있으면 `pd < YYYYMMDD`를 추가한다.
+- cutoff는 exclusive publication-date retrieval bound이며 법률상 prior-art conclusion이 아니다.
+- 최종 문자열은 D-064 `PatentSearchQueryPlan`의 1~2 candidate, PRIMARY/ALTERNATE, length/control-character/duplicate contract를 통과해야 한다.
+- `"`, `*`, `?`, `#`는 first-slice에서 CQL metacharacter ambiguity를 피하기 위해 fail-fast한다.
+- non-ASCII term fail-fast는 EPO protocol prohibition이 아니라 AIRA가 automatic translation을 아직 허용하지 않는 local first-slice policy다.
+- renderer는 semantic expansion, synonym generation, translation, classification generation을 하지 않는다.
+
+실제 EPO OPS bounded live smoke에서 `ta all "pressure sensor" and pd < 20260818` query가 provider에 의해 정상 수용되었고 request/result binding 및 bibliographic parsing이 확인되었다.
+
+Live smoke에서 비관련 intraocular-pressure 문헌이 반환된 것은 query syntax failure가 아니다. Query validity와 retrieval precision을 분리하며, relevance는 concept selection 및 후속 technical-relevance evaluation의 책임으로 둔다.
+
+다음 Step 3C에서는 `PatentTechnicalConceptPlan → PatentSearchQueryPlan → PatentResearchHandler` 실행 경로, PRIMARY/ALTERNATE 실행 budget/fallback, `maximum_bytes` transport binding을 composition/runtime에서 명시적으로 설계한다.
