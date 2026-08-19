@@ -3751,3 +3751,108 @@ Step 4A — Patent Metadata Expansion
 ```
 
 Stage 5 전체는 아직 완료하지 않는다.
+
+## 34.17 Patent Metadata Expansion and Claim Acquisition / Parsing
+
+2026-08-19 현재 Stage 5 Patent Research Vertical Slice는 Step 4A와 Step 4B까지
+실제 코드·테스트·UAT를 통해 완료되었다.
+
+현재 공식 위치:
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 4A — Patent Metadata Expansion
+Status: FINAL PASS
+
+Step 4B — Patent Claim Acquisition & Parsing
+Status: FINAL PASS
+
+NEXT:
+Step 4C — Claim Element Decomposition
+```
+
+### Step 4A — Patent Metadata Expansion
+
+완료 범위:
+
+- application number product propagation
+- priority claim contract
+- applicants / inventors
+- IPC classifications
+- CPC classifications
+- provider-only family identifier preservation
+- report / synthesis / CLI metadata propagation where product-scoped
+- integration / UAT
+
+최종 검증 기준선:
+
+```text
+full repository regression = 5343 passed
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+commit                     = 96ce87997b9d63c30386e8ce2b5eb616fb6fb25b
+```
+
+Step 4A는 metadata expansion이며 법적 상태·신규성·진보성 판단을 의미하지 않는다.
+
+### Step 4B — Patent Claim Acquisition & Parsing
+
+완료된 구조:
+
+```text
+EPO OPS exact DOCDB claims retrieval
+→ provider-level multilingual EpoOpsClaimsRecord
+→ strict observed "N. text" parsing
+→ provider-neutral PatentClaimsDocument
+→ verified patent execution 이후 companion claims runtime
+```
+
+확정된 설계 경계:
+
+- patent legal claim은 generic `ResearchClaim`과 별도 모델로 유지한다.
+- claims retrieval은 exact DOCDB publication identity를 사용한다.
+- provider language claim sets는 provider order로 보존한다.
+- `<claim>` wrapper 수를 legal claim 수로 해석하지 않는다.
+- observed `claim-text` item을 raw claim unit으로 취급한다.
+- 현재 parser는 실제 확인된 `N. text` 형식만 허용한다.
+- parsed claim number는 provider position과 일치해야 한다.
+- dependency / independent/dependent semantics는 Step 4B에서 추론하지 않는다.
+- 기존 `PatentResearchHandler`의 search/abstract/verified-record semantics는 변경하지 않는다.
+- claims는 이미 VERIFIED 된 publication에 대해 별도 companion runtime이 후처리한다.
+- claim retrieval failure는 fail-fast이며 alternate-query fallback으로 변환하지 않는다.
+- report / synthesis / CLI claims 표시도 Step 4B 범위에 포함하지 않는다.
+
+Step 4B 최종 검증:
+
+```text
+focused claim acquisition/UAT = 31 passed
+broader patent regression     = 72 passed
+full repository regression    = 5374 passed in 14.19s
+Ruff                          = PASS
+changed Python format         = PASS
+trailing whitespace audit     = PASS
+working-tree scope            = expected 13 new files only
+```
+
+### 다음 공식 제품 작업
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4C — Claim Element Decomposition
+```
+
+Step 4C는 parsed patent claim을 기술요소 단위로 구조화하는 단계다.
+
+현재 Step 4C에서 하지 않는 것:
+
+- novelty conclusion
+- inventive-step conclusion
+- invalidity conclusion
+- infringement / FTO conclusion
+- claim chart final generation
+- legal dependency conclusion without explicit evidence

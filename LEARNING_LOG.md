@@ -3040,3 +3040,103 @@ Step 4A — Patent Metadata Expansion
 ```
 
 문서 정합성도 제품 품질의 일부이며, 실제 코드·테스트·실행·Git 상태가 오래된 설명 문서보다 우선한다.
+
+## 2026-08-19 — Patent Step 4A / 4B 완료
+
+### 1. Patent metadata와 patent claim은 같은 계층이 아니다
+
+Step 4A에서 application number, priority, applicant/inventor, IPC/CPC 등
+publication metadata를 확장했다.
+
+Step 4B에서는 법적 청구항 원문을 별도 provider/raw contract와
+provider-neutral parsed contract로 처리했다.
+
+교훈:
+
+> metadata 확장과 claim content acquisition을 한 모델에 몰아넣지 않는다.
+
+### 2. `<claim>` wrapper 개수는 legal claim 개수가 아니다
+
+EPO OPS live audit에서 하나의 `<claim>` wrapper 안에 여러 `claim-text`가 존재했다.
+
+교훈:
+
+> provider XML의 structural wrapper와 domain entity를 동일시하지 않는다.
+
+### 3. parser는 관찰된 형식보다 넓게 추측하지 않는다
+
+실제 live audit에서 확인된 번호 형식은 `N. text`였다.
+
+교훈:
+
+> provider parsing contract는 관찰된 실제 shape를 기준으로 좁게 시작한다.
+
+### 4. patent legal claim과 generic ResearchClaim은 반드시 분리해야 한다
+
+AIRA의 기존 `ResearchClaim`은 evidence-backed research assertion이다.
+특허 청구항은 publication의 법적 scope text다.
+
+교훈:
+
+> 이름이 같아도 domain semantics가 다르면 별도 model을 사용한다.
+
+### 5. claims를 기존 PatentResearchHandler에 직접 넣지 않은 이유
+
+기존 handler는:
+
+```text
+search
+→ abstract retrieval
+→ VERIFIED patent source
+```
+
+를 담당하고, query fallback도 `verified_records`를 기준으로 한다.
+
+따라서:
+
+```text
+existing verified execution
+→ companion claims acquisition
+→ parsed PatentClaimsDocument
+```
+
+로 분리했다.
+
+교훈:
+
+> 후속 enrichment가 기존 retrieval success semantics를 바꾸지 않게 한다.
+
+### 6. untracked file은 `git diff --check`만으로 검사되지 않는다
+
+Step 4B 마지막 검증에서 신규 파일이 모두 untracked 상태였기 때문에
+`git diff --check`만으로는 신규 파일 내용을 검사하지 못한다는 점을 확인했다.
+
+또한 `git diff --no-index ... || exit 1`은 정상적인 diff exit code 1 때문에
+interactive shell을 종료시킬 수 있었다.
+
+교훈:
+
+> untracked change의 hygiene 검증은 tracked diff와 별도로 설계하고,
+> interactive shell 검사 명령에 위험한 `exit`를 넣지 않는다.
+
+### 7. Step 4B 최종 검증
+
+```text
+focused claim acquisition/UAT = 31 passed
+broader patent regression     = 72 passed
+full repository regression    = 5374 passed in 14.19s
+Ruff                          = PASS
+changed Python format         = PASS
+trailing whitespace audit     = PASS
+```
+
+### 다음 학습 / 개발 목표
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4C — Claim Element Decomposition
+```
+
+Step 4C에서는 아직 novelty, inventive step, invalidity, infringement 또는
+FTO 같은 법률 결론을 확정하지 않는다.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ops:world-patent-data
+    xmlns:ops="http://ops.epo.org"
+    xmlns:ftxt="http://www.epo.org/fulltext">
+  <ftxt:fulltext-documents>
+    <ftxt:fulltext-document system="ops.epo.org" fulltext-format="text-only">
+      <ftxt:bibliographic-data>
+        <ftxt:publication-reference>
+          <ftxt:document-id>
+            <ftxt:country>EP</ftxt:country>
+            <ftxt:doc-number>1000000</ftxt:doc-number>
+            <ftxt:kind>A1</ftxt:kind>
+          </ftxt:document-id>
+        </ftxt:publication-reference>
+      </ftxt:bibliographic-data>
+      <ftxt:claims lang="EN">
+        <ftxt:claim>
+          <ftxt:claim-text>   </ftxt:claim-text>
+        </ftxt:claim>
+      </ftxt:claims>
+    </ftxt:fulltext-document>
+  </ftxt:fulltext-documents>
+</ops:world-patent-data>

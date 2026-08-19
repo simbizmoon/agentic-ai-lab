@@ -4511,3 +4511,42 @@ Patent Step 3C/3D current-state 표현이 동시에 남아 있음을 확인했�
 - "현재", "다음", "authoritative" 표현은 최신 canonical section에서만 사용한다.
 - 현재 구현 상태 판단은 `MASTER.md`의 사실 확인 우선순위를 따른다.
 - Stage 전환은 `ROADMAP.md`와 필요한 경우 `DECISIONS.md`에 명시한다.
+
+## D-073 — Patent claim acquisition은 verified publication 후처리 companion runtime으로 분리한다
+
+- 상태: 확정
+- 날짜: 2026-08-19
+- 적용 범위: Stage 5 Patent Research Vertical Slice Step 4B
+
+결정:
+
+- 특허의 법적 청구항은 generic AIRA `ResearchClaim`과 별도 Domain Model로 유지한다.
+- EPO OPS claim retrieval은 bibliographic search에서 확보한 exact DOCDB publication identity를 사용한다.
+- provider-level raw claims와 provider-neutral parsed claims를 분리한다.
+- provider가 반환한 multilingual claim set과 provider order를 보존한다.
+- legal claim number는 현재 실제 관찰된 `N. text` 형식에서만 parsing한다.
+- parsed claim number는 provider position과 일치해야 하며 불일치 시 fail-fast한다.
+- claim dependency, independent/dependent classification 및 legal interpretation은 Step 4B에서 추론하지 않는다.
+- 기존 `PatentResearchHandler`의 search → abstract → VERIFIED source 경로는 유지한다.
+- claims acquisition은 이미 VERIFIED 된 publication을 입력으로 받는 별도 `PatentClaimsRuntime` companion path로 구성한다.
+- claims acquisition 실패는 zero-result 또는 alternate-query fallback으로 변환하지 않고 fail-fast한다.
+- `PatentSourceMetadata`에 raw claims를 억지로 포함하지 않는다.
+- report / synthesis / CLI claim exposure는 후속 제품 단계에서 별도 결정한다.
+
+이유:
+
+- search/fallback candidate accounting과 claims acquisition semantics를 분리할 수 있다.
+- 기존 Step 3A~3G technical relevance path의 안정성을 보존할 수 있다.
+- patent legal claim과 generic research claim의 의미 충돌을 방지할 수 있다.
+- 후속 Step 4C claim element decomposition과 Step 4D prior-art evidence mapping의 입력 경계를 명확히 할 수 있다.
+
+검증:
+
+```text
+focused claim acquisition/UAT = 31 passed
+broader patent regression     = 72 passed
+full repository regression    = 5374 passed
+Ruff                          = PASS
+changed Python format         = PASS
+trailing whitespace audit     = PASS
+```
