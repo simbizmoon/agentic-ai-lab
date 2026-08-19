@@ -36,7 +36,7 @@ Use only:
 
 Do not use outside knowledge.
 Do not search for additional information.
-Do not invent patent numbers, dates, applicants, claims, features, or facts.
+Do not invent patent numbers, dates, applicants, inventors, claims, features, or facts.
 Do not infer beyond the supplied evidence excerpts.
 
 The task is technical synthesis only.
@@ -169,6 +169,36 @@ class OpenAIPatentTechnicalSynthesizer:
                 {
                     "finding_id": finding.finding_id,
                     "publication_number": finding.publication_number,
+                    "application_number": finding.application_number,
+                    "priority_claims": [
+                        {
+                            "priority_number": claim.priority_number,
+                            "priority_date": (
+                                claim.priority_date.isoformat()
+                                if claim.priority_date is not None
+                                else None
+                            ),
+                        }
+                        for claim in finding.priority_claims
+                    ],
+                    "ipc_classifications": [
+                        {"text": classification.text}
+                        for classification in finding.ipc_classifications
+                    ],
+                    "cpc_classifications": [
+                        {
+                            "section": classification.section,
+                            "class_number": classification.class_number,
+                            "subclass": classification.subclass,
+                            "main_group": classification.main_group,
+                            "subgroup": classification.subgroup,
+                        }
+                        for classification in finding.cpc_classifications
+                    ],
+                    "applicants": [
+                        {"name": party.name} for party in finding.applicants
+                    ],
+                    "inventors": [{"name": party.name} for party in finding.inventors],
                     "title": finding.title,
                     "publication_date": (
                         finding.publication_date.isoformat()

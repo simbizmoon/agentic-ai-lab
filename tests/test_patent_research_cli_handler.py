@@ -10,7 +10,11 @@ from app.research.research_citation_verifier_executor import (
 from app.schemas.evidence_relevance_judgment import EvidenceRelevanceLevel
 from app.schemas.patent_research_request import PatentResearchRequest
 from app.schemas.patent_source_metadata import (
+    PatentCpcClassification,
+    PatentIpcClassification,
     PatentMetadataVerificationState,
+    PatentParty,
+    PatentPriorityClaim,
     PatentSourceFamily,
 )
 from app.schemas.patent_technical_report import (
@@ -53,6 +57,42 @@ def build_result() -> object:
     finding = PatentTechnicalFinding(
         finding_id="finding-001",
         publication_number="WO2023156109A1",
+        application_number="WO2023APP001",
+        priority_claims=(
+            PatentPriorityClaim(
+                priority_number="KR20250015704",
+                priority_date=date(2025, 2, 7),
+            ),
+            PatentPriorityClaim(
+                priority_number="US202563756683P",
+                priority_date=None,
+            ),
+        ),
+        ipc_classifications=(
+            PatentIpcClassification(text="H02J 3/ 32 A I"),
+            PatentIpcClassification(text="H02J 3/ 46 A I"),
+        ),
+        cpc_classifications=(
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="32",
+            ),
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="46",
+            ),
+        ),
+        applicants=(PatentParty(name="Seat Research Institute"),),
+        inventors=(
+            PatentParty(name="HEO, Sewan"),
+            PatentParty(name="KU, Tai-yeon"),
+        ),
         title="VEHICLE SEAT",
         source_url="https://ops.epo.org/example",
         publication_date=date(2023, 8, 24),
@@ -161,6 +201,27 @@ def test_handler_renders_separated_patent_result_sections(capsys) -> None:
     assert "synthesis_accepted=true" in output
     assert "=== VERIFIED METADATA / TECHNICAL RELEVANCE ===" in output
     assert "publication_number=WO2023156109A1" in output
+    assert "application_number=WO2023APP001" in output
+    assert "priority_claim_count=2" in output
+    assert "priority_claim[1].number=KR20250015704" in output
+    assert "priority_claim[1].date=2025-02-07" in output
+    assert "priority_claim[2].number=US202563756683P" in output
+    assert "priority_claim[2].date=unknown" in output
+    assert "ipc_classification_count=2" in output
+    assert "ipc_classification[1].text=H02J 3/ 32 A I" in output
+    assert "ipc_classification[2].text=H02J 3/ 46 A I" in output
+    assert "cpc_classification_count=2" in output
+    assert "cpc_classification[1].section=H" in output
+    assert "cpc_classification[1].class_number=02" in output
+    assert "cpc_classification[1].subclass=J" in output
+    assert "cpc_classification[1].main_group=3" in output
+    assert "cpc_classification[1].subgroup=32" in output
+    assert "cpc_classification[2].subgroup=46" in output
+    assert "applicant_count=1" in output
+    assert "applicant[1].name=Seat Research Institute" in output
+    assert "inventor_count=2" in output
+    assert "inventor[1].name=HEO, Sewan" in output
+    assert "inventor[2].name=KU, Tai-yeon" in output
     assert "relevance_level=directly_relevant" in output
     assert "=== EVIDENCE / PROVENANCE ===" in output
     assert "excerpt=A pressure sensor detects seat occupancy." in output
@@ -169,6 +230,52 @@ def test_handler_renders_separated_patent_result_sections(capsys) -> None:
     assert "overall_support_level=fully_supported" in output
     assert "=== SCOPE NOTICE ===" in output
     assert "no patent-law conclusion" in output
+
+
+def test_handler_renders_missing_application_number_as_unknown(capsys) -> None:
+    result = build_result()
+    finding = result.synthesis.report.findings[0].model_copy(
+        update={
+            "application_number": None,
+            "priority_claims": (),
+            "ipc_classifications": (),
+            "cpc_classifications": (),
+            "applicants": (),
+            "inventors": (),
+        }
+    )
+    report = result.synthesis.report.model_copy(update={"findings": [finding]})
+    runtime = FakeRuntime(
+        SimpleNamespace(
+            synthesis=SimpleNamespace(
+                report=report,
+                synthesis=result.synthesis.synthesis,
+            ),
+            verification=result.verification,
+        )
+    )
+    request = PatentResearchRequest(
+        question="How do pressure sensors detect seat occupancy?",
+        objective="Identify technically relevant patent publications.",
+        prior_art_cutoff_date=date(2026, 8, 18),
+        maximum_search_results=2,
+        maximum_sources=1,
+    )
+
+    value = PatentResearchCliHandler(
+        runtime_factory=lambda: runtime,  # type: ignore[arg-type]
+        request_id_factory=lambda: "request-001",
+    )(request)
+
+    output = capsys.readouterr().out
+    assert value == 0
+    assert "publication_number=WO2023156109A1" in output
+    assert "application_number=unknown" in output
+    assert "priority_claim_count=0" in output
+    assert "ipc_classification_count=0" in output
+    assert "cpc_classification_count=0" in output
+    assert "applicant_count=0" in output
+    assert "inventor_count=0" in output
 
 
 def test_handler_renders_zero_finding_as_not_applicable(capsys) -> None:

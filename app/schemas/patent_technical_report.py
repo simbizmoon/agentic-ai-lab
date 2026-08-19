@@ -9,7 +9,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.evidence_relevance_judgment import EvidenceRelevanceLevel
 from app.schemas.patent_source_metadata import (
+    PatentCpcClassification,
+    PatentIpcClassification,
     PatentMetadataVerificationState,
+    PatentParty,
+    PatentPriorityClaim,
     PatentSourceFamily,
 )
 
@@ -52,6 +56,12 @@ class PatentTechnicalFinding(BaseModel):
     title: str
     source_url: str
     publication_date: date | None = None
+    application_number: str | None = None
+    priority_claims: tuple[PatentPriorityClaim, ...] = ()
+    ipc_classifications: tuple[PatentIpcClassification, ...] = ()
+    cpc_classifications: tuple[PatentCpcClassification, ...] = ()
+    applicants: tuple[PatentParty, ...] = ()
+    inventors: tuple[PatentParty, ...] = ()
     source_family: PatentSourceFamily
     metadata_verification_state: PatentMetadataVerificationState
     relevance_level: EvidenceRelevanceLevel
@@ -72,6 +82,8 @@ class PatentTechnicalFinding(BaseModel):
         for name, value in required.items():
             if not value.strip():
                 raise ValueError(f"{name} must not be blank")
+        if self.application_number is not None and not self.application_number.strip():
+            raise ValueError("application_number must not be blank when provided")
 
         if self.relevance_level not in {
             EvidenceRelevanceLevel.DIRECTLY_RELEVANT,

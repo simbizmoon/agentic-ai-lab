@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ops:world-patent-data
+    xmlns:ops="http://ops.epo.org"
+    xmlns:exchange="http://www.epo.org/exchange">
+  <ops:biblio-search>
+    <ops:search-result>
+      <exchange:exchange-documents>
+        <exchange:exchange-document>
+          <exchange:bibliographic-data>
+            <exchange:publication-reference>
+              <exchange:document-id document-id-type="docdb">
+                <exchange:country>US</exchange:country>
+                <exchange:doc-number>20260238012</exchange:doc-number>
+                <exchange:kind>A1</exchange:kind>
+                <exchange:date>20260813</exchange:date>
+              </exchange:document-id>
+            </exchange:publication-reference>
+            <exchange:patent-classifications>
+              <exchange:patent-classification sequence="1">
+                <exchange:classification-scheme office="EP" scheme="CPCI"/>
+                <exchange:section>H</exchange:section>
+                <exchange:class>02</exchange:class>
+                <exchange:subclass>J</exchange:subclass>
+                <exchange:main-group>3</exchange:main-group>
+                <exchange:subgroup>32</exchange:subgroup>
+                <exchange:classification-value>I</exchange:classification-value>
+                <exchange:generating-office>US</exchange:generating-office>
+              </exchange:patent-classification>
+              <exchange:patent-classification sequence="2">
+                <exchange:classification-scheme office="EP" scheme="CPCI"/>
+                <exchange:section>H</exchange:section>
+                <exchange:class>02</exchange:class>
+                <exchange:subclass>J</exchange:subclass>
+                <exchange:main-group>3</exchange:main-group>
+                <exchange:subgroup>46</exchange:subgroup>
+                <exchange:classification-value>I</exchange:classification-value>
+                <exchange:generating-office>US</exchange:generating-office>
+              </exchange:patent-classification>
+              <exchange:patent-classification sequence="3">
+                <exchange:classification-scheme office="US" scheme="OTHER"/>
+                <exchange:section>G</exchange:section>
+                <exchange:class>06</exchange:class>
+                <exchange:subclass>F</exchange:subclass>
+                <exchange:main-group>1</exchange:main-group>
+                <exchange:subgroup>00</exchange:subgroup>
+              </exchange:patent-classification>
+            </exchange:patent-classifications>
+            <exchange:invention-title lang="en">CPCI fixture</exchange:invention-title>
+          </exchange:bibliographic-data>
+        </exchange:exchange-document>
+      </exchange:exchange-documents>
+    </ops:search-result>
+  </ops:biblio-search>
+</ops:world-patent-data>

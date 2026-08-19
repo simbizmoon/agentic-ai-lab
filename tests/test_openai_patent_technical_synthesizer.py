@@ -1,5 +1,6 @@
 """Tests for OpenAI-backed bounded patent technical synthesis."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -10,7 +11,11 @@ from app.research.openai_patent_technical_synthesizer import (
 )
 from app.schemas.evidence_relevance_judgment import EvidenceRelevanceLevel
 from app.schemas.patent_source_metadata import (
+    PatentCpcClassification,
+    PatentIpcClassification,
     PatentMetadataVerificationState,
+    PatentParty,
+    PatentPriorityClaim,
     PatentSourceFamily,
 )
 from app.schemas.patent_technical_report import (
@@ -51,6 +56,38 @@ def report() -> PatentTechnicalResearchReport:
     finding = PatentTechnicalFinding(
         finding_id="request-001-patent-finding-001",
         publication_number="CN122100948A",
+        application_number="CN2026122100948",
+        priority_claims=(
+            PatentPriorityClaim(
+                priority_number="KR20250015704",
+                priority_date=None,
+            ),
+        ),
+        ipc_classifications=(
+            PatentIpcClassification(text="H02J 3/ 32 A I"),
+            PatentIpcClassification(text="H02J 3/ 46 A I"),
+        ),
+        cpc_classifications=(
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="32",
+            ),
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="46",
+            ),
+        ),
+        applicants=(PatentParty(name="Seat Research Institute"),),
+        inventors=(
+            PatentParty(name="HEO, Sewan"),
+            PatentParty(name="KU, Tai-yeon"),
+        ),
         title="Vehicle seat occupancy detection method",
         source_url="https://ops.epo.org/3.2/rest-services/example",
         source_family=PatentSourceFamily.EPO_OPS,
@@ -113,6 +150,39 @@ def test_synthesizer_preserves_exact_finding_id() -> None:
         "request-001-patent-finding-001"
     )
     call = client.responses.calls[0]
+    payload = json.loads(call["input"])
+    assert payload["findings"][0]["application_number"] == "CN2026122100948"
+    assert payload["findings"][0]["priority_claims"] == [
+        {
+            "priority_number": "KR20250015704",
+            "priority_date": None,
+        }
+    ]
+    assert payload["findings"][0]["ipc_classifications"] == [
+        {"text": "H02J 3/ 32 A I"},
+        {"text": "H02J 3/ 46 A I"},
+    ]
+    assert payload["findings"][0]["cpc_classifications"] == [
+        {
+            "section": "H",
+            "class_number": "02",
+            "subclass": "J",
+            "main_group": "3",
+            "subgroup": "32",
+        },
+        {
+            "section": "H",
+            "class_number": "02",
+            "subclass": "J",
+            "main_group": "3",
+            "subgroup": "46",
+        },
+    ]
+    assert payload["findings"][0]["applicants"] == [{"name": "Seat Research Institute"}]
+    assert payload["findings"][0]["inventors"] == [
+        {"name": "HEO, Sewan"},
+        {"name": "KU, Tai-yeon"},
+    ]
     assert call["text_format"] is PatentTechnicalSynthesis
     assert call["store"] is False
 

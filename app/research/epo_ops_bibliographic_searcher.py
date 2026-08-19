@@ -17,7 +17,11 @@ from app.research.patent_publication_identity import (
 from app.schemas.epo_ops_bibliographic import (
     EpoOpsBibliographicRecord,
     EpoOpsBibliographicSearchResult,
+    EpoOpsCpcClassification,
     EpoOpsDocumentIdType,
+    EpoOpsIpcClassification,
+    EpoOpsPartyRepresentation,
+    EpoOpsPriorityClaim,
     EpoOpsSearchRequest,
 )
 
@@ -186,6 +190,12 @@ class EpoOpsBibliographicSearcher:
         publication_date = cls._publication_date(publication_id)
         title, title_language = cls._select_title(bibliographic)
         application_number = cls._application_number(bibliographic)
+        family_id = cls._family_id(document)
+        priority_claims = cls._priority_claims(bibliographic)
+        ipc_classifications = cls._ipc_classifications(bibliographic)
+        cpc_classifications = cls._cpc_classifications(bibliographic)
+        applicants = cls._party_representations(bibliographic, role="applicant")
+        inventors = cls._party_representations(bibliographic, role="inventor")
 
         return EpoOpsBibliographicRecord(
             publication_number=publication_number,
@@ -195,7 +205,13 @@ class EpoOpsBibliographicSearcher:
             source_endpoint=source_endpoint,
             document_id_type=EpoOpsDocumentIdType.DOCDB,
             application_number=application_number,
+            family_id=family_id,
             title_language=title_language,
+            priority_claims=priority_claims,
+            ipc_classifications=ipc_classifications,
+            cpc_classifications=cpc_classifications,
+            applicants=applicants,
+            inventors=inventors,
         )
 
     @classmethod
@@ -213,28 +229,12 @@ class EpoOpsBibliographicSearcher:
             )
         return f"{country}{number}{kind}", f"{country}.{number}.{kind}"
 
-    @staticmethod
-    def _publication_date(document_id) -> date | None:
-        value = document_id.findtext("exchange:date", namespaces=NAMESPACES)
-        if value is None or not value.strip():
-            return None
-        normalized = value.strip()
-        if (
-            len(normalized) != 8
-            or not normalized.isascii()
-            or not normalized.isdecimal()
-        ):
-            raise EpoOpsBibliographicResponseError(
-                "EPO OPS result contained an invalid publication date."
-            )
-        try:
-            return date.fromisoformat(
-                f"{normalized[:4]}-{normalized[4:6]}-{normalized[6:]}"
-            )
-        except ValueError:
-            raise EpoOpsBibliographicResponseError(
-                "EPO OPS result contained an invalid publication date."
-            ) from None
+    @classmethod
+    def _publication_date(cls, document_id) -> date | None:
+        return cls._optional_date(
+            document_id.findtext("exchange:date", namespaces=NAMESPACES),
+            field_name="publication date",
+        )
 
     @staticmethod
     def _select_title(bibliographic) -> tuple[str, str | None]:
@@ -261,6 +261,19 @@ class EpoOpsBibliographicSearcher:
         )
 
     @staticmethod
+    def _family_id(document) -> str | None:
+        """Preserve the provider-supplied DOCDB simple-family identifier."""
+
+        value = document.get("family-id")
+        if value is None:
+            return None
+        if not value.strip():
+            raise EpoOpsBibliographicResponseError(
+                "EPO OPS exchange-document contained a blank family-id."
+            )
+        return value.strip()
+
+    @staticmethod
     def _application_number(bibliographic) -> str | None:
         application_id = bibliographic.find(
             (
@@ -278,6 +291,278 @@ class EpoOpsBibliographicSearcher:
         if value is None or not value.strip():
             return None
         return "".join(value.split()).upper()
+
+    @staticmethod
+    def _ipc_classifications(
+        bibliographic,
+    ) -> tuple[EpoOpsIpcClassification, ...]:
+        """Preserve classification-ipcr text without parsing ST.8 subfields."""
+
+        container = bibliographic.find(
+            "exchange:classifications-ipcr",
+            NAMESPACES,
+        )
+        if container is None:
+            return ()
+
+        values: list[EpoOpsIpcClassification] = []
+        for element in container.findall(
+            "exchange:classification-ipcr",
+            NAMESPACES,
+        ):
+            raw_text = element.findtext(
+                "exchange:text",
+                namespaces=NAMESPACES,
+            )
+            if raw_text is None or not raw_text.strip():
+                raise EpoOpsBibliographicResponseError(
+                    "EPO OPS IPC classification contained blank text."
+                )
+
+            sequence = element.get("sequence")
+            values.append(
+                EpoOpsIpcClassification(
+                    text=raw_text.strip(),
+                    sequence=(
+                        sequence.strip()
+                        if sequence is not None and sequence.strip()
+                        else None
+                    ),
+                )
+            )
+
+        return tuple(values)
+
+    @staticmethod
+    def _cpc_classifications(
+        bibliographic,
+    ) -> tuple[EpoOpsCpcClassification, ...]:
+        """Select CPCI patent-classification records and preserve components."""
+
+        container = bibliographic.find(
+            "exchange:patent-classifications",
+            NAMESPACES,
+        )
+        if container is None:
+            return ()
+
+        values: list[EpoOpsCpcClassification] = []
+        for element in container.findall(
+            "exchange:patent-classification",
+            NAMESPACES,
+        ):
+            scheme = element.find(
+                "exchange:classification-scheme",
+                NAMESPACES,
+            )
+            if scheme is None:
+                continue
+
+            raw_scheme = scheme.get("scheme")
+            if raw_scheme is None or raw_scheme.casefold() != "cpci":
+                continue
+
+            def required_text(source_element, name: str) -> str:
+                value = source_element.findtext(
+                    f"exchange:{name}",
+                    namespaces=NAMESPACES,
+                )
+                if value is None or not value.strip():
+                    raise EpoOpsBibliographicResponseError(
+                        f"EPO OPS CPCI classification contained blank {name}."
+                    )
+                return value.strip()
+
+            def optional_text(source_element, name: str) -> str | None:
+                value = source_element.findtext(
+                    f"exchange:{name}",
+                    namespaces=NAMESPACES,
+                )
+                if value is None or not value.strip():
+                    return None
+                return value.strip()
+
+            sequence = element.get("sequence")
+            scheme_office = scheme.get("office")
+            values.append(
+                EpoOpsCpcClassification(
+                    section=required_text(element, "section"),
+                    class_number=required_text(element, "class"),
+                    subclass=required_text(element, "subclass"),
+                    main_group=required_text(element, "main-group"),
+                    subgroup=required_text(element, "subgroup"),
+                    sequence=(
+                        sequence.strip()
+                        if sequence is not None and sequence.strip()
+                        else None
+                    ),
+                    classification_value=optional_text(element, "classification-value"),
+                    scheme_office=(
+                        scheme_office.strip()
+                        if scheme_office is not None and scheme_office.strip()
+                        else None
+                    ),
+                    generating_office=optional_text(element, "generating-office"),
+                )
+            )
+
+        return tuple(values)
+
+    @staticmethod
+    def _party_representations(
+        bibliographic,
+        *,
+        role: str,
+    ) -> tuple[EpoOpsPartyRepresentation, ...]:
+        """Preserve applicant/inventor representations without identity merging."""
+
+        if role not in {"applicant", "inventor"}:
+            raise ValueError("role must be applicant or inventor")
+
+        parties = bibliographic.find("exchange:parties", NAMESPACES)
+        if parties is None:
+            return ()
+
+        container = parties.find(f"exchange:{role}s", NAMESPACES)
+        if container is None:
+            return ()
+
+        values: list[EpoOpsPartyRepresentation] = []
+        for element in container.findall(f"exchange:{role}", NAMESPACES):
+            raw_name = element.findtext(
+                f"exchange:{role}-name/exchange:name",
+                namespaces=NAMESPACES,
+            )
+            if raw_name is None or not raw_name.strip():
+                raise EpoOpsBibliographicResponseError(
+                    f"EPO OPS {role} contained a blank name."
+                )
+
+            sequence = element.get("sequence")
+            data_format = element.get("data-format")
+            values.append(
+                EpoOpsPartyRepresentation(
+                    name=raw_name.strip(),
+                    sequence=(
+                        sequence.strip()
+                        if sequence is not None and sequence.strip()
+                        else None
+                    ),
+                    data_format=(
+                        data_format.strip()
+                        if data_format is not None and data_format.strip()
+                        else None
+                    ),
+                )
+            )
+
+        return tuple(values)
+
+    @classmethod
+    def _priority_claims(
+        cls,
+        bibliographic,
+    ) -> tuple[EpoOpsPriorityClaim, ...]:
+        """Parse EPODOC priority claims without inferring legal validity.
+
+        A priority-claim element may contain multiple document-id representations.
+        The current provider contract selects EPODOC when present and preserves an
+        ORIGINAL number only when it occurs inside that same claim element. Claims
+        that do not expose EPODOC are outside this first bounded contract and are
+        not promoted.
+        """
+
+        container = bibliographic.find(
+            "exchange:priority-claims",
+            NAMESPACES,
+        )
+        if container is None:
+            return ()
+
+        claims: list[EpoOpsPriorityClaim] = []
+        for claim in container.findall("exchange:priority-claim", NAMESPACES):
+            epodoc = claim.find(
+                "exchange:document-id[@document-id-type='epodoc']",
+                NAMESPACES,
+            )
+            if epodoc is None:
+                continue
+
+            number = epodoc.findtext(
+                "exchange:doc-number",
+                namespaces=NAMESPACES,
+            )
+            if number is None or not number.strip():
+                raise EpoOpsBibliographicResponseError(
+                    "EPO OPS priority claim contained a blank EPODOC number."
+                )
+
+            priority_date = cls._optional_date(
+                epodoc.findtext(
+                    "exchange:date",
+                    namespaces=NAMESPACES,
+                ),
+                field_name="priority date",
+            )
+
+            original = claim.find(
+                "exchange:document-id[@document-id-type='original']",
+                NAMESPACES,
+            )
+            original_number = None
+            if original is not None:
+                raw_original = original.findtext(
+                    "exchange:doc-number",
+                    namespaces=NAMESPACES,
+                )
+                if raw_original is not None and raw_original.strip():
+                    original_number = raw_original.strip()
+
+            sequence = claim.get("sequence")
+            claim_kind = claim.get("kind")
+            claims.append(
+                EpoOpsPriorityClaim(
+                    priority_number="".join(number.split()).upper(),
+                    priority_date=priority_date,
+                    sequence=sequence.strip()
+                    if sequence and sequence.strip()
+                    else None,
+                    claim_kind=(
+                        claim_kind.strip()
+                        if claim_kind and claim_kind.strip()
+                        else None
+                    ),
+                    original_number=original_number,
+                )
+            )
+
+        return tuple(claims)
+
+    @staticmethod
+    def _optional_date(
+        value: str | None,
+        *,
+        field_name: str,
+    ) -> date | None:
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip()
+        if (
+            len(normalized) != 8
+            or not normalized.isascii()
+            or not normalized.isdecimal()
+        ):
+            raise EpoOpsBibliographicResponseError(
+                f"EPO OPS result contained an invalid {field_name}."
+            )
+        try:
+            return date.fromisoformat(
+                f"{normalized[:4]}-{normalized[4:6]}-{normalized[6:]}"
+            )
+        except ValueError:
+            raise EpoOpsBibliographicResponseError(
+                f"EPO OPS result contained an invalid {field_name}."
+            ) from None
 
     @staticmethod
     def _required_child_text(element, child_name: str) -> str:

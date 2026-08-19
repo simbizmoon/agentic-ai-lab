@@ -7,7 +7,11 @@ from pydantic import ValidationError
 
 from app.schemas.evidence_relevance_judgment import EvidenceRelevanceLevel
 from app.schemas.patent_source_metadata import (
+    PatentCpcClassification,
+    PatentIpcClassification,
     PatentMetadataVerificationState,
+    PatentParty,
+    PatentPriorityClaim,
     PatentSourceFamily,
 )
 from app.schemas.patent_technical_report import (
@@ -38,6 +42,38 @@ def finding(
     return PatentTechnicalFinding(
         finding_id="request-001-patent-finding-001",
         publication_number="CN122100948A",
+        application_number="CN2026122100948",
+        priority_claims=(
+            PatentPriorityClaim(
+                priority_number="KR20250015704",
+                priority_date=date(2025, 2, 7),
+            ),
+        ),
+        ipc_classifications=(
+            PatentIpcClassification(text="H02J 3/ 32 A I"),
+            PatentIpcClassification(text="H02J 3/ 46 A I"),
+        ),
+        cpc_classifications=(
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="32",
+            ),
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="46",
+            ),
+        ),
+        applicants=(PatentParty(name="Seat Research Institute"),),
+        inventors=(
+            PatentParty(name="HEO, Sewan"),
+            PatentParty(name="KU, Tai-yeon"),
+        ),
         title="Vehicle seat occupancy detection method",
         source_url="https://ops.epo.org/3.2/rest-services/example",
         publication_date=date(2026, 1, 1),
@@ -80,6 +116,40 @@ def test_report_accepts_valid_finding() -> None:
     value = report()
     assert value.finding_count == 1
     assert value.findings[0].publication_number == "CN122100948A"
+    assert value.findings[0].application_number == "CN2026122100948"
+    assert value.findings[0].priority_claims == (
+        PatentPriorityClaim(
+            priority_number="KR20250015704",
+            priority_date=date(2025, 2, 7),
+        ),
+    )
+    assert value.findings[0].ipc_classifications == (
+        PatentIpcClassification(text="H02J 3/ 32 A I"),
+        PatentIpcClassification(text="H02J 3/ 46 A I"),
+    )
+    assert value.findings[0].cpc_classifications == (
+        PatentCpcClassification(
+            section="H",
+            class_number="02",
+            subclass="J",
+            main_group="3",
+            subgroup="32",
+        ),
+        PatentCpcClassification(
+            section="H",
+            class_number="02",
+            subclass="J",
+            main_group="3",
+            subgroup="46",
+        ),
+    )
+    assert value.findings[0].applicants == (
+        PatentParty(name="Seat Research Institute"),
+    )
+    assert value.findings[0].inventors == (
+        PatentParty(name="HEO, Sewan"),
+        PatentParty(name="KU, Tai-yeon"),
+    )
 
 
 def test_finding_rejects_irrelevant_judgment() -> None:

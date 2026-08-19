@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ops:world-patent-data
+    xmlns:ops="http://ops.epo.org"
+    xmlns:exchange="http://www.epo.org/exchange">
+  <ops:biblio-search>
+    <ops:search-result>
+      <exchange:exchange-documents>
+        <exchange:exchange-document>
+          <exchange:bibliographic-data>
+            <exchange:publication-reference>
+              <exchange:document-id document-id-type="docdb">
+                <exchange:country>US</exchange:country>
+                <exchange:doc-number>20260238012</exchange:doc-number>
+                <exchange:kind>A1</exchange:kind>
+                <exchange:date>20260813</exchange:date>
+              </exchange:document-id>
+            </exchange:publication-reference>
+            <exchange:application-reference>
+              <exchange:document-id document-id-type="epodoc">
+                <exchange:doc-number>US202519404448</exchange:doc-number>
+                <exchange:date>20251201</exchange:date>
+              </exchange:document-id>
+            </exchange:application-reference>
+            <exchange:parties>
+              <exchange:applicants>
+                <exchange:applicant sequence="1" data-format="epodoc">
+                  <exchange:applicant-name>
+                    <exchange:name>   </exchange:name>
+                  </exchange:applicant-name>
+                </exchange:applicant>
+              </exchange:applicants>
+            </exchange:parties>
+            <exchange:invention-title lang="en">
+              Blank applicant boundary test
+            </exchange:invention-title>
+          </exchange:bibliographic-data>
+        </exchange:exchange-document>
+      </exchange:exchange-documents>
+    </ops:search-result>
+  </ops:biblio-search>
+</ops:world-patent-data>

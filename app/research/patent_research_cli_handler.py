@@ -60,6 +60,44 @@ class PatentResearchCliHandler:
             )
             print(f"[{finding.finding_id}]")
             print(f"publication_number={finding.publication_number}")
+            print(f"application_number={finding.application_number or 'unknown'}")
+            print(f"priority_claim_count={len(finding.priority_claims)}")
+            for index, claim in enumerate(finding.priority_claims, start=1):
+                priority_date = (
+                    claim.priority_date.isoformat()
+                    if claim.priority_date is not None
+                    else "unknown"
+                )
+                print(f"priority_claim[{index}].number={claim.priority_number}")
+                print(f"priority_claim[{index}].date={priority_date}")
+            print(f"ipc_classification_count={len(finding.ipc_classifications)}")
+            for index, classification in enumerate(
+                finding.ipc_classifications,
+                start=1,
+            ):
+                print(f"ipc_classification[{index}].text={classification.text}")
+            print(f"cpc_classification_count={len(finding.cpc_classifications)}")
+            for index, classification in enumerate(
+                finding.cpc_classifications,
+                start=1,
+            ):
+                print(f"cpc_classification[{index}].section={classification.section}")
+                print(
+                    f"cpc_classification[{index}].class_number="
+                    f"{classification.class_number}"
+                )
+                print(f"cpc_classification[{index}].subclass={classification.subclass}")
+                print(
+                    f"cpc_classification[{index}].main_group="
+                    f"{classification.main_group}"
+                )
+                print(f"cpc_classification[{index}].subgroup={classification.subgroup}")
+            print(f"applicant_count={len(finding.applicants)}")
+            for index, party in enumerate(finding.applicants, start=1):
+                print(f"applicant[{index}].name={party.name}")
+            print(f"inventor_count={len(finding.inventors)}")
+            for index, party in enumerate(finding.inventors, start=1):
+                print(f"inventor[{index}].name={party.name}")
             print(f"title={finding.title}")
             print(f"publication_date={publication_date}")
             print(f"source_family={finding.source_family.value}")

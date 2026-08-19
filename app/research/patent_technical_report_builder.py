@@ -207,6 +207,12 @@ class DeterministicPatentTechnicalReportBuilder:
             title=metadata.title,
             source_url=metadata.source_url,
             publication_date=metadata.publication_date,
+            application_number=metadata.application_number,
+            priority_claims=metadata.priority_claims,
+            ipc_classifications=metadata.ipc_classifications,
+            cpc_classifications=metadata.cpc_classifications,
+            applicants=metadata.applicants,
+            inventors=metadata.inventors,
             source_family=PatentSourceFamily(metadata.source_family.value),
             metadata_verification_state=(
                 PatentMetadataVerificationState(

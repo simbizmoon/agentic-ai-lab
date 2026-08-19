@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ops:world-patent-data
+    xmlns:ops="http://ops.epo.org"
+    xmlns:exchange="http://www.epo.org/exchange">
+  <ops:biblio-search>
+    <ops:search-result>
+      <exchange:exchange-documents>
+        <exchange:exchange-document>
+          <exchange:bibliographic-data>
+            <exchange:publication-reference>
+              <exchange:document-id document-id-type="docdb">
+                <exchange:country>US</exchange:country>
+                <exchange:doc-number>20260238012</exchange:doc-number>
+                <exchange:kind>A1</exchange:kind>
+                <exchange:date>20260813</exchange:date>
+              </exchange:document-id>
+            </exchange:publication-reference>
+            <exchange:application-reference>
+              <exchange:document-id document-id-type="epodoc">
+                <exchange:doc-number>US202519404448</exchange:doc-number>
+                <exchange:date>20251201</exchange:date>
+              </exchange:document-id>
+            </exchange:application-reference>
+            <exchange:classifications-ipcr>
+              <exchange:classification-ipcr sequence="1">
+                <exchange:text>H02J 3/ 32 A I</exchange:text>
+              </exchange:classification-ipcr>
+              <exchange:classification-ipcr sequence="2">
+                <exchange:text>H02J 3/ 46 A I</exchange:text>
+              </exchange:classification-ipcr>
+            </exchange:classifications-ipcr>
+            <exchange:patent-classifications>
+              <exchange:patent-classification sequence="1">
+                <exchange:classification-scheme office="US" scheme="OTHER"/>
+                <exchange:classification-symbol>H 02 J 3 32 I US</exchange:classification-symbol>
+              </exchange:patent-classification>
+            </exchange:patent-classifications>
+            <exchange:invention-title lang="en">
+              IPC classification test publication
+            </exchange:invention-title>
+          </exchange:bibliographic-data>
+        </exchange:exchange-document>
+      </exchange:exchange-documents>
+    </ops:search-result>
+  </ops:biblio-search>
+</ops:world-patent-data>

@@ -13,7 +13,11 @@ from app.research.patent_technical_report_builder import (
 )
 from app.schemas.patent_research_request import PatentResearchRequest
 from app.schemas.patent_source_metadata import (
+    PatentCpcClassification,
+    PatentIpcClassification,
     PatentMetadataVerificationState,
+    PatentParty,
+    PatentPriorityClaim,
     PatentSourceFamily,
     PatentSourceMetadata,
 )
@@ -145,6 +149,42 @@ def relevance_result(
         publication_number="CN122100948A",
         title="Vehicle seat occupancy detection method",
         source_url="https://ops.epo.org/3.2/rest-services/example",
+        application_number="CN2026122100948",
+        priority_claims=(
+            PatentPriorityClaim(
+                priority_number="KR20250015704",
+                priority_date=date(2025, 2, 7),
+            ),
+            PatentPriorityClaim(
+                priority_number="US202563756683P",
+                priority_date=date(2025, 2, 10),
+            ),
+        ),
+        ipc_classifications=(
+            PatentIpcClassification(text="H02J 3/ 32 A I"),
+            PatentIpcClassification(text="H02J 3/ 46 A I"),
+        ),
+        cpc_classifications=(
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="32",
+            ),
+            PatentCpcClassification(
+                section="H",
+                class_number="02",
+                subclass="J",
+                main_group="3",
+                subgroup="46",
+            ),
+        ),
+        applicants=(PatentParty(name="Seat Research Institute"),),
+        inventors=(
+            PatentParty(name="HEO, Sewan"),
+            PatentParty(name="KU, Tai-yeon"),
+        ),
         metadata_verification_state=(PatentMetadataVerificationState.VERIFIED),
         publication_date=date(2026, 1, 1),
     )
@@ -185,6 +225,42 @@ def test_builder_maps_relevant_evidence_with_exact_provenance() -> None:
     assert report.unevaluated_evidence_ids == []
     finding_value = report.findings[0]
     assert finding_value.publication_number == "CN122100948A"
+    assert finding_value.application_number == "CN2026122100948"
+    assert finding_value.priority_claims == (
+        PatentPriorityClaim(
+            priority_number="KR20250015704",
+            priority_date=date(2025, 2, 7),
+        ),
+        PatentPriorityClaim(
+            priority_number="US202563756683P",
+            priority_date=date(2025, 2, 10),
+        ),
+    )
+    assert finding_value.ipc_classifications == (
+        PatentIpcClassification(text="H02J 3/ 32 A I"),
+        PatentIpcClassification(text="H02J 3/ 46 A I"),
+    )
+    assert finding_value.cpc_classifications == (
+        PatentCpcClassification(
+            section="H",
+            class_number="02",
+            subclass="J",
+            main_group="3",
+            subgroup="32",
+        ),
+        PatentCpcClassification(
+            section="H",
+            class_number="02",
+            subclass="J",
+            main_group="3",
+            subgroup="46",
+        ),
+    )
+    assert finding_value.applicants == (PatentParty(name="Seat Research Institute"),)
+    assert finding_value.inventors == (
+        PatentParty(name="HEO, Sewan"),
+        PatentParty(name="KU, Tai-yeon"),
+    )
     assert finding_value.relevance_level.value == "directly_relevant"
     assert finding_value.evidence.excerpt == CONTENT
     assert finding_value.evidence.start_character == 0

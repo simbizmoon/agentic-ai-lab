@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ops:world-patent-data
+    xmlns:ops="http://ops.epo.org"
+    xmlns:exchange="http://www.epo.org/exchange">
+  <ops:biblio-search>
+    <ops:search-result>
+      <exchange:exchange-documents>
+        <exchange:exchange-document family-id="100819551">
+          <exchange:bibliographic-data>
+            <exchange:publication-reference>
+              <exchange:document-id document-id-type="docdb">
+                <exchange:country>EP</exchange:country>
+                <exchange:doc-number>TEST0001</exchange:doc-number>
+                <exchange:kind>A1</exchange:kind>
+                <exchange:date>20240131</exchange:date>
+              </exchange:document-id>
+            </exchange:publication-reference>
+
+            <exchange:application-reference>
+              <exchange:document-id document-id-type="epodoc">
+                <exchange:doc-number>EPTESTAPP0001</exchange:doc-number>
+              </exchange:document-id>
+            </exchange:application-reference>
+
+            <exchange:priority-claims>
+              <exchange:priority-claim sequence="1" kind="national">
+                <exchange:document-id document-id-type="epodoc">
+                  <exchange:doc-number>KR20250015704</exchange:doc-number>
+                  <exchange:date>20250207</exchange:date>
+                </exchange:document-id>
+                <exchange:document-id document-id-type="original">
+                  <exchange:doc-number>10-2025-0015704</exchange:doc-number>
+                </exchange:document-id>
+              </exchange:priority-claim>
+              <exchange:priority-claim sequence="2" kind="national">
+                <exchange:document-id document-id-type="epodoc">
+                  <exchange:doc-number>US202563756683P</exchange:doc-number>
+                  <exchange:date>20250210</exchange:date>
+                </exchange:document-id>
+                <exchange:document-id document-id-type="original">
+                  <exchange:doc-number>63756683</exchange:doc-number>
+                </exchange:document-id>
+              </exchange:priority-claim>
+            </exchange:priority-claims>
+
+            <exchange:classifications-ipcr>
+              <exchange:classification-ipcr sequence="1">
+                <exchange:text>H02J 3/ 32 A I</exchange:text>
+              </exchange:classification-ipcr>
+              <exchange:classification-ipcr sequence="2">
+                <exchange:text>H02J 3/ 46 A I</exchange:text>
+              </exchange:classification-ipcr>
+            </exchange:classifications-ipcr>
+
+            <exchange:patent-classifications>
+              <exchange:patent-classification sequence="1">
+                <exchange:classification-scheme office="EP" scheme="CPCI"/>
+                <exchange:section>H</exchange:section>
+                <exchange:class>02</exchange:class>
+                <exchange:subclass>J</exchange:subclass>
+                <exchange:main-group>3</exchange:main-group>
+                <exchange:subgroup>32</exchange:subgroup>
+                <exchange:classification-value>I</exchange:classification-value>
+                <exchange:generating-office>US</exchange:generating-office>
+              </exchange:patent-classification>
+              <exchange:patent-classification sequence="2">
+                <exchange:classification-scheme office="EP" scheme="CPCI"/>
+                <exchange:section>H</exchange:section>
+                <exchange:class>02</exchange:class>
+                <exchange:subclass>J</exchange:subclass>
+                <exchange:main-group>3</exchange:main-group>
+                <exchange:subgroup>46</exchange:subgroup>
+                <exchange:classification-value>I</exchange:classification-value>
+                <exchange:generating-office>US</exchange:generating-office>
+              </exchange:patent-classification>
+            </exchange:patent-classifications>
+
+            <exchange:parties>
+              <exchange:applicants>
+                <exchange:applicant sequence="1" data-format="epodoc">
+                  <exchange:applicant-name>
+                    <exchange:name>SEAT RESEARCH INST [KR]</exchange:name>
+                  </exchange:applicant-name>
+                </exchange:applicant>
+                <exchange:applicant sequence="1" data-format="original">
+                  <exchange:applicant-name>
+                    <exchange:name>Seat Research Institute</exchange:name>
+                  </exchange:applicant-name>
+                </exchange:applicant>
+              </exchange:applicants>
+              <exchange:inventors>
+                <exchange:inventor sequence="1" data-format="epodoc">
+                  <exchange:inventor-name>
+                    <exchange:name>HEO SEWAN [KR]</exchange:name>
+                  </exchange:inventor-name>
+                </exchange:inventor>
+                <exchange:inventor sequence="1" data-format="original">
+                  <exchange:inventor-name>
+                    <exchange:name>HEO, Sewan</exchange:name>
+                  </exchange:inventor-name>
+                </exchange:inventor>
+                <exchange:inventor sequence="2" data-format="epodoc">
+                  <exchange:inventor-name>
+                    <exchange:name>KU TAI-YEON [KR]</exchange:name>
+                  </exchange:inventor-name>
+                </exchange:inventor>
+                <exchange:inventor sequence="2" data-format="original">
+                  <exchange:inventor-name>
+                    <exchange:name>KU, Tai-yeon</exchange:name>
+                  </exchange:inventor-name>
+                </exchange:inventor>
+              </exchange:inventors>
+            </exchange:parties>
+
+            <exchange:invention-title lang="en">
+              Integrated patent metadata fixture
+            </exchange:invention-title>
+          </exchange:bibliographic-data>
+        </exchange:exchange-document>
+      </exchange:exchange-documents>
+    </ops:search-result>
+  </ops:biblio-search>
+</ops:world-patent-data>
