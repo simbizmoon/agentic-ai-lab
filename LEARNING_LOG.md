@@ -3140,3 +3140,142 @@ Step 4C — Claim Element Decomposition
 
 Step 4C에서는 아직 novelty, inventive step, invalidity, infringement 또는
 FTO 같은 법률 결론을 확정하지 않는다.
+
+## 2026-08-19 — Patent Step 4C Claim Element Decomposition 완료
+
+### 1. Semantic decomposition과 deterministic validation의 역할은 다르다
+
+Claim을 기술요소로 나누는 일은 단순 punctuation split이 아니다. 하나의 긴 문장 안에서
+구성요소, 기능, 조건과 관계를 의미 단위로 보존해야 한다.
+
+이번 Step 4C에서는:
+
+```text
+LLM
+→ semantic element decomposition
+
+deterministic code
+→ schema / source identity / lexical grounding / order validation
+```
+
+으로 책임을 분리했다.
+
+교훈:
+
+> 모델에게 의미 판단을 맡기더라도, 코드로 확실히 검증할 수 있는 invariant는 다시 검증한다.
+
+### 2. deterministic validator가 semantic proof인 것은 아니다
+
+element 단어가 source claim에 존재하고 원래 순서를 따른다고 해서 claim 전체가 완전하게
+분해되었다는 뜻은 아니다.
+
+이번 validator가 증명하지 않는 것:
+
+```text
+full claim coverage
+semantic completeness
+essentiality
+novelty
+inventive step
+legal scope
+dependency
+```
+
+교훈:
+
+> 검증기가 실제로 증명하는 범위를 넘어 이름이나 설명을 확장하지 않는다.
+
+### 3. 다국어 grounding은 영어 token assumption을 그대로 적용하면 안 된다
+
+처음 validator는 exact token equality를 사용했다. 한국어에서는 source의 `압력센서와`와
+decomposed element의 `압력센서`처럼 조사 때문에 정상적인 의미 보존이 exact-token mismatch가
+될 수 있었다.
+
+이를 source-token containment + ordered subsequence로 수정했다.
+
+교훈:
+
+> lexical safety rule도 언어의 형태론적 특성을 고려해야 한다.
+
+### 4. Offline integration과 live smoke는 서로 다른 실패를 잡는다
+
+Offline fixture integration은 다음 경로를 검증했다.
+
+```text
+EPO XML
+→ retriever
+→ parser
+→ PatentClaimsDocument
+→ decomposition runtime
+```
+
+실제 live smoke는 여기에 real EPO OPS와 real OpenAI Structured Outputs를 추가했다.
+
+첫 live run에서 EPO retrieval/parser는 통과했지만 OpenAI read timeout이 발생했다.
+이 실패는 unit/integration test만으로는 발견할 수 없었다.
+
+교훈:
+
+> external provider capability는 mock PASS와 bounded live PASS를 분리해서 기록한다.
+
+### 5. timeout과 retry는 correctness와 별도의 runtime contract다
+
+기본 설정은:
+
+```text
+model = gpt-5
+timeout = 30 seconds
+max_retries = 2
+```
+
+였고 실제 claim decomposition에서 timeout이 발생했다.
+
+Smoke에 한해:
+
+```text
+timeout = 120 seconds
+max_retries = 0
+```
+
+으로 제한하여 재실행했고 43.261초에 성공했다.
+
+이는 30초가 claim decomposition workload에 부족할 수 있다는 evidence지만,
+한 번의 smoke만으로 전역 기본 timeout을 변경하지 않았다.
+
+교훈:
+
+> latency evidence를 correctness failure와 혼동하지 말고, retry budget도 실제 provider call bound의 일부로 본다.
+
+### 6. Step 4C 최종 검증
+
+```text
+focused Patent regression = 82 passed
+full repository pytest    = 5430 passed in 20.56s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded live smoke        = PASS
+```
+
+실제 live smoke:
+
+```text
+publication = EP1000000B1
+language    = EN
+claim       = 1
+model       = gpt-5
+elements    = 9
+grounding   = PASS
+```
+
+### 다음 학습 / 개발 목표
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4D — Prior-Art Evidence Mapping
+```
+
+Step 4D에서는 claim element마다 verified prior-art evidence를 traceable하게 연결하는
+구조를 만든다. 아직 novelty, inventive step, invalidity, infringement/FTO 또는
+최종 claim chart 법률 결론을 만들지 않는다.

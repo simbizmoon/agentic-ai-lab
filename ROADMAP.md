@@ -38,15 +38,14 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 5 — Internet Research Expansion
 - 현재 Vertical Slice: Patent Research Vertical Slice
-- 현재 완료 지점: Step 3G — Patent User Acceptance Test `FINAL PASS`
-- 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5에서는 EPO OPS
-  structured patent provider, request-grounded concept planning, deterministic CQL, bounded
-  execution, VERIFIED patent metadata/abstract binding, technical-relevance evidence,
-  patent-specific synthesis/support verification, `aira research-patent` CLI 및 사용자 UAT까지
-  first usable Patent Technical Research slice를 완료했다.
+- 현재 완료 지점: Step 4C — Claim Element Decomposition `FINAL PASS`
+- 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
+  Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
+  Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
+  Element Decomposition(Step 4C)까지 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Patent Research Vertical Slice Step 4A — Patent Metadata Expansion
-- 현재 기준일: 2026-08-18
+- 다음 공식 작업: Patent Research Vertical Slice Step 4D — Prior-Art Evidence Mapping
+- 현재 기준일: 2026-08-19
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -76,17 +75,17 @@
 
 현재 검증 기준:
 
-- 기준일: 2026-08-18
+- 기준일: 2026-08-19
 - Python: `3.12.3`
 - pytest: `9.1.1`
 - Ruff: `0.16.0`
-- Step 3G focused Patent regression: `66 passed`
-- Step 3G full repository regression: `5302 passed`
+- Step 4C focused Patent regression: `82 passed`
+- Step 4C full repository regression: `5430 passed in 20.56s`
 - Ruff: `PASS`
 - changed Python format check: `PASS`
 - `git diff --check`: `PASS`
-- Patent live UAT: `PASS`
-- accepted code checkpoint: `e3e1d65e6790fa2656f25f260608e4950519052f`
+- Step 4C bounded live smoke: `PASS`
+- accepted code checkpoint: Step 4C는 아직 commit 전이며 마지막 accepted checkpoint는 `3994cacd6f0c4692769653a010ae747cd4234d25`
 
 판정 원칙:
 
@@ -849,7 +848,7 @@ Rewrite가 아니라 Integration-first
 - [ ] 출원일
 - [x] 공개일 — first slice에서 VERIFIED publication date 지원
 - [ ] 출원인
-- [ ] 청구항
+- [x] 청구항 — exact DOCDB acquisition/parsing 및 Step 4C technical element decomposition baseline 지원
 - [ ] 법적 상태
 - [ ] 관련도와 위험도
 
@@ -3856,3 +3855,116 @@ Step 4C는 parsed patent claim을 기술요소 단위로 구조화하는 단계�
 - infringement / FTO conclusion
 - claim chart final generation
 - legal dependency conclusion without explicit evidence
+
+## 34.18 Claim Element Decomposition
+
+2026-08-19 Stage 5 Patent Research Vertical Slice Step 4C를 완료했다.
+
+현재 공식 위치:
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 4C — Claim Element Decomposition
+Status: FINAL PASS
+
+NEXT:
+Step 4D — Prior-Art Evidence Mapping
+```
+
+### 완료된 구조
+
+```text
+PatentClaim
+→ OpenAI structured semantic decomposition
+→ PatentClaimElementSelection
+→ PatentClaimDecomposition
+→ deterministic grounding / identity validation
+→ PatentClaimsDocumentDecomposition
+```
+
+Step 4C는 Step 4B의 provider-neutral parsed claim을 입력으로 사용하며,
+기존 claim acquisition/search/fallback semantics를 변경하지 않는다.
+
+### 확정된 설계 경계
+
+- patent claim element는 generic `ResearchClaim`과 별도 domain contract로 유지한다.
+- `PatentClaimElement`, `PatentClaimElementSelection`, `PatentClaimDecomposition`을
+  별도 immutable/strict schema로 둔다.
+- LLM은 supplied claim text만 사용하여 ordered technical element를 생성한다.
+- synonym invention, translation, dependency inference 및 legal interpretation을 금지한다.
+- local deterministic validator가 `claim_number`, `provider_position`,
+  `original_claim_text` identity drift를 fail-fast한다.
+- element wording은 source claim의 lexical token sequence에 grounded되어야 한다.
+- 한국어 조사처럼 정상적인 suffix 차이는 source token containment로 허용하되
+  source order는 유지한다.
+- deterministic grounding은 semantic completeness, full-claim coverage,
+  novelty, essentiality 또는 legal-scope proof가 아니다.
+- multilingual claim-set/provider order와 claim order를 decomposition document에서도
+  그대로 보존한다.
+- zero claim document는 decomposer를 호출하지 않으며 grounding failure는 fail-fast한다.
+- report/CLI exposure, prior-art evidence mapping, claim chart와 legal conclusion은
+  Step 4C 범위 밖이다.
+
+### Offline integration
+
+Step 4B의 실제 EPO fixture를 재사용하여 다음을 검증했다.
+
+```text
+EPO claims XML fixture
+→ EpoOpsClaimsRetriever
+→ EpoOpsClaimsRecord
+→ strict patent claim parser
+→ PatentClaimsDocument
+→ PatentClaimDecompositionRuntime
+→ ordered multilingual decompositions
+```
+
+B1 multilingual fixture의 `DE → FR → EN` 순서와 각 claim의 provider position,
+publication number/DOCDB/source endpoint identity가 decomposition 결과까지 보존되었다.
+
+### Bounded live smoke
+
+실제 EPO OPS의 `EP.1000000.B1`에서 EN claim 1개를 취득하고 실제 `gpt-5`
+Structured Outputs decomposition 1회를 수행했다.
+
+```text
+EPO exact DOCDB retrieval = PASS
+languages                 = DE, FR, EN
+parsed claim              = EN claim 1
+OpenAI model              = gpt-5
+generated elements        = 9
+deterministic grounding   = PASS
+LIVE_SMOKE_RESULT         = PASS
+```
+
+기본 OpenAI 설정 `timeout=30`, `max_retries=2`에서는 첫 smoke가 timeout되었다.
+동일 smoke를 `OPENAI_TIMEOUT_SECONDS=120`, `OPENAI_MAX_RETRIES=0`으로 재실행했을 때
+43.261초에 성공했다. 이는 claim decomposition latency에 대한 실제 runtime evidence이며,
+전역 timeout 기본값 변경은 Step 4C에서 확정하지 않았다.
+
+### 최종 검증 기준선
+
+```text
+focused Patent regression = 82 passed
+full repository pytest    = 5430 passed in 20.56s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded live smoke        = PASS
+working-tree scope        = expected Step 4C new files only
+```
+
+### 다음 공식 제품 작업
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4D — Prior-Art Evidence Mapping
+```
+
+Step 4D에서는 Step 4C의 ordered technical elements와 verified prior-art evidence를
+traceable하게 대응시키는 구조를 설계한다. Claim chart 최종 생성과 novelty/inventive-step,
+invalidity, infringement/FTO 같은 법률 결론은 아직 수행하지 않는다.

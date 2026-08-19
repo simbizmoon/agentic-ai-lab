@@ -4550,3 +4550,71 @@ Ruff                          = PASS
 changed Python format         = PASS
 trailing whitespace audit     = PASS
 ```
+
+## D-074 — Patent claim element decomposition은 LLM semantic split 뒤 deterministic source-grounding을 강제한다
+
+- 상태: 확정
+- 날짜: 2026-08-19
+- 적용 범위: Stage 5 Patent Research Vertical Slice Step 4C
+
+### 결정
+
+```text
+PatentClaim
+→ OpenAI structured element selection
+→ PatentClaimDecomposition
+→ deterministic source-grounding validator
+```
+
+- patent legal claim element는 generic `ResearchClaim`과 별도 domain model로 유지한다.
+- LLM은 claim을 기술요소 단위로 의미 있게 분해하되 supplied claim text 밖의
+  기술 사실, synonym, translation, dependency 또는 legal interpretation을 추가하지 않는다.
+- element numbering은 1부터 contiguous order를 사용한다.
+- `claim_number`, `provider_position`, `original_claim_text`는 source claim과 exact bind한다.
+- deterministic validator는 source claim의 lexical token order를 이용해 hallucinated wording과
+  reordered wording을 fail-fast한다.
+- 한국어 조사와 같이 element token이 source token에 포함되는 정상적인 suffix 차이는 허용한다.
+- lexical grounding은 semantic completeness, full coverage, essentiality, novelty 또는
+  legal scope 검증을 의미하지 않는다.
+- full-claim coverage를 문자열 규칙으로 억지 검증하지 않는다.
+- multilingual claim-set order와 provider claim order를 decomposition result에서도 보존한다.
+- grounding 실패는 fail-fast하며 silent repair, alternate-query fallback 또는 legal inference로
+  변환하지 않는다.
+- Step 4C 결과는 prior-art evidence mapping의 입력이며 claim chart 또는 legal conclusion 자체가 아니다.
+
+### 이유
+
+Semantic claim decomposition은 punctuation split만으로 정확하게 수행하기 어렵기 때문에
+LLM Structured Outputs가 적합하다. 반면 source identity, lexical invention 및 ordering은
+deterministic code가 더 강하게 검증할 수 있다.
+
+따라서:
+
+```text
+LLM = semantic decomposition
+code = schema / identity / lexical grounding invariant
+```
+
+으로 책임을 분리한다.
+
+한국어 live/unit 검증에서 source token `압력센서와`와 element token `압력센서`처럼
+조사 때문에 exact-token equality가 정상 decomposition을 거부하는 사례가 확인되었다.
+이에 exact equality 대신 ordered source-token containment를 사용하되 source order는 계속 강제한다.
+
+### 검증
+
+```text
+focused Patent regression = 82 passed
+full repository pytest    = 5430 passed in 20.56s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded EPO/OpenAI smoke  = PASS
+```
+
+실제 bounded smoke에서는 `EP.1000000.B1` EN claim 1을 `gpt-5`가 9개 element로
+구조화했고 deterministic grounding을 통과했다.
+
+기본 `OPENAI_TIMEOUT_SECONDS=30`에서는 실제 Structured Outputs call이 timeout되었고,
+smoke에 한해 `120` seconds / `0` retries로 재실행하여 43.261초에 성공했다.
+이 evidence만으로 전역 timeout 기본값을 변경하지 않으며 별도 reliability/latency 결정에서 다룬다.
