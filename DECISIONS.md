@@ -4692,3 +4692,93 @@ bounded EPO/OpenAI smoke  = PASS
 
 이 smoke는 chronology를 검증하지 않았으며 novelty, anticipation, obviousness, invalidity,
 infringement/FTO 또는 기타 법률 결론을 생성하지 않았다.
+
+## D-076 — Claim chart는 Step 4D technical mapping의 deterministic presentation artifact로 유지한다
+
+- 상태: 확정
+- 날짜: 2026-08-20
+- 적용 범위: Stage 5 Patent Research Vertical Slice Step 4E
+
+### 결정
+
+```text
+Step 4D technical mapping
+→ deterministic restructuring
+→ human-reviewable PatentClaimChart
+```
+
+- Claim Chart 생성은 새 semantic evaluator 또는 새 LLM generation task를 추가하지 않는다.
+- `PatentPriorArtEvidenceEvaluation`을 chart row에 그대로 보존한다.
+- chart는 target patent identity, multilingual/provider claim order,
+  claim element order 및 exact evidence provenance를 보존한다.
+- chart 전체 row number는 deterministic하게 `1..N`으로 부여한다.
+- zero-evidence element도 빈 evaluation tuple을 가진 row로 보존한다.
+- `scope_notice`는 chart가 technical comparison artifact일 뿐 legal conclusion이
+  아님을 명시한다.
+- legal-conclusion field를 chart schema에 도입하지 않는다.
+- report/persistence/export/CLI는 Step 4E에서 분리한다.
+
+### 이유
+
+Step 4D는 이미 다음을 갖고 있다.
+
+```text
+target claim element
+prior-art publication identity
+exact evidence provenance
+technical relevance judgment
+```
+
+Step 4E에서 이 정보를 다시 LLM에 보내 chart를 생성하면 이미 검증된 provenance와
+judgment가 재해석되거나 변형될 위험이 있다.
+
+따라서:
+
+```text
+LLM / semantic judgment
+= Step 4D responsibility
+
+chart structure / ordering / presentation data
+= deterministic Step 4E responsibility
+```
+
+로 책임을 분리한다.
+
+### Evidence scope
+
+현재 chart의 prior-art evidence source는 VERIFIED patent abstract다.
+
+따라서 Step 4E chart는 full patent disclosure chart가 아니며,
+novelty/anticipation/inventive-step/invalidity 판단 자료로 자동 해석하지 않는다.
+
+### Execution bound
+
+Claim Chart builder/runtime은 외부 호출을 하지 않는다.
+
+다만 upstream Step 4D mapping runtime은:
+
+```text
+elements × supplied evidence
+```
+
+조합을 평가하며 mapping-specific evaluator call budget은 아직 별도 구현되지 않았다.
+이를 Step 4E의 완료 주장에 포함하지 않고 후속 reliability/cost hardening 대상으로 둔다.
+
+### 검증
+
+```text
+focused Patent regression = 65 passed in 1.21s
+full repository pytest    = 5495 passed in 20.32s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded EPO/OpenAI/chart smoke = PASS
+```
+
+실제 smoke에서 `EP.1000000.B1` claim/abstract를 대상으로 technical mapping이
+`partially_relevant`, score `0.750`으로 생성되었고, Claim Chart는 추가 외부 호출 없이
+동일 evaluation/provenance를 보존했다.
+
+chronology 및 legal prior-art qualification은 검증하지 않았고,
+novelty, anticipation, obviousness/inventive step, invalidity,
+infringement/FTO 또는 claim-scope 결론을 생성하지 않았다.

@@ -18,6 +18,7 @@ from app.research.openai_evidence_relevance_evaluator import (
     EvidenceRelevanceEvaluationResult,
 )
 from app.research.paragraph_evidence_extractor import ParagraphEvidenceExtractor
+from app.research.patent_claim_chart_runtime import PatentClaimChartRuntime
 from app.research.patent_claim_decomposition_runtime import (
     PatentClaimDecompositionRuntime,
 )
@@ -411,6 +412,53 @@ def test_offline_fixture_integrates_claims_evidence_and_mapping() -> None:
     assert len(evidence_relevance.calls) >= 1
     assert len(element_evaluator.calls) == 6
 
+    chart_result = PatentClaimChartRuntime().build(mapping_result)
+
+    assert chart_result.mapping_result is mapping_result
+    assert len(chart_result.charts) == 1
+
+    chart = chart_result.charts[0]
+    assert chart.target_publication_number == "EP1000000B1"
+    assert chart.target_publication_docdb == "EP.1000000.B1"
+    assert tuple(claim_set.language for claim_set in chart.claim_sets) == (
+        "DE",
+        "FR",
+        "EN",
+    )
+    assert tuple(len(claim_set.claims) for claim_set in chart.claim_sets) == (2, 2, 2)
+    assert tuple(
+        row.row_number
+        for claim_set in chart.claim_sets
+        for chart_claim in claim_set.claims
+        for row in chart_claim.rows
+    ) == (1, 2, 3, 4, 5, 6)
+
+    chart_english_claim_one = chart.claim_sets[2].claims[0]
+    assert chart_english_claim_one.original_claim_text == "English claim one."
+    assert chart_english_claim_one.rows[0].element_number == 1
+    assert chart_english_claim_one.rows[0].element_text == "English claim one."
+    assert chart_english_claim_one.rows[0].row_number == 5
+
+    chart_evidence = chart_english_claim_one.rows[0].evaluations[0]
+    assert chart_evidence.publication_number == "EP2000000A1"
+    assert chart_evidence.evidence_id == selected_evidence.evidence_id
+    assert chart_evidence.source_id == selected_evidence.source_id
+    assert chart_evidence.document_id == selected_evidence.document_id
+    assert chart_evidence.excerpt == selected_evidence.excerpt
+    assert chart_evidence.start_character == selected_evidence.start_character
+    assert chart_evidence.end_character == selected_evidence.end_character
+    assert (
+        chart_evidence.judgment.relevance_level
+        is EvidenceRelevanceLevel.DIRECTLY_RELEVANT
+    )
+
+    chart_german_claim_one = chart.claim_sets[0].claims[0]
+    assert chart_german_claim_one.rows[0].row_number == 1
+    assert (
+        chart_german_claim_one.rows[0].evaluations[0].judgment.relevance_level
+        is EvidenceRelevanceLevel.IRRELEVANT
+    )
+
 
 def test_offline_mapping_result_contains_no_legal_conclusion_fields() -> None:
     raw = EpoOpsClaimsRetriever(
@@ -441,9 +489,11 @@ def test_offline_mapping_result_contains_no_legal_conclusion_fields() -> None:
         evidence_result=evidence_result,
     )
 
-    serialized = repr(mapping.mapping_documents[0].model_dump()).casefold()
+    chart = PatentClaimChartRuntime().build(mapping).charts[0]
+    mapping_payload = mapping.mapping_documents[0].model_dump()
+    chart_payload = chart.model_dump()
 
-    for forbidden in (
+    forbidden_keys = {
         "novelty",
         "anticipation",
         "obviousness",
@@ -451,7 +501,29 @@ def test_offline_mapping_result_contains_no_legal_conclusion_fields() -> None:
         "invalidity",
         "infringement",
         "freedom_to_operate",
+        "legal_status",
+        "claim_scope",
         "essentiality",
         "depends_on",
-    ):
-        assert forbidden not in serialized
+    }
+
+    def collect_keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            keys = {str(key).casefold() for key in value}
+            for nested in value.values():
+                keys.update(collect_keys(nested))
+            return keys
+
+        if isinstance(value, (list, tuple)):
+            keys: set[str] = set()
+            for nested in value:
+                keys.update(collect_keys(nested))
+            return keys
+
+        return set()
+
+    assert forbidden_keys.isdisjoint(collect_keys(mapping_payload))
+    assert forbidden_keys.isdisjoint(collect_keys(chart_payload))
+
+    # Safety language may name legal concepts specifically to disclaim them.
+    assert "does not determine novelty" in chart.scope_notice.casefold()

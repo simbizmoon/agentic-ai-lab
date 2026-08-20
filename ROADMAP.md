@@ -38,13 +38,13 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 5 — Internet Research Expansion
 - 현재 Vertical Slice: Patent Research Vertical Slice
-- 현재 완료 지점: Step 4D — Prior-Art Evidence Mapping `FINAL PASS`
+- 현재 완료 지점: Step 4E — Claim Chart Generation `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
-  Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D)까지 완료했다.
+  Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation(Step 4E)까지 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Patent Research Vertical Slice Step 4E — Claim Chart Generation
+- 다음 공식 작업: Patent Research Vertical Slice Step 4F — Multi-Patent Comparison
 - 현재 기준일: 2026-08-20
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -79,13 +79,13 @@
 - Python: `3.12.3`
 - pytest: `9.1.1`
 - Ruff: `0.16.0`
-- Step 4D focused Patent regression: `46 passed`
-- Step 4D full repository regression: `5467 passed in 16.40s`
+- Step 4E focused Patent regression: `65 passed in 1.21s`
+- Step 4E full repository regression: `5495 passed in 20.32s`
 - Ruff: `PASS`
 - changed Python format check: `PASS`
 - `git diff --check`: `PASS`
-- Step 4D bounded live smoke: `PASS`
-- accepted code checkpoint: Step 4C commit/push `06e4973bb7ed3146a06bd4ffab3229ef16282734`; Step 4D는 아직 commit 전
+- Step 4E bounded live smoke: `PASS`
+- accepted code checkpoint: Step 4D commit/push `87f564a4cd6e0f5c7f6005f76a3d0f4f2593f08b`; Step 4E는 아직 commit 전
 
 판정 원칙:
 
@@ -4101,3 +4101,194 @@ Step 4E에서는 Step 4D의 traceable element/evidence mappings를 사람이 검
 structured claim-chart 형태로 구성한다. Claim chart는 기술적 비교 artifact이며,
 novelty/inventive-step/invalidity/infringement/FTO 같은 법률 결론은 여전히 별도
 legal-analysis layer의 책임으로 남긴다.
+
+## 34.20 Claim Chart Generation
+
+2026-08-20 Stage 5 Patent Research Vertical Slice Step 4E를 완료했다.
+
+현재 공식 위치:
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 4E — Claim Chart Generation
+Status: FINAL PASS
+
+NEXT:
+Step 4F — Multi-Patent Comparison
+```
+
+### 완료된 구조
+
+```text
+PatentPriorArtEvidenceMappingRuntimeResult
+→ PatentClaimsDocumentEvidenceMapping
+→ DeterministicPatentClaimChartBuilder
+→ PatentClaimChartRuntime
+→ PatentClaimChart
+   └─ language claim set
+      └─ source claim
+         └─ ordered claim-element row
+            └─ 0..N prior-art evidence evaluations
+```
+
+Step 4E는 Step 4D에서 이미 생성한 claim-element/evidence technical mapping을
+사람이 검토 가능한 structured chart artifact로 재구성한다.
+
+### 확정된 설계 경계
+
+- claim chart 생성에는 새로운 LLM 판단을 추가하지 않는다.
+- Step 4D의 `PatentPriorArtEvidenceEvaluation`을 그대로 재사용한다.
+- target publication number/DOCDB/source endpoint를 chart에 보존한다.
+- multilingual claim-set order, provider claim order, element order를 보존한다.
+- chart 전체 row는 `1..N`의 deterministic global row number를 가진다.
+- zero-evidence element도 row로 보존하여 "evidence 없음"과 schema failure를 구분한다.
+- prior-art publication, `evidence_id`, `source_id`, `document_id`, exact excerpt,
+  character offsets 및 technical relevance judgment를 손실 없이 보존한다.
+- chart는 `novelty`, `anticipation`, `obviousness`, `inventive_step`, `invalidity`,
+  `infringement`, `freedom_to_operate`, `legal_status`, `claim_scope`,
+  `essentiality`, `depends_on` 같은 legal-conclusion field를 만들지 않는다.
+- safety `scope_notice`는 위 법률 개념을 명시적으로 언급하면서 chart가 이를
+  판단하지 않는다고 선언한다.
+- Step 4E는 persistence/export/CLI formatting을 수행하지 않는다.
+  해당 책임은 후속 Step 4G boundary로 남긴다.
+
+### 중요한 evidence scope
+
+현재 Step 4D가 사용하는 prior-art evidence는
+`PatentResearchDocumentAdapter`가 VERIFIED patent **abstract**를 generic
+`ResearchSourceDocument.content`로 변환한 결과다.
+
+따라서 현재 Step 4E chart의 의미는:
+
+```text
+claim element
+↔ verified patent abstract evidence
+technical comparison chart
+```
+
+이다.
+
+이는 다음과 같지 않다.
+
+```text
+claim element
+↔ full patent specification / claims disclosure
+```
+
+따라서 현재 chart를 full-disclosure claim chart, anticipation chart 또는
+novelty chart로 해석하지 않는다.
+
+### Mapping execution bound에 대한 현재 한계
+
+Step 4D mapping runtime은 supplied claim elements와 supplied evidence items의
+모든 조합을 평가한다.
+
+```text
+mapping evaluator calls
+= number of elements × number of supplied evidence items
+```
+
+upstream source/evidence bound가 전체 규모를 제한하지만, mapping layer 자체의
+별도 evaluator-call budget은 Step 4E 완료 시점에도 아직 도입되지 않았다.
+
+Step 4E bounded live smoke는 명시적으로:
+
+```text
+claim element = 1
+evidence item = 1
+OpenAI mapping call = 1
+claim-chart external call = 0
+```
+
+으로 실행했다.
+
+mapping-specific call budget은 correctness claim으로 간주하지 않고 후속
+reliability/cost hardening 후보로 남긴다.
+
+### Offline end-to-end integration
+
+기존 Step 4D multilingual fixture path를 claim chart까지 확장했다.
+
+```text
+claims_b1_multilingual.xml
+→ EpoOpsClaimsRetriever
+→ strict claim parser
+→ PatentClaimDecompositionRuntime
+→ prior-art semantic ResearchEvidence
+→ PatentPriorArtEvidenceMappingRuntime
+→ PatentClaimChartRuntime
+```
+
+검증 결과:
+
+- language order: `DE → FR → EN`
+- claim count: `2 / 2 / 2`
+- chart global row number: `1..6`
+- EN claim 1: row `5`
+- exact prior-art publication/evidence/source/document/excerpt/offset 보존
+- `DIRECTLY_RELEVANT` 및 `IRRELEVANT` judgment 보존
+- mapping/chart legal-conclusion field 없음
+
+### Bounded live smoke
+
+실제 EPO OPS `EP.1000000.B1`의 exact claims와 abstract를 사용하고
+`gpt-5` element/evidence technical relevance evaluation을 정확히 1회 수행한 뒤
+Step 4E chart를 생성했다.
+
+```text
+EPO claims retrieval       = PASS
+languages                  = DE, FR, EN
+EPO abstract retrieval     = PASS
+abstract language          = en
+abstract characters        = 799
+evidence provenance        = PASS
+OpenAI model               = gpt-5
+technical relevance level  = partially_relevant
+technical relevance score  = 0.750
+claim charts               = 1
+chart rows                 = 1
+chart evaluations          = 1
+chart provenance           = PASS
+legal-field boundary       = PASS
+LIVE_SMOKE_RESULT          = PASS
+```
+
+technical judgment는 abstract가 일반 apparatus 흐름은 설명하지만 claim element의
+구체적인 `frame + stop members + mould container part engagement` 구조는 설명하지
+않는다고 판정했다.
+
+smoke에서는 chronology assertion과 legal prior-art qualification을 수행하지 않았으며
+novelty, anticipation, obviousness/inventive step, validity/invalidity,
+infringement/FTO 또는 claim scope 결론을 생성하지 않았다.
+
+OpenAI call은 smoke에 한해 `OPENAI_TIMEOUT_SECONDS=120`,
+`OPENAI_MAX_RETRIES=0`으로 bounded execution했다. 이 결과만으로 전역 timeout
+기본값을 변경하지 않는다.
+
+### 최종 검증 기준선
+
+```text
+focused Patent regression = 65 passed in 1.21s
+full repository pytest    = 5495 passed in 20.32s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded live smoke        = PASS
+working-tree scope        = expected Step 4E 7 files before documentation
+```
+
+### 다음 공식 제품 작업
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4F — Multi-Patent Comparison
+```
+
+Step 4F에서는 여러 prior-art patent publication에 대한 element-level technical
+mapping을 비교 가능한 구조로 집계한다. 현재 abstract-based evidence scope와
+nonlegal boundary는 그대로 유지하며, legal novelty/inventive-step 분석으로
+자동 승격하지 않는다.

@@ -3487,3 +3487,151 @@ Step 4E — Claim Chart Generation
 
 Step 4E에서는 Step 4D의 traceable element/evidence mapping을 사람이 검토 가능한 structured
 claim chart로 변환한다. 이 chart는 technical comparison artifact이며 법률 결론은 아니다.
+
+## 2026-08-20 — Patent Step 4E Claim Chart Generation 완료
+
+### 1. 분석 결과와 presentation artifact는 분리해야 한다
+
+Step 4D에는 이미 technical judgment와 provenance가 있었다.
+
+```text
+claim element
+↔ evidence
+→ relevance judgment
+```
+
+Step 4E에서 필요한 것은 새 판단이 아니라:
+
+```text
+existing mapping
+→ 사람이 검토하기 쉬운 ordered chart
+```
+
+였다.
+
+교훈:
+
+> 분석이 끝난 데이터를 표로 만들기 위해 LLM을 다시 호출할 필요는 없다.
+> 구조화와 순서 부여는 deterministic code가 더 안전하다.
+
+### 2. "evidence가 없음"도 유효한 chart 상태다
+
+어떤 element에 evaluation이 하나도 없을 수 있다.
+
+이를 schema failure로 처리하면 다음 두 상태를 구분할 수 없다.
+
+```text
+데이터 구조가 잘못됨
+정상적으로 처리했지만 supplied evidence가 없음
+```
+
+따라서 row는 `evaluations=()`를 허용한다.
+
+교훈:
+
+> 분석 시스템의 빈 결과는 오류와 다르다. 빈 결과도 명시적인 domain state다.
+
+### 3. Safety notice와 legal field 검사는 다른 문제다
+
+초기 offline integration test에서는 serialized chart 전체에서 `novelty` 같은
+단어가 있으면 실패하도록 작성했다.
+
+하지만 chart의 safety notice는 정상적으로:
+
+```text
+does not determine novelty ...
+```
+
+라고 써야 한다.
+
+따라서 실패 원인은 production code가 아니라 잘못된 test assertion이었다.
+
+수정 후에는 값의 문자열이 아니라 nested payload의 **field key**를 재귀적으로 검사하여
+legal-conclusion field가 존재하는지를 검증했다.
+
+교훈:
+
+> 금지된 개념을 설명하기 위해 그 단어를 언급하는 것과,
+> 그 개념을 실제 데이터 필드로 생성하는 것은 다르다.
+
+### 4. Claim chart의 evidence scope를 과장하면 안 된다
+
+현재 Step 4D evidence는 verified patent abstract 기반이다.
+
+따라서 현재 chart는:
+
+```text
+claim element ↔ patent abstract technical comparison
+```
+
+이다.
+
+full specification/claim disclosure chart가 아니다.
+
+교훈:
+
+> provenance가 정확해도 source scope가 좁으면 결론의 범위도 좁게 유지해야 한다.
+
+### 5. Deterministic chart도 live E2E 검증 가치가 있다
+
+Claim Chart 자체는 외부 호출이 없지만 실제 Step 4D live mapping 결과가
+chart까지 전달되는지 검증했다.
+
+실제 smoke:
+
+```text
+EP1000000B1
+EPO claims PASS
+EPO abstract PASS
+OpenAI mapping calls = 1
+mapping = partially_relevant / 0.750
+claim charts = 1
+rows = 1
+evaluations = 1
+chart provenance PASS
+legal-field boundary PASS
+LIVE_SMOKE_RESULT=PASS
+```
+
+교훈:
+
+> deterministic downstream component라도 실제 upstream artifact와 결합될 때
+> identity/provenance drift가 없는지 E2E에서 확인해야 한다.
+
+### 6. 비용 경계는 아직 완전히 끝난 것이 아니다
+
+Claim Chart builder/runtime은 external call `0`이다.
+
+하지만 Step 4D mapping runtime은 모든:
+
+```text
+claim elements × supplied evidence
+```
+
+pair를 평가한다.
+
+현재 upstream evidence bounds가 있지만 mapping 전용 call budget은 없다.
+
+교훈:
+
+> bounded smoke와 bounded production runtime은 같은 뜻이 아니다.
+> smoke가 1 call이었다고 production mapping layer에도 1-call budget이 생기는 것은 아니다.
+
+### 7. 최종 검증
+
+```text
+focused Patent regression = 65 passed in 1.21s
+full repository pytest    = 5495 passed in 20.32s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded live smoke        = PASS
+```
+
+다음 공식 작업:
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4F — Multi-Patent Comparison
+```
