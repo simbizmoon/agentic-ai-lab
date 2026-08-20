@@ -4618,3 +4618,77 @@ bounded EPO/OpenAI smoke  = PASS
 기본 `OPENAI_TIMEOUT_SECONDS=30`에서는 실제 Structured Outputs call이 timeout되었고,
 smoke에 한해 `120` seconds / `0` retries로 재실행하여 43.261초에 성공했다.
 이 evidence만으로 전역 timeout 기본값을 변경하지 않으며 별도 reliability/latency 결정에서 다룬다.
+
+## D-075 — Patent prior-art mapping은 claim element와 traceable evidence의 기술적 관련성을 별도 domain layer에서 평가한다
+
+- 상태: 확정
+- 날짜: 2026-08-20
+- 적용 범위: Stage 5 Patent Research Vertical Slice Step 4D
+
+### 결정
+
+```text
+PatentClaimElement
++
+ResearchEvidence
+→ patent element/evidence technical relevance evaluation
+→ traceable mapping
+```
+
+- Step 4D는 Step 4C의 `PatentClaimElement`와 Step 3D의 traceable `ResearchEvidence`
+  사이에 얇은 patent-domain mapping layer를 둔다.
+- 기존 evidence provenance를 복제하지 않는다.
+- mapping은 target patent identity와 prior-art publication identity를 분리하여 보존한다.
+- prior-art evidence provenance는 `evidence_id`, `source_id`, `document_id`,
+  exact excerpt, `start_character`, `end_character`를 그대로 보존한다.
+- technical relevance judgment는 기존 `EvidenceRelevanceJudgment`의
+  `DIRECTLY_RELEVANT`, `PARTIALLY_RELEVANT`, `IRRELEVANT` contract를 재사용한다.
+- irrelevant evaluation도 저장하여 검토 흔적을 남긴다.
+- LLM은 supplied claim element와 supplied evidence excerpt만 비교한다.
+- outside knowledge, missing technical structure/function/relationship inference,
+  source authority, priority/family/legal-status 판단을 수행하지 않는다.
+- `DIRECTLY_RELEVANT`는 anticipation, novelty destruction 또는 infringement를 의미하지 않는다.
+- `PARTIALLY_RELEVANT`는 partial anticipation 또는 obviousness를 의미하지 않는다.
+- `IRRELEVANT`는 patentability 또는 validity를 의미하지 않는다.
+- mapping runtime은 source/document/publication binding 오류를 fail-fast한다.
+- zero evidence는 evaluator call 없이 empty mapping evaluations를 생성한다.
+- Step 4D 결과는 Step 4E Claim Chart Generation의 입력이며 legal conclusion 자체가 아니다.
+
+### 이유
+
+Step 3D의 generic semantic evidence stack은 이미 exact source/document/excerpt provenance를
+제공한다. 이를 patent 전용으로 복제하면 provenance semantics가 이중화된다.
+
+반면 claim element와 evidence passage의 기술적 대응 판단은 일반 research
+question/objective relevance와 의미가 다르므로, Structured Outputs/error-handling 패턴은
+재사용하되 patent element/evidence pair 전용 thin evaluator를 둔다.
+
+따라서 책임을 다음처럼 분리한다.
+
+```text
+generic evidence layer
+= evidence extraction + exact provenance
+
+patent mapping layer
+= claim element ↔ evidence technical relevance
+
+future legal layer
+= chronology / novelty / inventive step / legal conclusions
+```
+
+### 검증
+
+```text
+focused Patent regression = 46 passed in 1.14s
+full repository pytest    = 5467 passed in 16.40s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded EPO/OpenAI smoke  = PASS
+```
+
+실제 bounded smoke에서 `EP.1000000.B1`의 claim/abstract를 대상으로 `gpt-5`가
+`partially_relevant`, score `0.700`을 반환했고 exact mapping provenance가 보존되었다.
+
+이 smoke는 chronology를 검증하지 않았으며 novelty, anticipation, obviousness, invalidity,
+infringement/FTO 또는 기타 법률 결론을 생성하지 않았다.

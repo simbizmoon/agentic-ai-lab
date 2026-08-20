@@ -3279,3 +3279,211 @@ Step 4D — Prior-Art Evidence Mapping
 Step 4D에서는 claim element마다 verified prior-art evidence를 traceable하게 연결하는
 구조를 만든다. 아직 novelty, inventive step, invalidity, infringement/FTO 또는
 최종 claim chart 법률 결론을 만들지 않는다.
+
+## 2026-08-20 — Patent Step 4D Prior-Art Evidence Mapping 완료
+
+### 1. Evidence를 다시 만드는 것과 evidence를 claim element에 대응시키는 것은 다른 문제다
+
+Step 3D에는 이미 다음 provenance가 있었다.
+
+```text
+ResearchEvidence
+- evidence_id
+- source_id
+- document_id
+- exact excerpt
+- start_character / end_character
+```
+
+따라서 Step 4D에서 새 evidence pipeline을 복제하지 않았다.
+
+대신:
+
+```text
+PatentClaimElement
++
+ResearchEvidence
+→ technical relevance mapping
+```
+
+만 추가했다.
+
+교훈:
+
+> 이미 검증된 provenance abstraction이 있으면 domain layer는 그것을 재사용하고,
+> 새 책임만 얇게 추가한다.
+
+### 2. Research relevance와 claim-element relevance는 같지 않다
+
+기존 generic evaluator는 다음을 평가한다.
+
+```text
+research question/objective
+↔ evidence passage
+```
+
+Step 4D에서 필요한 것은:
+
+```text
+patent claim element
+↔ prior-art evidence passage
+```
+
+이다.
+
+Structured Outputs, refusal/status handling, usage metadata 같은 provider adapter 패턴은
+재사용했지만, semantic instruction은 patent element/evidence 기술 비교에 맞게 분리했다.
+
+교훈:
+
+> infrastructure pattern은 재사용하되 domain semantics까지 억지로 동일시하지 않는다.
+
+### 3. Technical mapping label과 legal conclusion을 분리해야 한다
+
+Step 4D의 relevance label은:
+
+```text
+directly_relevant
+partially_relevant
+irrelevant
+```
+
+이다.
+
+하지만 각각은 다음을 뜻하지 않는다.
+
+```text
+anticipated
+novelty destroyed
+obvious
+invalid
+infringing
+patentable
+```
+
+교훈:
+
+> "기술적으로 대응된다"와 "특허법상 결론이 난다" 사이에는 별도의 chronology,
+> legal rule 및 expert-analysis layer가 필요하다.
+
+### 4. Irrelevant 결과도 audit trail에서는 가치가 있다
+
+최종적으로 관련 evidence만 남기면 다음 둘을 구분할 수 없다.
+
+```text
+아직 평가하지 않음
+검토했지만 기술적으로 무관함
+```
+
+Step 4D mapping은 irrelevant evaluation도 보존한다.
+
+교훈:
+
+> 평가 시스템에서는 positive result뿐 아니라 검토 흔적 자체가 provenance다.
+
+### 5. Test fixture도 production invariant를 따라야 한다
+
+초기 Step 4D runtime test는 fake URL `ops.example` 때문에
+`PatentSourceMetadata`의 accepted-host validation에서 실패했다.
+
+production runtime에 도달하기 전 fixture 생성이 거부되었고, EPO OPS 허용 host로 수정한 뒤
+runtime tests가 통과했다.
+
+또 첫 수정 스크립트는 formatter 이후 문자열 배치를 잘못 가정해 write를 취소했다.
+
+교훈:
+
+> 테스트 fixture도 실제 domain invariant를 따라야 하며, patch script의 precondition은
+> formatter나 layout에 불필요하게 취약하지 않게 설계한다.
+
+### 6. Offline integration은 abstraction 연결을 검증한다
+
+Step 4D offline integration은 다음을 한 경로로 연결했다.
+
+```text
+EPO multilingual claims fixture
+→ claim parsing
+→ claim decomposition
+→ claim element
+
+verified patent abstract
+→ semantic evidence extraction
+→ exact ResearchEvidence provenance
+
+두 결과
+→ PatentPriorArtEvidenceMappingRuntime
+→ element/evidence mapping
+```
+
+DE → FR → EN multilingual order, claim order, publication/source/document/evidence identity와
+exact excerpt offsets가 끝까지 유지되었다.
+
+### 7. Live smoke는 keyword overlap보다 technical relationship이 중요함을 보여줬다
+
+실제 `EP.1000000.B1` live smoke에서 `gpt-5` 결과는:
+
+```text
+relevance_level = partially_relevant
+relevance_score = 0.700
+```
+
+이었다.
+
+abstract에는 claim과 공통인 apparatus 구성과 mould-part movement가 있었지만,
+claim의 구체적인 `frame with stop members` 및 engagement 관계가 나타나지 않았다.
+
+교훈:
+
+> 동일 구성요소 이름이 나온다는 사실만으로 direct relevance를 주면 안 된다.
+> 기능, 조건, 구조 및 관계가 실제 passage에 존재하는지 비교해야 한다.
+
+### 8. Live smoke의 scope를 명시적으로 제한해야 한다
+
+이번 smoke는:
+
+```text
+EPO exact claims
+EPO exact abstract
+OpenAI element/evidence technical relevance
+exact mapping provenance
+```
+
+만 검증했다.
+
+다음은 검증하지 않았다.
+
+```text
+chronology
+legal prior-art status
+novelty
+anticipation
+inventive step / obviousness
+validity / invalidity
+infringement / FTO
+```
+
+교훈:
+
+> live API가 성공했다는 사실도 그 smoke가 실제로 검증한 의미 범위 안에서만 해석한다.
+
+### 9. Step 4D 최종 검증
+
+```text
+focused Patent regression = 46 passed in 1.14s
+full repository pytest    = 5467 passed in 16.40s
+Ruff                      = PASS
+changed Python format     = PASS
+git diff --check          = PASS
+bounded live smoke        = PASS
+```
+
+### 다음 학습 / 개발 목표
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4E — Claim Chart Generation
+```
+
+Step 4E에서는 Step 4D의 traceable element/evidence mapping을 사람이 검토 가능한 structured
+claim chart로 변환한다. 이 chart는 technical comparison artifact이며 법률 결론은 아니다.
