@@ -604,28 +604,53 @@ Work Item 1 — Search Provider Decision Record
 5. `DECISIONS.md`에 결정 기록
 6. Codex 구현 작업지시서 작성
 
-# 15. 2026-08-18 현재 Integration Work Item
+# 15. Historical 2026-08-18 Integration Work Item
+
+> 이 section의 Step 4A 계획은 완료된 historical checkpoint다. 최신 상태는 Section 16을
+> 따른다.
+
+당시 authoritative product position:
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 3G — FINAL PASS
+Next: Step 4A — Patent Metadata Expansion
+```
+
+# 16. 2026-08-23 Post-Step-4G Integration Work Item
 
 현재 authoritative product position은 `ROADMAP.md`를 따른다.
 
 ```text
 Stage 5 — Internet Research Expansion
 Patent Research Vertical Slice
-Step 3G — FINAL PASS
+Step 4G — Persistence / Export / CLI Exposure — FINAL PASS
 ```
 
-다음 Integration Work Item:
+Post-Step-4G Existing Capability Audit 결과:
+
+- general web research는 이미 존재한다.
+- patent technical vertical slice는 persistence/CLI까지 존재한다.
+- dedicated academic research vertical slice는 발견되지 않았다.
+- public PDF Internet acquisition은 별도 cross-cutting audit이 필요하다.
+
+다음 Integration Work Item은 구현이 아니라 요구사항 감사다.
 
 ```text
-Step 4A — Patent Metadata Expansion
+Academic Research Vertical Slice
+Step 1 — Existing Capability and Provider Requirements Audit
 ```
 
-목표는 현재 VERIFIED publication identity/metadata/abstract baseline을
-claim analysis와 prior-art comparison에 필요한 metadata contract로 확장하는 것이다.
+감사 완료 기준:
 
-구현 전에 반드시 실제 EPO OPS response, 현재 patent schemas/adapters/runtime,
-기존 tests를 audit한다. 지원할 필드와 verification semantics는 provider evidence 없이
-추정하지 않는다.
+1. academic document identity와 metadata boundary 정의
+2. DOI 및 version identity 규칙 정의
+3. abstract/full-text/license 접근 범위 정의
+4. first-provider 후보와 공식 API 제약 비교
+5. request/result/provenance/citation/cost bound 정의
+6. 재사용할 generic web/evidence component와 새 domain contract 분리
+7. paywall bypass, citation-count quality inference 등 명시적 제외 범위 정의
 
-Step 4A에서는 novelty/invalidity/obviousness/infringement/FTO 같은 definitive legal
-conclusion을 추가하지 않는다.
+Provider 선택은 최신 공식 문서 확인이 필요한 별도 작업이다. offline audit 단계에서는
+provider를 추측하거나 외부 API를 호출하지 않는다.

@@ -319,7 +319,7 @@ Full regression
 - search concurrency 안전 구조 도입
 - integrated local-document + web RAG production path 확대
 
-## 8. 2026-08-18 Capability Matrix 갱신 — Stage 5 Patent first usable slice
+## 8. Historical 2026-08-18 Capability Matrix — Stage 5 Patent first usable slice
 
 ### Patent Research capability
 
@@ -354,4 +354,57 @@ focused patent regression  = 66 passed
 full repository regression = 5302 passed
 Ruff / format / diff-check = PASS
 live Patent UAT             = PASS
+```
+
+
+## 9. 2026-08-23 Capability Matrix 갱신 — Patent Step 4G FINAL PASS
+
+> 이 section이 Patent Research Vertical Slice의 최신 capability 판정이다. Section 8은
+> Step 3G 당시의 historical checkpoint로 보존한다.
+
+### Patent Research capability
+
+| Capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| EPO OPS Structured Patent Provider | Production-aligned / live validated | first structured provider |
+| Patent Planning / Search / VERIFIED Abstract | Production-aligned / live validated | bounded technical discovery |
+| Exact DOCDB Claim Acquisition / Parsing | Production-aligned / live validated | exact publication identity |
+| Grounded Claim Element Decomposition | Production-aligned / live validated | claim wording preservation |
+| Element / Evidence Relevance Mapping | Production-aligned / live validated | bounded technical judgment |
+| Deterministic Claim Chart | Production-aligned / live validated | exact evaluation preservation |
+| Deterministic Multi-Patent Comparison | Production-aligned / live validated | publication-axis comparison |
+| Markdown / JSON Export | Production-aligned / offline E2E | collision-safe persistence |
+| `aira research-patent` CLI | User-facing / UAT PASS | first technical-research slice |
+| `aira research-patent-compare` CLI | User-facing / offline E2E PASS | explicit bounded comparison |
+| Multi-provider Patent Federation | Not implemented | future candidate, not current commitment |
+| Full Specification Disclosure Analysis | Not implemented | abstracts are current comparison evidence |
+| Chronology / Legal Prior-Art Qualification | Not implemented | authoritative legal conclusion excluded |
+| Authoritative Patent Legal Analysis | Not implemented | novelty/validity/infringement/FTO excluded |
+
+### Stage 5 adjacent capability audit
+
+| Capability | 상태 | 감사 결과 |
+|---|---|---|
+| General Web Research | Present | Tavily + safe HTTP reader + live/integrated runtime |
+| Public PDF Internet Acquisition | Audit required | local PDF foundation exists; web acquisition boundary unconfirmed |
+| Dedicated Academic Research | Not found | no academic provider/domain vertical slice found |
+
+### Current product position
+
+```text
+Stage 5 — Internet Research Expansion          IN PROGRESS
+Patent Research Vertical Slice Step 4G        FINAL PASS
+Next immediate work                           governance sync complete
+Next product audit                            Academic Research provider requirements
+```
+
+Step 4G accepted validation:
+
+```text
+focused comparison regression = 122 passed in 2.22s
+full repository regression    = 5618 passed in 21.46s
+Ruff / format / diff-check    = PASS
+Step 4G OpenAI requests       = 0
+Step 4G EPO requests          = 0
+prior bounded patent live     = PASS
 ```
