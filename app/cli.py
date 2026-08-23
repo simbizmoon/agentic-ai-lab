@@ -298,32 +298,68 @@ def build_parser() -> argparse.ArgumentParser:
         help="Compare one explicit patent claim against explicit publications.",
         description=(
             "Retrieve exact EPO claims and abstracts, perform a bounded technical "
-            "comparison, and persist Markdown and JSON artifacts. This command "
+            "comparison, and persist Markdown and JSON artifacts. Supply 2 to 4 "
+            "comparison publications. Planned mapping calls equal maximum claim "
+            "elements multiplied by comparison publication count. This command "
             "does not make patent-law conclusions or rank patents."
         ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    comparison_parser.add_argument("--target-publication", required=True)
+    comparison_parser.add_argument(
+        "--target-publication",
+        required=True,
+        help="Exact EP publication with kind code, for example EP1000000B1.",
+    )
     comparison_parser.add_argument(
         "--comparison-publication",
         required=True,
         action="append",
         metavar="PUBLICATION",
-    )
-    comparison_parser.add_argument("--claim-language", default="EN")
-    comparison_parser.add_argument("--claim-number", type=int, default=1)
-    comparison_parser.add_argument(
-        "--maximum-claim-elements", type=int, default=1, metavar="COUNT"
-    )
-    comparison_parser.add_argument(
-        "--maximum-mapping-calls", type=int, default=2, metavar="COUNT"
+        help=(
+            "Exact EP comparison publication with kind code; repeat this option "
+            "2 to 4 times."
+        ),
     )
     comparison_parser.add_argument(
-        "--maximum-bytes", type=int, default=1_000_000, metavar="BYTES"
+        "--claim-language",
+        default="EN",
+        help="Two-letter language code for the selected target claim.",
+    )
+    comparison_parser.add_argument(
+        "--claim-number",
+        type=int,
+        default=1,
+        help="One-based claim number to compare.",
+    )
+    comparison_parser.add_argument(
+        "--maximum-claim-elements",
+        type=int,
+        default=1,
+        metavar="COUNT",
+        help="Maximum decomposed claim elements; allowed range is 1 to 8.",
+    )
+    comparison_parser.add_argument(
+        "--maximum-mapping-calls",
+        type=int,
+        default=2,
+        metavar="COUNT",
+        help=(
+            "Maximum element/evidence evaluations; must cover elements multiplied "
+            "by comparison publications."
+        ),
+    )
+    comparison_parser.add_argument(
+        "--maximum-bytes",
+        type=int,
+        default=1_000_000,
+        metavar="BYTES",
+        help="Maximum accepted bytes for each EPO response.",
     )
     comparison_parser.add_argument(
         "--output-dir",
         default="reports/patent-comparisons",
         metavar="PATH",
+        help="Directory for collision-safe Markdown and JSON artifacts.",
     )
 
     cache_parser = subparsers.add_parser(
@@ -766,8 +802,24 @@ def run_patent_comparison_command(
         )
     except ValidationError as error:
         first_error = error.errors(include_url=False)[0]
-        message = str(first_error.get("msg", "invalid patent comparison request"))
-        message = message.removeprefix("Value error, ")
+        location = tuple(first_error.get("loc", ()))
+        error_type = str(first_error.get("type", ""))
+        if (
+            location == ("comparison_publication_numbers",)
+            and error_type == "too_short"
+        ):
+            message = (
+                "at least 2 --comparison-publication values are required; "
+                "repeat the option for each publication"
+            )
+        elif (
+            location == ("comparison_publication_numbers",) and error_type == "too_long"
+        ):
+            message = "at most 4 --comparison-publication values are allowed"
+        else:
+            message = str(
+                first_error.get("msg", "invalid patent comparison request")
+            ).removeprefix("Value error, ")
         raise ValueError(message) from error
 
     return patent_comparison_handler(

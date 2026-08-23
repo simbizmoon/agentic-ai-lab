@@ -13,6 +13,7 @@ from app.research.patent_publication_identity import (
 from app.schemas.http_html_reader_config import HttpHtmlReaderConfig
 
 _CLAIM_LANGUAGE_PATTERN = re.compile(r"[A-Z]{2}", re.ASCII)
+_EXACT_EPO_PUBLICATION_PATTERN = re.compile(r"EP[0-9]+[A-Z][0-9]?", re.ASCII)
 
 
 class PatentMultiPatentComparisonRequest(BaseModel):
@@ -34,7 +35,13 @@ class PatentMultiPatentComparisonRequest(BaseModel):
     @field_validator("target_publication_number")
     @classmethod
     def normalize_target_publication_number(cls, value: str) -> str:
-        return normalize_patent_publication_number(value)
+        normalized = normalize_patent_publication_number(value)
+        if _EXACT_EPO_PUBLICATION_PATTERN.fullmatch(normalized) is None:
+            raise ValueError(
+                "exact EPO comparison requires an EP publication with kind code, "
+                "for example EP1000000B1"
+            )
+        return normalized
 
     @field_validator("comparison_publication_numbers")
     @classmethod
@@ -45,6 +52,14 @@ class PatentMultiPatentComparisonRequest(BaseModel):
         normalized = tuple(
             normalize_patent_publication_number(value) for value in values
         )
+        if any(
+            _EXACT_EPO_PUBLICATION_PATTERN.fullmatch(value) is None
+            for value in normalized
+        ):
+            raise ValueError(
+                "exact EPO comparison requires EP publications with kind codes, "
+                "for example EP1000000A1"
+            )
         folded = tuple(value.casefold() for value in normalized)
         if len(set(folded)) != len(folded):
             raise ValueError("comparison publication numbers must be unique")
