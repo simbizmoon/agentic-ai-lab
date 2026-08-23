@@ -375,7 +375,7 @@ live Patent UAT             = PASS
 | Deterministic Multi-Patent Comparison | Production-aligned / live validated | publication-axis comparison |
 | Markdown / JSON Export | Production-aligned / offline E2E | collision-safe persistence |
 | `aira research-patent` CLI | User-facing / UAT PASS | first technical-research slice |
-| `aira research-patent-compare` CLI | User-facing / offline E2E PASS | explicit bounded comparison |
+| `aira research-patent-compare` CLI | User-facing / offline E2E PASS; Step 4H UAT pending | explicit bounded comparison |
 | Multi-provider Patent Federation | Not implemented | future candidate, not current commitment |
 | Full Specification Disclosure Analysis | Not implemented | abstracts are current comparison evidence |
 | Chronology / Legal Prior-Art Qualification | Not implemented | authoritative legal conclusion excluded |
@@ -394,8 +394,9 @@ live Patent UAT             = PASS
 ```text
 Stage 5 — Internet Research Expansion          IN PROGRESS
 Patent Research Vertical Slice Step 4G        FINAL PASS
-Next immediate work                           governance sync complete
-Next product audit                            Academic Research provider requirements
+Next official work                          Patent Step 4H — Analysis UAT
+After Step 4H                               Academic Step 5A — Provider Foundation
+Next Stage                                  Stage 6 — Integrated RAG
 ```
 
 Step 4G accepted validation:

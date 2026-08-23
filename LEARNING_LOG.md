@@ -3769,5 +3769,22 @@ EPO requests               = 0
 
 ### 다음 학습 단계
 
-Step 4G 이후 공식 범위를 추측하지 않는다. Existing Capability Audit으로 남은 제품 gap을
-확인하고 다음 단계의 이론, 작은 예제, 실습 및 완료 기준을 먼저 정의한다.
+```text
+Step 4H — Patent Analysis UAT
+```
+
+Step 4G에서 완성한 patent comparison CLI와 artifacts를 실제 사용자 관점에서 평가한다.
+Step 4H 완료 후 `Stage 5 / Academic Research / Step 5A`로 이동한다. Stage 6는 Integrated RAG로 유지한다.
+
+## 2026-08-23 — Stage 5 Step 4H / 5A 및 Stage 6 순서 확정
+
+현재 vertical slice의 UAT gate를 먼저 닫고 다음 source domain으로 이동한다.
+
+```text
+현재 학습 = Patent Step 4H UAT
+다음 학습 = Academic Step 5A Foundation
+다음 Stage = Stage 6 Integrated RAG
+```
+
+Academic provider 감사 자료는 Step 5A에서 재사용하지만 현재 작업 상태를 바꾸는 근거로
+사용하지 않는다.

@@ -628,29 +628,46 @@ Patent Research Vertical Slice
 Step 4G — Persistence / Export / CLI Exposure — FINAL PASS
 ```
 
-Post-Step-4G Existing Capability Audit 결과:
-
-- general web research는 이미 존재한다.
-- patent technical vertical slice는 persistence/CLI까지 존재한다.
-- dedicated academic research vertical slice는 발견되지 않았다.
-- public PDF Internet acquisition은 별도 cross-cutting audit이 필요하다.
-
-다음 Integration Work Item은 구현이 아니라 요구사항 감사다.
+다음 Integration Work Item:
 
 ```text
-Academic Research Vertical Slice
-Step 1 — Existing Capability and Provider Requirements Audit
+Step 4H — Patent Analysis UAT
 ```
 
-감사 완료 기준:
+Step 4H의 목적은 새 patent analysis logic을 추가하는 것이 아니라 Step 4G의 사용자 경계를
+검증하는 것이다. CLI help/input, pre-execution budget visibility, validation errors,
+Markdown/JSON readability, exact provenance traceability 및 technical-only scope comprehension을
+scripted offline UAT로 먼저 평가한다.
 
-1. academic document identity와 metadata boundary 정의
-2. DOI 및 version identity 규칙 정의
-3. abstract/full-text/license 접근 범위 정의
-4. first-provider 후보와 공식 API 제약 비교
-5. request/result/provenance/citation/cost bound 정의
-6. 재사용할 generic web/evidence component와 새 domain contract 분리
-7. paywall bypass, citation-count quality inference 등 명시적 제외 범위 정의
+완료 기준:
 
-Provider 선택은 최신 공식 문서 확인이 필요한 별도 작업이다. offline audit 단계에서는
-provider를 추측하거나 외부 API를 호출하지 않는다.
+1. happy path와 주요 validation/error scenario PASS
+2. provider 생성 전 invalid request 및 budget overflow rejection
+3. planned/actual mapping call과 artifact path 표시
+4. 두 publication cell과 exact evidence provenance 확인
+5. legal/ranking field absence 및 scope notice 이해 가능성 확인
+6. focused/full regression과 static checks PASS
+7. 발견된 usability debt와 UAT verdict 문서화
+
+Step 4F의 live path가 이미 통과했으므로 동일한 OpenAI/EPO smoke를 자동 반복하지 않는다.
+live UAT가 추가로 필요한지는 offline UAT 결과 후 별도 최소 budget으로 결정한다.
+
+Step 4H 완료 후 다음 Integration Work Item:
+
+```text
+Stage 5 — Academic Research Vertical Slice
+Step 5A — Existing Capability / Provider Foundation
+```
+
+Academic provider requirements audit은 Step 5A 입력 자료로 사용한다. Step 5A는 academic
+identity, DOI/version, metadata, abstract/full-text/license, provenance/citation 및 cost bound를
+먼저 정의한다.
+
+Stage 5 완료 후:
+
+```text
+Stage 6 — Integrated RAG
+```
+
+Stage 6는 기존 charter대로 Parsing, Chunking, Hybrid Retrieval, Reranking 및 Citation
+Grounding의 통합 책임을 가진다.

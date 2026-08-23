@@ -45,7 +45,7 @@
   Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation
   (Step 4E), Multi-Patent Comparison(Step 4F), Persistence / Export / CLI Exposure(Step 4G)까지 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Step 4G 이후 후속 범위 선정을 위한 Existing Capability Audit 및 계획 확정
+- 다음 공식 작업: Patent Research Vertical Slice Step 4H — Patent Analysis UAT
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -4468,6 +4468,83 @@ Step 4G EPO requests                  = 0
 
 ### 다음 공식 작업
 
-Step 4G 이후 번호와 범위는 기존 문서에 정의되어 있지 않다. 새 단계를 추측하지 않고
-Existing Capability Audit을 통해 다음 vertical-slice gap을 확인한 뒤 계획과 완료 기준을
-먼저 확정한다.
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4H — Patent Analysis UAT
+```
+
+Step 4H는 새 분석 capability를 추가하는 단계가 아니다. Step 4G에서 노출한
+`research-patent-compare`를 실제 사용자 관점에서 평가하여 입력 이해 가능성, 비용 경계,
+오류 메시지, Markdown/JSON artifact 가독성, exact provenance 추적성 및 technical-only
+safety boundary를 검증한다. OpenAI semantic quality, chronology 또는 법률 결론을 UAT의
+합격 주장으로 포함하지 않는다.
+
+
+## 34.23 Step 4H — Patent Analysis UAT 계획
+
+상태: `PLANNED`
+
+### 목표
+
+Step 4G의 end-user patent comparison workflow가 실제 사용 가능한지 평가한다.
+
+```text
+explicit target/comparison publications
+→ visible pre-execution bounds
+→ bounded technical analysis
+→ Markdown / JSON artifacts
+→ user traceability and scope understanding
+```
+
+### UAT 평가 항목
+
+1. CLI help와 필수 입력이 초보 사용자에게 이해 가능한가
+2. publication identity와 claim selection이 출력에서 명확한가
+3. planned/actual mapping calls와 artifact path가 명확한가
+4. 잘못된 publication, claim, budget 및 output path 오류가 수정 가능한 메시지인가
+5. Markdown comparison이 두 publication cell과 evidence provenance를 읽기 쉽게 표시하는가
+6. JSON artifact가 exact evidence ID/source ID/document ID/excerpt/offset을 보존하는가
+7. 결과가 technical relevance이며 legal opinion 또는 patent ranking이 아님을 사용자가
+   구분할 수 있는가
+8. 동일 실행의 비용과 외부 호출 범위가 사전에 제한되는가
+
+### 실행 원칙
+
+- offline UAT fixture와 scripted scenarios를 먼저 실행한다.
+- Step 4F에서 이미 검증한 동일 live semantic path를 불필요하게 반복하지 않는다.
+- 새 live smoke가 필요한 경우 별도 승인과 최소 호출 budget을 먼저 명시한다.
+- UAT는 OpenAI semantic quality, prior-art chronology, novelty, validity,
+  infringement/FTO 또는 기타 법률 결론을 검증하지 않는다.
+
+### 완료 기준
+
+- happy path, validation failure, budget rejection, artifact review 및 scope comprehension
+  scenario PASS
+- 외부 provider가 주입되기 전 invalid request rejection 확인
+- exact provenance 및 legal/ranking field absence 확인
+- focused regression, full repository regression, Ruff/format/diff-check PASS
+- UAT 결과와 발견된 usability debt를 문서화
+
+Step 4H 완료 후 다음 공식 작업은 `Stage 5 / Academic Research Vertical Slice /
+Step 5A — Existing Capability / Provider Foundation`이다. Academic Research는 현재 Patent
+작업 번호를 대체하지 않으며, Stage 6는 기존 charter의 Integrated RAG 책임을 유지한다.
+
+## 34.24 Stage 5 / Stage 6 실행 순서 확정
+
+```text
+Stage 5 — Internet Research Expansion
+├─ Patent Research Vertical Slice
+│  └─ Step 4H — Patent Analysis UAT                         CURRENT / NEXT
+└─ Academic Research Vertical Slice
+   └─ Step 5A — Existing Capability / Provider Foundation AFTER 4H
+
+Stage 6 — Integrated RAG                                  AFTER STAGE 5
+```
+
+Step 5A는 academic identity, DOI/version, metadata, abstract/full-text/license,
+provenance/citation 및 cost bound를 먼저 정의한다. provider 구현과 live smoke는 offline
+contract gate 이후에 수행한다.
+
+Stage 6는 Parsing, Chunking, Hybrid Retrieval, Reranking 및 Citation Grounding의 통합
+책임을 가진다. Academic Research를 Stage 6로 이동하거나 Stage 6의 의미를 변경하지 않는다.

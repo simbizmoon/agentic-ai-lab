@@ -4862,3 +4862,35 @@ CLI-to-artifact offline E2E에서 두 publication, 두 mapping evaluation, exact
 Markdown/JSON persistence 및 legal/ranking field 부재를 검증했다. Step 4G 개발과 검증의
 OpenAI/EPO 호출은 0회다. 실제 provider 연결은 Step 4F bounded live smoke 결과를 재사용하며,
 불필요한 동일 live smoke는 반복하지 않는다.
+
+## D-079 — Stage 5는 Patent Step 4H 후 Academic Step 5A로 진행하고 Stage 6는 Integrated RAG로 유지한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Stage 5 이후 실행 번호와 Stage 6 boundary
+
+### 결정
+
+```text
+Stage 5 / Patent Research / Step 4H — Patent Analysis UAT
+→ Stage 5 / Academic Research / Step 5A — Provider Foundation
+→ Stage 6 / Integrated RAG
+```
+
+- Step 4H를 현재 다음 공식 작업으로 유지한다.
+- Academic Research는 Step 4H 완료 후 Stage 5 Step 5A로 시작한다.
+- Stage 6는 기존 charter의 Integrated RAG 책임을 유지한다.
+- Academic provider 감사 결과는 Step 5A 입력 자료로 사용하되 Step 4H를 대체하지 않는다.
+- 이후 문서와 작업지시는 이 번호와 순서를 따른다.
+
+### 이유
+
+Patent comparison은 persistence/CLI까지 구현됐지만 사용자 관점의 분석 UAT가 남아 있다.
+Academic Research는 Stage 5의 Internet Research 범위이고 Stage 6는 이미 Integrated RAG로
+정의되어 있으므로 책임과 번호를 분리한다.
+
+### 비용 원칙
+
+Step 4H는 offline scripted UAT를 기본으로 하고 동일 OpenAI/EPO smoke를 불필요하게
+반복하지 않는다. Step 5A도 offline-first로 수행하며 live provider smoke는 명시적 bound
+이후에만 실행한다.
