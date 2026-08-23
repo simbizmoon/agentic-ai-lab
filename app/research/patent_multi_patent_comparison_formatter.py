@@ -45,11 +45,15 @@ class DeterministicPatentMultiPatentComparisonFormatter:
             f"- Target publication: {comparison.target_publication_number}",
             f"- Target DOCDB identity: {comparison.target_publication_docdb}",
             f"- Target source: {comparison.target_source_endpoint}",
-            "- Prior-art publication axis: "
+            "- Comparison publication axis: "
             + (
                 ", ".join(comparison.prior_art_publications)
                 if comparison.prior_art_publications
                 else "None"
+            ),
+            (
+                "- Evidence scope: supplied patent abstract excerpts only; "
+                "not a review of full patent specifications or chronology."
             ),
             "",
         ]

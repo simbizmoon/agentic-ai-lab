@@ -144,6 +144,19 @@ def test_repeated_formatting_is_deterministic() -> None:
     assert formatter.format(source) == formatter.format(source)
 
 
+def test_markdown_uses_neutral_axis_and_explicit_abstract_scope() -> None:
+    markdown = (
+        DeterministicPatentMultiPatentComparisonFormatter()
+        .format(comparison())
+        .markdown
+    )
+
+    assert "Comparison publication axis: EP2000000A1, EP3000000A1" in markdown
+    assert "Prior-art publication axis" not in markdown
+    assert "supplied patent abstract excerpts only" in markdown
+    assert "not a review of full patent specifications or chronology" in markdown
+
+
 def test_markdown_preserves_order_and_exact_provenance() -> None:
     formatted = DeterministicPatentMultiPatentComparisonFormatter().format(comparison())
     markdown = formatted.markdown
