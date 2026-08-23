@@ -48,7 +48,7 @@
   Existing Capability / Provider Foundation(Step 5A), Academic Evidence Acquisition
   (Step 5B), Evidence Persistence / CLI Exposure와 사용자 UAT(Step 5C)를 완료했다.
 - Stage 5 전체 상태: `COMPLETE`
-- 다음 공식 작업: Stage 6 / Step 6A — Integrated RAG Existing Capability Audit
+- 다음 공식 작업: Stage 6 / Step 1 — Integrated RAG Existing Capability Audit
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -901,7 +901,7 @@ Keyword와 Semantic Search를 결합하여 관련 Evidence만 LLM에 제공한�
 
 ## 상태
 
-- [~] 준비 중 — Step 6A Existing Capability Audit가 다음 공식 작업
+- [~] 준비 중 — Step 1 Existing Capability Audit가 다음 공식 작업
 
 ## Work Items
 
@@ -4536,7 +4536,7 @@ Stage 5 — Internet Research Expansion
    └─ Step 5C — Evidence Persistence / CLI Exposure       FINAL PASS
 
 Stage 6 — Integrated RAG                                  CURRENT / NEXT
-└─ Step 6A — Existing Capability Audit                    NEXT
+└─ Step 1 — Existing Capability Audit                    NEXT
 ```
 
 Step 5A는 academic identity, DOI/version, metadata, abstract/full-text/license,
@@ -4698,8 +4698,8 @@ Step 5C 사용자 gate까지 통과했으므로 Stage 5 Internet Research Expans
 
 ```text
 Stage 6 — Integrated RAG
-Step 6A — Existing Capability Audit
+Step 1 — Existing Capability Audit
 ```
 
-Step 6A는 기존 parsing, chunking, keyword/semantic retrieval, cache, evidence 및 citation
+Step 1는 기존 parsing, chunking, keyword/semantic retrieval, cache, evidence 및 citation
 capability를 먼저 감사한다. 새 vector database나 provider를 감사 전에 도입하지 않는다.

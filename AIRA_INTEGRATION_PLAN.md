@@ -668,9 +668,9 @@ Step 5C는 exact scholarly evidence를 private deterministic Markdown/JSON과 bo
 
 ```text
 Stage 6 — Integrated RAG
-Step 6A — Existing Capability Audit
+Step 1 — Existing Capability Audit
 ```
 
-Step 6A는 새 구현 전에 기존 parser/chunker, keyword/semantic retrieval, embedding/parsed cache,
+Step 1는 새 구현 전에 기존 parser/chunker, keyword/semantic retrieval, embedding/parsed cache,
 evidence selection 및 citation grounding의 실제 재사용 가능 범위를 감사한다. 감사 전에는 새
 vector database, retrieval provider 또는 OpenAI 호출을 추가하지 않는다.

@@ -3894,5 +3894,5 @@ artifact를 오프라인으로 재검증해 불필요한 OpenAlex 호출을 피�
 
 ### 다음 학습 단계
 
-Stage 6 Step 6A — Integrated RAG Existing Capability Audit. 기존 parsing, chunking,
+Stage 6 Step 1 — Integrated RAG Existing Capability Audit. 기존 parsing, chunking,
 retrieval, cache, evidence 및 citation 구조를 감사한 뒤 최소 통합 slice를 설계한다.

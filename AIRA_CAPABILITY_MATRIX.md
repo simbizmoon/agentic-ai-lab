@@ -454,7 +454,7 @@ After:   Stage 6 / Integrated RAG
 
 ```text
 Current: Stage 5 / Academic Step 5C FINAL PASS — Stage 5 COMPLETE
-Next:    Stage 6 / Step 6A Integrated RAG Existing Capability Audit
+Next:    Stage 6 / Step 1 Integrated RAG Existing Capability Audit
 After:   Stage 6 implementation sequence selected by audit
 ```
 
@@ -472,5 +472,5 @@ After:   Stage 6 implementation sequence selected by audit
 
 ```text
 Current: Stage 5 / Academic Step 5C FINAL PASS — Stage 5 COMPLETE
-Next:    Stage 6 / Step 6A Integrated RAG Existing Capability Audit
+Next:    Stage 6 / Step 1 Integrated RAG Existing Capability Audit
 ```

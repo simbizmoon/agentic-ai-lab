@@ -4986,7 +4986,7 @@ claim support를 판단하지 않는다.
 - live CLI 검증은 OpenAlex 1회로 제한하고 smoke assertion 오류는 기존 artifact의 offline
   validation으로 해결해 provider 호출을 반복하지 않는다.
 - Step 5C를 `FINAL PASS`로 닫고 Stage 5를 완료한다.
-- 다음 공식 작업은 Stage 6 Step 6A Integrated RAG Existing Capability Audit이다.
+- 다음 공식 작업은 Stage 6 Step 1 Integrated RAG Existing Capability Audit이다.
 
 ### 제한
 
