@@ -325,3 +325,21 @@ def test_models_are_strict_and_forbid_unknown_fields() -> None:
             },
             strict=True,
         )
+
+
+def test_failed_result_preserves_all_rejected_record_failures() -> None:
+    result = ScholarlySearchResult(
+        request=_request(),
+        provider="fixture-provider",
+        status=ScholarlySearchStatus.FAILED,
+        record_failures=(_failure(position=1), _failure(position=2)),
+        error=ScholarlyProviderError(
+            error_type="AllRecordsRejected",
+            message="All provider records failed validation.",
+        ),
+        usage=_usage(received=2, accepted=0, rejected=2),
+    )
+
+    assert result.works == ()
+    assert len(result.record_failures) == 2
+    assert result.usage.records_rejected == 2

@@ -172,6 +172,8 @@ class ScholarlySearchResult(BaseModel):
                     "partial result requires accepted works and record failures"
                 )
         elif self.status is ScholarlySearchStatus.FAILED and (
-            self.works or self.record_failures or self.error is None
+            self.works or self.error is None
         ):
-            raise ValueError("failed result requires only a provider error")
+            raise ValueError(
+                "failed result must not contain accepted works and requires an error"
+            )
