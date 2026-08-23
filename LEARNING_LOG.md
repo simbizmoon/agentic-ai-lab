@@ -3813,3 +3813,30 @@ artifact의 `Prior-art publication axis` 표현은 chronology나 법적 prior-ar
 
 Stage 5 Academic Research Vertical Slice Step 5A — Existing Capability / Provider Foundation.
 먼저 offline capability와 provider contract를 감사하고, live 호출은 명시적 최소 budget 이후에만 수행한다.
+
+## 2026-08-23 — Academic Step 5A Provider Foundation 완료
+
+### 학습 결과
+
+학술자료는 URL이나 제목만으로 식별하면 안 된다. DOI, arXiv version, PMID/PMCID, OpenAlex ID와
+provider response provenance를 분리해 보존해야 같은 논문, 다른 버전, 단순 유사 제목을
+구분할 수 있다.
+
+### 실패 사례 분석
+
+1. 모든 provider record가 malformed인 경우 초기 FAILED schema가 record failure를 보존하지
+   못했다. 실패 상태에서도 rejected record 위치와 원인을 유지하도록 계약을 수정했다.
+2. 첫 live smoke는 DOI가 반드시 존재한다고 가정해 실패했다. DOI는 선택 사항이므로 없는
+   값을 만들지 않고 `ABSENT`로 명시하도록 smoke를 수정했다.
+3. 전체 formatter 검사는 기존 745개 파일의 baseline 차이를 발견했다. Step 5A 변경 파일의
+   format PASS와 분리 기록하고 무관한 전체 재포맷은 수행하지 않았다.
+
+교훈:
+
+> 결측값과 실패 provenance를 정직하게 보존하는 것이 겉으로 완전해 보이는 metadata보다
+> 중요하다.
+
+### 다음 학습 단계
+
+Stage 5 Academic Step 5B — Academic Evidence Acquisition. metadata/abstract를 기존 exact
+evidence 구조에 연결하되 PDF 다운로드와 이용 허가는 별도 경계로 유지한다.

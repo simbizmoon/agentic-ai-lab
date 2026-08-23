@@ -37,16 +37,17 @@
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 5 — Internet Research Expansion
-- 현재 Vertical Slice: Patent Research Vertical Slice
-- 현재 완료 지점: Step 4H — Patent Analysis UAT `FINAL PASS`
+- 현재 Vertical Slice: Academic Research Vertical Slice
+- 현재 완료 지점: Step 5A — Existing Capability / Provider Foundation `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
   Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation
   (Step 4E), Multi-Patent Comparison(Step 4F), Persistence / Export / CLI Exposure(Step 4G),
-  Patent Analysis UAT(Step 4H)까지 완료했다.
+  Patent Analysis UAT(Step 4H)까지 완료했다. Academic Research Vertical Slice에서는
+  Existing Capability / Provider Foundation(Step 5A)을 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Academic Research Vertical Slice Step 5A — Existing Capability / Provider Foundation
+- 다음 공식 작업: Academic Research Vertical Slice Step 5B — Academic Evidence Acquisition
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -4529,7 +4530,8 @@ Stage 5 — Internet Research Expansion
 ├─ Patent Research Vertical Slice
 │  └─ Step 4H — Patent Analysis UAT                         FINAL PASS
 └─ Academic Research Vertical Slice
-   └─ Step 5A — Existing Capability / Provider Foundation CURRENT / NEXT
+   ├─ Step 5A — Existing Capability / Provider Foundation FINAL PASS
+   └─ Step 5B — Academic Evidence Acquisition             CURRENT / NEXT
 
 Stage 6 — Integrated RAG                                  AFTER STAGE 5
 ```
@@ -4540,3 +4542,56 @@ contract gate 이후에 수행한다.
 
 Stage 6는 Parsing, Chunking, Hybrid Retrieval, Reranking 및 Citation Grounding의 통합
 책임을 가진다. Academic Research를 Stage 6로 이동하거나 Stage 6의 의미를 변경하지 않는다.
+
+## 34.25 Step 5A — Academic Provider Foundation 완료
+
+상태: `FINAL PASS` (2026-08-23)
+
+### 완료 범위
+
+- 기존 research/evidence/citation/PDF 기반의 재사용 가능성과 academic-specific 결손 감사
+- provider-neutral scholarly work identity, DOI/version/access/license/provenance schema
+- DOI, arXiv, PMID, PMCID 및 OpenAlex ID의 deterministic normalization
+- exact identifier 기반 deduplication과 title-only 추측 금지
+- bounded provider request/result/usage/error/partial-failure contract
+- OpenAlex metadata adapter와 offline HTTP fixtures
+- exact identity와 원본 record를 보존하는 bounded scholarly workflow
+- 실제 OpenAlex 1-request metadata smoke
+
+### 검증 기준선
+
+```text
+Academic focused regression       = 74 passed in 0.53s
+full repository pytest            = 5698 passed in 20.82s
+Ruff lint                         = PASS
+Step 5A changed-file format       = PASS
+git diff --check / working tree   = PASS / clean
+successful OpenAlex live requests = 1
+successful live result            = 1 accepted work
+live abstract                     = 1630 characters
+live response provenance          = SHA-256 PASS
+OpenAI requests                   = 0
+PDF/full-text downloads           = 0
+```
+
+repository-wide format check에는 기존 745개 파일의 formatter baseline 차이가 남아 있다.
+Step 5A가 만든 파일은 format check를 통과했으며 이 단계에서 무관한 대규모 재포맷은 하지 않았다.
+
+### 검증하지 않은 범위
+
+- 검색 semantic quality와 systematic-review completeness
+- DOI 존재 보장, citation impact 또는 논문 품질 ranking
+- PDF/full-text 취득 및 license에 따른 이용 권한
+- 여러 academic provider의 federation
+- OpenAI 기반 학술 의미 판단
+
+### 다음 공식 작업
+
+```text
+Stage 5 — Academic Research Vertical Slice
+Step 5B — Academic Evidence Acquisition
+```
+
+Step 5B는 provider metadata/abstract를 기존 exact evidence provenance 구조에 연결하는 범위를
+먼저 정의한다. Public PDF download와 license permission은 별도 명시적 안전 경계 전에는
+포함하지 않는다. Stage 6는 계속 Integrated RAG 책임을 유지한다.

@@ -4917,3 +4917,30 @@ Step 4H는 offline scripted UAT를 기본으로 하고 동일 OpenAI/EPO smoke�
 
 Step 4H는 OpenAI semantic quality의 일반화, chronology, novelty, validity,
 infringement/FTO 또는 기타 법률 결론을 검증하거나 제공하지 않는다.
+
+## D-081 — Academic Step 5A는 OpenAlex 기반 bounded metadata foundation으로 완료한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Stage 5 Academic Research provider foundation
+
+### 결정
+
+- scholarly identity는 provider-neutral typed schema로 유지하고 OpenAlex는 첫 adapter로 사용한다.
+- DOI는 선택 사항이며 provider가 공급하지 않으면 `ABSENT`로 보존하고 생성하지 않는다.
+- 중복은 exact normalized identifier로만 판정하고 제목·저자 유사성으로 추측하지 않는다.
+- 모든 provider record는 exact response URL, provider record ID 및 response SHA-256에 결합한다.
+- malformed record는 부분/전체 실패에서 위치와 오류를 보존한다.
+- request/result count와 provider request budget은 실행 계약으로 검증한다.
+- Step 5A를 `FINAL PASS`로 닫고 다음 작업은 Academic Step 5B로 진행한다.
+
+### 선택 이유와 비용
+
+OpenAlex는 structured work metadata, DOI/OpenAlex identity, authorship, abstract 및 access 위치를
+한 응답에서 제공하고 요청별 비용을 관찰할 수 있다. 성공 live smoke는 검색 요청 1회,
+provider reported cost USD 0.001, OpenAI 0회, PDF/full-text download 0회였다.
+
+### 제한
+
+이 결정은 검색 품질, systematic-review completeness, citation impact, PDF 이용 허가 또는
+authoritative literature quality 판단을 보장하지 않는다.

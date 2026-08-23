@@ -387,15 +387,15 @@ live Patent UAT             = PASS
 |---|---|---|
 | General Web Research | Present | Tavily + safe HTTP reader + live/integrated runtime |
 | Public PDF Internet Acquisition | Audit required | local PDF foundation exists; web acquisition boundary unconfirmed |
-| Dedicated Academic Research | Not found | no academic provider/domain vertical slice found |
+| Academic Metadata Foundation | Production-aligned / live validated | bounded OpenAlex metadata, exact identity/provenance; evidence workflow pending |
 
 ### Current product position
 
 ```text
 Stage 5 — Internet Research Expansion          IN PROGRESS
 Patent Research Vertical Slice Step 4H        FINAL PASS
-Next official work                          Academic Step 5A — Provider Foundation
-After Step 4H                               Academic Step 5A — Provider Foundation
+Academic Research Vertical Slice Step 5A      FINAL PASS
+Next official work                          Academic Step 5B — Evidence Acquisition
 Next Stage                                  Stage 6 — Integrated RAG
 ```
 
@@ -420,5 +420,23 @@ analysis는 계속 미구현/제외 상태다.
 ```text
 Current: Stage 5 / Patent Step 4H FINAL PASS
 Next:    Stage 5 / Academic Step 5A Provider Foundation
+After:   Stage 6 / Integrated RAG
+```
+
+## 11. 2026-08-23 Capability Matrix 갱신 — Academic Step 5A FINAL PASS
+
+| Academic capability | 상태 | 제한 |
+|---|---|---|
+| Scholarly identity/access schema | Production-aligned / offline validated | provider-neutral typed contract |
+| Identifier normalization/dedup | Production-aligned / offline validated | exact identifiers only |
+| OpenAlex metadata adapter | Production-aligned / live validated | one provider, one-page bounded search |
+| Bounded scholarly workflow | Production-aligned / live validated | metadata/abstract foundation |
+| Academic evidence acquisition | Not implemented | Step 5B |
+| Public academic PDF acquisition | Not implemented | permission/safety boundary required |
+| Systematic literature review | Not implemented | completeness not established |
+
+```text
+Current: Stage 5 / Academic Step 5A FINAL PASS
+Next:    Stage 5 / Academic Step 5B Evidence Acquisition
 After:   Stage 6 / Integrated RAG
 ```

@@ -624,24 +624,27 @@ Next: Step 4A — Patent Metadata Expansion
 
 ```text
 Stage 5 — Internet Research Expansion
-Patent Research Vertical Slice
-Step 4H — Patent Analysis UAT — FINAL PASS
+Academic Research Vertical Slice
+Step 5A — Existing Capability / Provider Foundation — FINAL PASS
 ```
 
 Step 4H Integration Work Item은 offline scripted UAT와 artifact review를 통과했다.
 CLI usability, provider 이전 request rejection, 비용 경계, 두 publication cell, exact provenance,
 legal/ranking field 부재 및 scope notice를 검증했다. 발견된 artifact wording debt도 수정했다.
 
+Step 5A Integration Work Item은 scholarly identity/access schema, deterministic identifier
+normalization, bounded provider contract, OpenAlex adapter, workflow integration 및 1-request
+live metadata smoke를 통과했다.
+
 다음 Integration Work Item:
 
 ```text
 Stage 5 — Academic Research Vertical Slice
-Step 5A — Existing Capability / Provider Foundation
+Step 5B — Academic Evidence Acquisition
 ```
 
-Academic provider requirements audit은 Step 5A 입력 자료로 사용한다. Step 5A는 academic
-identity, DOI/version, metadata, abstract/full-text/license, provenance/citation 및 cost bound를
-먼저 정의한다.
+Step 5B는 exact metadata/abstract provenance를 기존 ResearchEvidence 경계에 연결한다.
+Public PDF/full-text acquisition과 license permission은 별도 안전 계약 전에는 제외한다.
 
 Stage 5 완료 후:
 
