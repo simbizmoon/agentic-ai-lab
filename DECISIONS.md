@@ -4967,3 +4967,28 @@ authoritative literature quality 판단을 보장하지 않는다.
 
 Step 5B는 논문 품질, citation impact, systematic-review completeness, full-text 이용 권한 또는
 claim support를 판단하지 않는다.
+
+## D-083 — Academic evidence persistence와 CLI는 exact artifact 및 1-request boundary로 완료한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Stage 5 Academic Step 5C persistence, CLI 및 user gate
+
+### 결정
+
+- Step 5B result 전체를 lossless JSON으로 저장하고 Markdown은 사람이 provenance를 검토하는
+  deterministic representation으로 유지한다.
+- private execution directory는 `0700`, Markdown/JSON files는 `0600`으로 생성한다.
+- existing execution collision, unsafe path component 및 partial write는 거부하거나 rollback한다.
+- CLI의 provider request ceiling은 정확히 `1`, maximum results는 `1..25`로 제한한다.
+- DOI 부재, abstract omission, rejected provider record 및 exact response provenance를 숨기지 않는다.
+- generic candidate `rank`는 provider 발견 순서 provenance이며 논문 품질 순위로 해석하지 않는다.
+- live CLI 검증은 OpenAlex 1회로 제한하고 smoke assertion 오류는 기존 artifact의 offline
+  validation으로 해결해 provider 호출을 반복하지 않는다.
+- Step 5C를 `FINAL PASS`로 닫고 Stage 5를 완료한다.
+- 다음 공식 작업은 Stage 6 Step 6A Integrated RAG Existing Capability Audit이다.
+
+### 제한
+
+이 결정은 semantic relevance, paper quality, citation impact, systematic-review completeness,
+PDF/full-text acquisition 또는 이용 permission을 제공하거나 보장하지 않는다.

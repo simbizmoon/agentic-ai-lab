@@ -625,7 +625,7 @@ Next: Step 4A — Patent Metadata Expansion
 ```text
 Stage 5 — Internet Research Expansion
 Academic Research Vertical Slice
-Step 5B — Academic Evidence Acquisition — FINAL PASS
+Step 5C — Evidence Persistence / CLI Exposure — FINAL PASS
 ```
 
 Step 4H Integration Work Item은 offline scripted UAT와 artifact review를 통과했다.
@@ -657,3 +657,20 @@ Stage 6 — Integrated RAG
 
 Stage 6는 기존 charter대로 Parsing, Chunking, Hybrid Retrieval, Reranking 및 Citation
 Grounding의 통합 책임을 가진다.
+
+# 17. 2026-08-23 Step 5C Final Integration Work Item
+
+Step 5C는 exact scholarly evidence를 private deterministic Markdown/JSON과 bounded CLI에
+연결하고 offline E2E, one-request OpenAlex live smoke, full regression 및 artifact review UAT를
+통과했다. Stage 5 Internet Research Expansion은 사용자 gate까지 완료했다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 6A — Existing Capability Audit
+```
+
+Step 6A는 새 구현 전에 기존 parser/chunker, keyword/semantic retrieval, embedding/parsed cache,
+evidence selection 및 citation grounding의 실제 재사용 가능 범위를 감사한다. 감사 전에는 새
+vector database, retrieval provider 또는 OpenAI 호출을 추가하지 않는다.

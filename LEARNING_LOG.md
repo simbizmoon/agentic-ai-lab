@@ -3864,3 +3864,35 @@ offline UAT의 첫 non-ranking assertion은 generic candidate `rank`까지 금�
 
 Stage 5 Academic Step 5C — Evidence Persistence / CLI Exposure. exact evidence를 재판단하지
 않고 저장·표시하며 비용과 omission/failure 경계를 사용자에게 노출한다.
+
+## 2026-08-23 — Academic Step 5C Evidence Persistence / CLI Exposure 완료
+
+### 학습 결과
+
+exact evidence를 사용자에게 제공하려면 JSON 직렬화만으로 충분하지 않았다. 동일 provenance를
+사람이 읽을 수 있는 Markdown에 표시하고, 비용 상한·omission·partial failure 및 scope를 CLI
+전후에 명시해야 검토 가능한 제품 경계가 된다.
+
+### 실패 사례 분석
+
+첫 live smoke는 제품 artifact를 정상 생성했지만 검증기가 `source_id`를 document 최상위에
+있다고 가정했다. 실제 generic document contract에서는 source identity가 nested candidate에
+있었다. 또한 semantic 평가 부재 metadata의 실제 키는 `relevance_assessment`였다. 이미 생성된
+artifact를 오프라인으로 재검증해 불필요한 OpenAlex 호출을 피했다.
+
+교훈:
+
+> live smoke도 production schema를 다시 추측하면 안 된다. 실패 후에는 provider를 곧바로
+> 재호출하기보다 성공적으로 생성된 artifact를 먼저 재사용해 assertion만 검증해야 한다.
+
+### 평가 결과
+
+- full repository `5784 passed`
+- one-request OpenAlex CLI live path PASS
+- offline artifact review UAT PASS
+- OpenAI/PDF/full-text requests 0
+
+### 다음 학습 단계
+
+Stage 6 Step 6A — Integrated RAG Existing Capability Audit. 기존 parsing, chunking,
+retrieval, cache, evidence 및 citation 구조를 감사한 뒤 최소 통합 slice를 설계한다.

@@ -36,19 +36,19 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
-- 현재 제품 단계: Stage 5 — Internet Research Expansion
-- 현재 Vertical Slice: Academic Research Vertical Slice
-- 현재 완료 지점: Step 5B — Academic Evidence Acquisition `FINAL PASS`
+- 현재 제품 단계: Stage 6 — Integrated RAG
+- 직전 완료 Vertical Slice: Stage 5 / Academic Research Vertical Slice
+- 현재 완료 지점: Step 5C — Evidence Persistence / CLI Exposure `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
   Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation
   (Step 4E), Multi-Patent Comparison(Step 4F), Persistence / Export / CLI Exposure(Step 4G),
   Patent Analysis UAT(Step 4H)까지 완료했다. Academic Research Vertical Slice에서는
-  Existing Capability / Provider Foundation(Step 5A)과 Academic Evidence Acquisition
-  (Step 5B)을 완료했다.
-- Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Academic Research Vertical Slice Step 5C — Evidence Persistence / CLI Exposure
+  Existing Capability / Provider Foundation(Step 5A), Academic Evidence Acquisition
+  (Step 5B), Evidence Persistence / CLI Exposure와 사용자 UAT(Step 5C)를 완료했다.
+- Stage 5 전체 상태: `COMPLETE`
+- 다음 공식 작업: Stage 6 / Step 6A — Integrated RAG Existing Capability Audit
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -901,7 +901,7 @@ Keyword와 Semantic Search를 결합하여 관련 Evidence만 LLM에 제공한�
 
 ## 상태
 
-- [ ] 시작 전
+- [~] 준비 중 — Step 6A Existing Capability Audit가 다음 공식 작업
 
 ## Work Items
 
@@ -4533,9 +4533,10 @@ Stage 5 — Internet Research Expansion
 └─ Academic Research Vertical Slice
    ├─ Step 5A — Existing Capability / Provider Foundation FINAL PASS
    ├─ Step 5B — Academic Evidence Acquisition             FINAL PASS
-   └─ Step 5C — Evidence Persistence / CLI Exposure       CURRENT / NEXT
+   └─ Step 5C — Evidence Persistence / CLI Exposure       FINAL PASS
 
-Stage 6 — Integrated RAG                                  AFTER STAGE 5
+Stage 6 — Integrated RAG                                  CURRENT / NEXT
+└─ Step 6A — Existing Capability Audit                    NEXT
 ```
 
 Step 5A는 academic identity, DOI/version, metadata, abstract/full-text/license,
@@ -4646,3 +4647,59 @@ Step 5C — Academic Evidence Persistence / CLI Exposure
 Step 5C는 이미 생성된 exact evidence를 재판단하지 않고 deterministic artifact와 bounded CLI
 경계에 연결한다. 이후 사용자 관점 UAT를 별도 gate로 수행한 뒤 Stage 6 Integrated RAG로
 전환할지를 판단한다.
+
+## 34.27 Step 5C — Academic Evidence Persistence / CLI Exposure 완료
+
+Step 5B exact whole-abstract evidence를 재판단하지 않고 deterministic Markdown/JSON,
+private collision-safe writer 및 bounded `aira research-scholarly-evidence` 명령에 연결했다.
+
+### 완료된 capability
+
+- deterministic scholarly evidence Markdown/JSON formatter
+- `0700` execution directory와 `0600` artifact files
+- collision refusal, safe execution ID, atomic replace 및 partial-write rollback
+- maximum results `1..25`, provider request ceiling 정확히 `1`
+- OpenAlex workflow factory와 dependency-injected offline execution
+- CLI 입력부터 `evidence.md`/`evidence.json`까지 offline E2E
+- DOI PRESENT/ABSENT, abstract omission 및 malformed record의 분리 표시
+- exact evidence ID/source ID/document ID/excerpt/offset/provider SHA-256 보존
+
+### 검증 결과
+
+```text
+focused CLI E2E                    = 11 passed in 1.23s
+full repository pytest             = 5784 passed in 21.14s / 21.25s
+Academic Ruff lint                 = PASS
+Academic format check              = PASS (38 files)
+git diff --check                   = PASS
+working tree                       = clean
+bounded OpenAlex CLI live smoke    = PASS (1 request, 1 result)
+existing live artifact validation  = PASS (0 retry requests)
+offline artifact review UAT        = PASS
+OpenAI requests                    = 0
+PDF/full-text downloads            = 0
+```
+
+첫 live smoke의 acquisition과 artifact 생성은 성공했으나 검증기가 source ID를 document
+최상위에서 찾는 오류로 실패했다. 실제 schema의 `document.candidate.source_id`와
+`relevance_assessment=not_performed` 계약에 맞춰 검증기를 수정하고 이미 생성된 live
+artifact를 provider 재호출 없이 검증했다.
+
+### 검증하지 않은 범위
+
+- semantic relevance와 claim support
+- paper quality, citation impact 및 systematic-review completeness
+- PDF/full-text acquisition
+- license 또는 full-text 이용 permission 판단
+
+Step 5C 사용자 gate까지 통과했으므로 Stage 5 Internet Research Expansion을 완료한다.
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 6A — Existing Capability Audit
+```
+
+Step 6A는 기존 parsing, chunking, keyword/semantic retrieval, cache, evidence 및 citation
+capability를 먼저 감사한다. 새 vector database나 provider를 감사 전에 도입하지 않는다.

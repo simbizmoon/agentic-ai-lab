@@ -448,12 +448,29 @@ After:   Stage 6 / Integrated RAG
 | Abstract document adaptation | Production-aligned / offline UAT PASS | provider abstract only |
 | Whole-abstract evidence | Production-aligned / offline UAT PASS | exact `0..len`, non-semantic |
 | Bounded search-to-evidence workflow | Production-aligned / offline UAT PASS | Step 5A live path reused |
-| Academic artifact persistence | Not implemented | Step 5C |
-| Academic CLI / human UAT | Not implemented | after persistence/CLI |
+| Academic artifact persistence | Production-aligned / live validated | private deterministic Markdown/JSON |
+| Academic CLI / human UAT | User-facing / UAT PASS | one-request bounded command |
 | Public academic PDF/full text | Not implemented | permission boundary required |
 
 ```text
-Current: Stage 5 / Academic Step 5B FINAL PASS
-Next:    Stage 5 / Academic Step 5C Evidence Persistence / CLI Exposure
-After:   Stage 6 / Integrated RAG (after Stage 5 user gate)
+Current: Stage 5 / Academic Step 5C FINAL PASS — Stage 5 COMPLETE
+Next:    Stage 6 / Step 6A Integrated RAG Existing Capability Audit
+After:   Stage 6 implementation sequence selected by audit
+```
+
+## 13. 2026-08-23 Capability Matrix 갱신 — Academic Step 5C FINAL PASS
+
+| Academic capability | 상태 | 제한 |
+|---|---|---|
+| Deterministic evidence formatter | Production-aligned / UAT PASS | no new judgment |
+| Private Markdown/JSON writer | Production-aligned / UAT PASS | `0700`/`0600`, collision safe |
+| Bounded scholarly evidence CLI | Production-aligned / live validated | OpenAlex one page/request |
+| Exact artifact provenance | Production-aligned / live validated | provider abstract only |
+| DOI absence and omission/failure visibility | User-facing / UAT PASS | no fabricated value |
+| Paper quality and citation impact | Not implemented | explicitly not performed |
+| PDF/full-text permission | Not implemented | separate future boundary |
+
+```text
+Current: Stage 5 / Academic Step 5C FINAL PASS — Stage 5 COMPLETE
+Next:    Stage 6 / Step 6A Integrated RAG Existing Capability Audit
 ```
