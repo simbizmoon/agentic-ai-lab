@@ -431,12 +431,29 @@ After:   Stage 6 / Integrated RAG
 | Identifier normalization/dedup | Production-aligned / offline validated | exact identifiers only |
 | OpenAlex metadata adapter | Production-aligned / live validated | one provider, one-page bounded search |
 | Bounded scholarly workflow | Production-aligned / live validated | metadata/abstract foundation |
-| Academic evidence acquisition | Not implemented | Step 5B |
+| Academic abstract evidence acquisition | Production-aligned / offline UAT PASS | exact whole-abstract provenance; no semantic judgment |
 | Public academic PDF acquisition | Not implemented | permission/safety boundary required |
 | Systematic literature review | Not implemented | completeness not established |
 
 ```text
-Current: Stage 5 / Academic Step 5A FINAL PASS
-Next:    Stage 5 / Academic Step 5B Evidence Acquisition
+Current: Stage 5 / Academic Step 5B FINAL PASS
+Next:    Stage 5 / Academic Step 5C Evidence Persistence / CLI Exposure
 After:   Stage 6 / Integrated RAG
+```
+
+## 12. 2026-08-23 Capability Matrix 갱신 — Academic Step 5B FINAL PASS
+
+| Academic capability | 상태 | 제한 |
+|---|---|---|
+| Abstract document adaptation | Production-aligned / offline UAT PASS | provider abstract only |
+| Whole-abstract evidence | Production-aligned / offline UAT PASS | exact `0..len`, non-semantic |
+| Bounded search-to-evidence workflow | Production-aligned / offline UAT PASS | Step 5A live path reused |
+| Academic artifact persistence | Not implemented | Step 5C |
+| Academic CLI / human UAT | Not implemented | after persistence/CLI |
+| Public academic PDF/full text | Not implemented | permission boundary required |
+
+```text
+Current: Stage 5 / Academic Step 5B FINAL PASS
+Next:    Stage 5 / Academic Step 5C Evidence Persistence / CLI Exposure
+After:   Stage 6 / Integrated RAG (after Stage 5 user gate)
 ```

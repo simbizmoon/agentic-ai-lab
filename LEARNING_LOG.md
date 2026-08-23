@@ -3840,3 +3840,27 @@ provider response provenance를 분리해 보존해야 같은 논문, 다른 버
 
 Stage 5 Academic Step 5B — Academic Evidence Acquisition. metadata/abstract를 기존 exact
 evidence 구조에 연결하되 PDF 다운로드와 이용 허가는 별도 경계로 유지한다.
+
+## 2026-08-23 — Academic Step 5B Evidence Acquisition 완료
+
+### 학습 결과
+
+학술 초록은 검색 결과의 일부 문단을 다시 선택하기보다 provider가 공급한 하나의 bounded
+evidence unit으로 보존하는 것이 provenance에 더 적합했다. 기존 generic evidence schema의
+exact excerpt/range 검증을 재사용해 scholarly-specific adapter만 추가했다.
+
+### 실패 사례 분석
+
+offline UAT의 첫 non-ranking assertion은 generic candidate `rank`까지 금지했다. 이 값은 논문
+품질 순위가 아니라 provider 검색 위치 provenance이므로 유지해야 한다. 금지 범위를
+`paper_rank`, `quality_rank`, `paper_quality_score` 같은 판단 필드로 좁혔다.
+
+교훈:
+
+> 같은 이름처럼 보이는 필드도 출처 순서와 품질 판단은 의미가 다르므로 provenance를
+> 제거하지 말고 평가 경계를 정확히 명명해야 한다.
+
+### 다음 학습 단계
+
+Stage 5 Academic Step 5C — Evidence Persistence / CLI Exposure. exact evidence를 재판단하지
+않고 저장·표시하며 비용과 omission/failure 경계를 사용자에게 노출한다.

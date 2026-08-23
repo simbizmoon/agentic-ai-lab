@@ -625,7 +625,7 @@ Next: Step 4A — Patent Metadata Expansion
 ```text
 Stage 5 — Internet Research Expansion
 Academic Research Vertical Slice
-Step 5A — Existing Capability / Provider Foundation — FINAL PASS
+Step 5B — Academic Evidence Acquisition — FINAL PASS
 ```
 
 Step 4H Integration Work Item은 offline scripted UAT와 artifact review를 통과했다.
@@ -636,15 +636,18 @@ Step 5A Integration Work Item은 scholarly identity/access schema, deterministic
 normalization, bounded provider contract, OpenAlex adapter, workflow integration 및 1-request
 live metadata smoke를 통과했다.
 
+Step 5B Integration Work Item은 exact abstract documents, whole-abstract evidence, omission과
+partial failure preservation, bounded workflow, offline UAT 및 full regression을 통과했다.
+
 다음 Integration Work Item:
 
 ```text
 Stage 5 — Academic Research Vertical Slice
-Step 5B — Academic Evidence Acquisition
+Step 5C — Academic Evidence Persistence / CLI Exposure
 ```
 
-Step 5B는 exact metadata/abstract provenance를 기존 ResearchEvidence 경계에 연결한다.
-Public PDF/full-text acquisition과 license permission은 별도 안전 계약 전에는 제외한다.
+Step 5C는 exact scholarly evidence를 deterministic artifact와 bounded user command에
+연결한다. semantic judgment, PDF/full-text acquisition 및 permission 판단은 제외한다.
 
 Stage 5 완료 후:
 

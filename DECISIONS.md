@@ -4944,3 +4944,26 @@ provider reported cost USD 0.001, OpenAI 0회, PDF/full-text download 0회였다
 
 이 결정은 검색 품질, systematic-review completeness, citation impact, PDF 이용 허가 또는
 authoritative literature quality 판단을 보장하지 않는다.
+
+## D-082 — Academic abstract evidence는 전체 초록 exact range와 non-semantic policy로 보존한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Stage 5 Academic Step 5B evidence acquisition
+
+### 결정
+
+- provider-supplied abstract 하나를 exact ResearchSourceDocument와 evidence 하나로 변환한다.
+- evidence excerpt는 abstract 전체이고 range는 `0..len(abstract)`이다.
+- `evidence_type=other`, `stance=neutral`, relevance/confidence score `0.0`을 사용하며 metadata에
+  assessment가 `not_performed`임을 명시한다.
+- score `0.0`은 관련 없음 판정이 아니라 semantic 평가 부재를 뜻한다.
+- 초록이 없는 work는 빈 evidence를 만들지 않고 omission으로 기록한다.
+- malformed provider record, duplicate identity group 및 response provenance를 보존한다.
+- Step 5A live metadata 경로를 재사용하고 같은 OpenAlex 요청을 반복하지 않는다.
+- Step 5B를 `FINAL PASS`로 닫고 Step 5C persistence/CLI로 진행한다.
+
+### 제한
+
+Step 5B는 논문 품질, citation impact, systematic-review completeness, full-text 이용 권한 또는
+claim support를 판단하지 않는다.
