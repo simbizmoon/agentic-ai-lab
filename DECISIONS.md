@@ -4782,3 +4782,50 @@ bounded EPO/OpenAI/chart smoke = PASS
 chronology 및 legal prior-art qualification은 검증하지 않았고,
 novelty, anticipation, obviousness/inventive step, invalidity,
 infringement/FTO 또는 claim-scope 결론을 생성하지 않았다.
+
+## D-077 — Multi-patent comparison은 Step 4E evaluation을 publication axis로 재구성하는 deterministic artifact로 유지한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Stage 5 Patent Research Vertical Slice Step 4F
+
+### 결정
+
+```text
+Step 4E PatentClaimChart
+→ deterministic grouping by prior-art publication
+→ PatentMultiPatentComparison
+```
+
+- Step 4F는 새 LLM 또는 evaluator 호출을 추가하지 않는다.
+- Step 4E의 exact `PatentPriorArtEvidenceEvaluation`을 publication cell에 그대로 보존한다.
+- publication axis는 chart에서 처음 관찰된 순서로 고정한다.
+- target/multilingual claim 구조, row order 및 exact evidence provenance를 보존한다.
+- ranking, winner, coverage percentage 또는 best-patent field를 추가하지 않는다.
+- novelty, anticipation, obviousness/inventive step, legal status, invalidity,
+  infringement/FTO 또는 claim-scope 결론을 추가하지 않는다.
+- report persistence, export 및 CLI exposure는 Step 4G 책임으로 분리한다.
+
+### 이유
+
+Step 4E에는 이미 기술 판단과 exact provenance가 존재한다. 이를 다시 LLM에 보내면 판단과
+identity가 변형될 위험 및 불필요한 API 비용이 생긴다. Step 4F의 책임은 여러 publication을
+사람이 비교할 수 있도록 구조적으로 정렬하는 것이다.
+
+### 비용 경계
+
+Step 4F builder/runtime의 외부 호출 수는 0이다. live smoke의 OpenAI 2회 호출은 upstream
+Step 4D mapping을 실제 데이터로 생성하기 위한 bounded validation이며 Step 4F 자체의 비용이
+아니다. 향후 개발은 offline fixture를 기본으로 하고 live API 호출은 명시적인 최종 smoke로만
+제한한다.
+
+### 검증
+
+```text
+focused Step 4F regression = 34 passed in 1.05s
+full repository pytest     = 5527 passed in 21.55s
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+bounded EPO/OpenAI smoke   = PASS
+```

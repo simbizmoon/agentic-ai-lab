@@ -24,6 +24,9 @@ from app.research.patent_claim_decomposition_runtime import (
 )
 from app.research.patent_claim_parser import parse_epo_ops_claims_record
 from app.research.patent_claims_runtime import PatentClaimsRuntimeResult
+from app.research.patent_multi_patent_comparison_runtime import (
+    PatentMultiPatentComparisonRuntime,
+)
 from app.research.patent_prior_art_evidence_mapping_runtime import (
     PatentPriorArtEvidenceMappingRuntime,
 )
@@ -527,3 +530,258 @@ def test_offline_mapping_result_contains_no_legal_conclusion_fields() -> None:
 
     # Safety language may name legal concepts specifically to disclaim them.
     assert "does not determine novelty" in chart.scope_notice.casefold()
+
+
+def multi_prior_art_execution() -> PatentResearchPlanExecutionResult:
+    request = PatentResearchRequest(
+        question="Which passages are technically related to English claim one?",
+        objective="Select traceable multi-patent technical evidence.",
+        maximum_search_results=3,
+        maximum_sources=3,
+        maximum_bytes=8192,
+    )
+    query = PatentSearchQuery(
+        cql_query='ta all "English claim one"',
+        purpose=PatentSearchQueryPurpose.PRIMARY,
+    )
+
+    records: list[EpoOpsBibliographicRecord] = []
+    verified_records: list[EpoOpsVerifiedPatentRecord] = []
+
+    for publication_number, publication_docdb, publication_date, title, suffix in (
+        (
+            "EP2000000A1",
+            "EP.2000000.A1",
+            date(2025, 1, 15),
+            "Prior-art fixture patent one",
+            "pressure sensing arrangement for detecting occupancy in a seat",
+        ),
+        (
+            "EP3000000A1",
+            "EP.3000000.A1",
+            date(2024, 6, 10),
+            "Prior-art fixture patent two",
+            "seat occupancy detector with a pressure-responsive sensing element",
+        ),
+    ):
+        records.append(
+            EpoOpsBibliographicRecord(
+                publication_number=publication_number,
+                publication_docdb=publication_docdb,
+                title=title,
+                publication_date=publication_date,
+                source_endpoint=(
+                    "https://ops.epo.org/3.2/rest-services/"
+                    "published-data/search/biblio?q=multi-test"
+                ),
+                document_id_type=EpoOpsDocumentIdType.DOCDB,
+                title_language="en",
+            )
+        )
+        verified_records.append(
+            EpoOpsVerifiedPatentRecord(
+                metadata=PatentSourceMetadata(
+                    source_family=PatentSourceFamily.EPO_OPS,
+                    publication_number=publication_number,
+                    title=title,
+                    source_url=(
+                        "https://ops.epo.org/3.2/rest-services/"
+                        f"published-data/publication/docdb/{publication_docdb}/abstract"
+                    ),
+                    metadata_verification_state=PatentMetadataVerificationState.VERIFIED,
+                    publication_date=publication_date,
+                ),
+                abstract_text=(
+                    f"English claim one describes a {suffix}. "
+                    f"This is fixture evidence from {publication_number}."
+                ),
+                abstract_language="en",
+            )
+        )
+
+    return PatentResearchPlanExecutionResult(
+        query=query,
+        collection=PatentResearchCollectionResult(
+            request=request,
+            search_result=EpoOpsBibliographicSearchResult(
+                request=EpoOpsSearchRequest(
+                    cql_query=query.cql_query,
+                    maximum_results=3,
+                ),
+                records=tuple(records),
+            ),
+            verified_records=tuple(verified_records),
+        ),
+        attempted_queries=(query,),
+    )
+
+
+def multi_evidence_runtime(
+    evaluator: ControlledEvidenceRelevanceEvaluator,
+) -> PatentTechnicalRelevanceEvidenceRuntime:
+    return PatentTechnicalRelevanceEvidenceRuntime(
+        evidence_extractor=PipelineEvidenceExtractorAdapter(
+            SemanticResearchEvidenceExtractor(
+                question=(
+                    "Which passages are technically related to English claim one?"
+                ),
+                objective="Select traceable multi-patent technical evidence.",
+                paragraph_extractor=ParagraphEvidenceExtractor(
+                    maximum_evidence=4,
+                    minimum_characters=20,
+                ),
+                shortlister=EmbeddingSemanticEvidenceShortlister(
+                    embedding_provider=ControlledEmbeddingProvider(),
+                    maximum_candidates=4,
+                ),
+                reranker=SemanticEvidenceReranker(
+                    evaluator=evaluator,
+                    budget=ExecutionBudget(
+                        max_attempts=4,
+                        max_recorded_tokens=2000,
+                        max_elapsed_seconds=10.0,
+                    ),
+                ),
+                maximum_evidence=2,
+            )
+        )
+    )
+
+
+def test_offline_fixture_integrates_multi_patent_comparison() -> None:
+    raw = EpoOpsClaimsRetriever(
+        client=FakeClaimsClient("claims_b1_multilingual.xml")  # type: ignore[arg-type]
+    ).retrieve(target_bibliographic_record())
+    parsed = parse_epo_ops_claims_record(raw)
+
+    decomposition_result = PatentClaimDecompositionRuntime(
+        claim_decomposer=EchoClaimDecomposer(),
+    ).decompose(
+        PatentClaimsRuntimeResult(
+            execution=None,  # type: ignore[arg-type]
+            claim_documents=(parsed,),
+        )
+    )
+
+    evidence_relevance = ControlledEvidenceRelevanceEvaluator(calls=[])
+    evidence_result = multi_evidence_runtime(evidence_relevance).extract(
+        multi_prior_art_execution(),
+        request_id="step4f-offline-multi-patent",
+    )
+
+    assert len(evidence_result.evidence_set.evidence) == 2
+    assert tuple(
+        document.candidate.metadata["patent_publication_number"]
+        for document in evidence_result.document_set.documents
+    ) == ("EP2000000A1", "EP3000000A1")
+
+    element_evaluator = ControlledElementEvidenceEvaluator(calls=[])
+    mapping_result = PatentPriorArtEvidenceMappingRuntime(
+        evaluator=element_evaluator,
+    ).map(
+        decomposition_result=decomposition_result,
+        evidence_result=evidence_result,
+    )
+
+    assert len(element_evaluator.calls) == 12
+
+    chart_result = PatentClaimChartRuntime().build(mapping_result)
+    comparison_result = PatentMultiPatentComparisonRuntime().build(chart_result)
+
+    assert comparison_result.chart_result is chart_result
+    assert len(comparison_result.comparisons) == 1
+
+    comparison = comparison_result.comparisons[0]
+    assert comparison.target_publication_number == "EP1000000B1"
+    assert comparison.target_publication_docdb == "EP.1000000.B1"
+    assert comparison.prior_art_publications == (
+        "EP2000000A1",
+        "EP3000000A1",
+    )
+
+    assert tuple(claim_set.language for claim_set in comparison.claim_sets) == (
+        "DE",
+        "FR",
+        "EN",
+    )
+    assert tuple(
+        row.row_number
+        for claim_set in comparison.claim_sets
+        for comparison_claim in claim_set.claims
+        for row in comparison_claim.rows
+    ) == (1, 2, 3, 4, 5, 6)
+
+    english_claim_one = comparison.claim_sets[2].claims[0]
+    english_row = english_claim_one.rows[0]
+    assert english_row.row_number == 5
+    assert english_row.element_text == "English claim one."
+    assert tuple(cell.publication_number for cell in english_row.publications) == (
+        "EP2000000A1",
+        "EP3000000A1",
+    )
+
+    for cell in english_row.publications:
+        assert len(cell.evaluations) == 1
+        mapped = cell.evaluations[0]
+        assert mapped.publication_number == cell.publication_number
+        assert mapped.source_id
+        assert mapped.document_id
+        assert mapped.evidence_id
+        assert mapped.excerpt
+        assert (
+            mapped.judgment.relevance_level is EvidenceRelevanceLevel.DIRECTLY_RELEVANT
+        )
+
+    german_row = comparison.claim_sets[0].claims[0].rows[0]
+    assert tuple(cell.publication_number for cell in german_row.publications) == (
+        "EP2000000A1",
+        "EP3000000A1",
+    )
+    assert all(
+        cell.evaluations[0].judgment.relevance_level
+        is EvidenceRelevanceLevel.IRRELEVANT
+        for cell in german_row.publications
+    )
+
+    chart_english_evaluations = (
+        chart_result.charts[0].claim_sets[2].claims[0].rows[0].evaluations
+    )
+    comparison_english_evaluations = tuple(
+        cell.evaluations[0] for cell in english_row.publications
+    )
+    assert comparison_english_evaluations == chart_english_evaluations
+
+    payload = comparison.model_dump()
+    forbidden_keys = {
+        "novelty",
+        "anticipation",
+        "obviousness",
+        "inventive_step",
+        "invalidity",
+        "infringement",
+        "freedom_to_operate",
+        "legal_status",
+        "claim_scope",
+        "essentiality",
+        "depends_on",
+        "winner",
+        "best_patent",
+        "coverage_percentage",
+        "rank",
+    }
+
+    def collect_keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            keys = {str(key).casefold() for key in value}
+            for nested in value.values():
+                keys.update(collect_keys(nested))
+            return keys
+        if isinstance(value, (list, tuple)):
+            keys: set[str] = set()
+            for nested in value:
+                keys.update(collect_keys(nested))
+            return keys
+        return set()
+
+    assert forbidden_keys.isdisjoint(collect_keys(payload))
+    assert "does not determine novelty" in comparison.scope_notice.casefold()

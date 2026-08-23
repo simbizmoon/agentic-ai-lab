@@ -38,14 +38,15 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 5 — Internet Research Expansion
 - 현재 Vertical Slice: Patent Research Vertical Slice
-- 현재 완료 지점: Step 4E — Claim Chart Generation `FINAL PASS`
+- 현재 완료 지점: Step 4F — Multi-Patent Comparison `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
-  Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation(Step 4E)까지 완료했다.
+  Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation
+  (Step 4E), Multi-Patent Comparison(Step 4F)까지 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Patent Research Vertical Slice Step 4F — Multi-Patent Comparison
-- 현재 기준일: 2026-08-20
+- 다음 공식 작업: Patent Research Vertical Slice Step 4G — Persistence / Export / CLI Exposure
+- 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -75,17 +76,17 @@
 
 현재 검증 기준:
 
-- 기준일: 2026-08-19
+- 기준일: 2026-08-23
 - Python: `3.12.3`
 - pytest: `9.1.1`
 - Ruff: `0.16.0`
-- Step 4E focused Patent regression: `65 passed in 1.21s`
-- Step 4E full repository regression: `5495 passed in 20.32s`
+- Step 4F focused regression: `34 passed in 1.05s`
+- Step 4F full repository regression: `5527 passed in 21.55s`
 - Ruff: `PASS`
 - changed Python format check: `PASS`
 - `git diff --check`: `PASS`
-- Step 4E bounded live smoke: `PASS`
-- accepted code checkpoint: Step 4D commit/push `87f564a4cd6e0f5c7f6005f76a3d0f4f2593f08b`; Step 4E는 아직 commit 전
+- Step 4F bounded EPO/OpenAI live smoke: `PASS`
+- accepted code checkpoint: Step 4D commit/push `87f564a4cd6e0f5c7f6005f76a3d0f4f2593f08b`; Step 4E/4F는 아직 commit 전
 
 판정 원칙:
 
@@ -4292,3 +4293,131 @@ Step 4F에서는 여러 prior-art patent publication에 대한 element-level tec
 mapping을 비교 가능한 구조로 집계한다. 현재 abstract-based evidence scope와
 nonlegal boundary는 그대로 유지하며, legal novelty/inventive-step 분석으로
 자동 승격하지 않는다.
+
+## 34.21 Multi-Patent Comparison
+
+2026-08-23 Stage 5 Patent Research Vertical Slice Step 4F를 완료했다.
+
+현재 공식 위치:
+
+```text
+Stage 5 — Internet Research Expansion
+Status: IN PROGRESS
+
+Patent Research Vertical Slice
+Step 4F — Multi-Patent Comparison
+Status: FINAL PASS
+
+NEXT:
+Step 4G — Persistence / Export / CLI Exposure
+```
+
+### 완료된 구조
+
+```text
+PatentPriorArtEvidenceMappingRuntimeResult
+→ PatentClaimChartRuntimeResult
+→ DeterministicPatentMultiPatentComparisonBuilder
+→ PatentMultiPatentComparisonRuntime
+→ PatentMultiPatentComparison
+   └─ target claim element row
+      └─ ordered prior-art publication cell
+         └─ exact PatentPriorArtEvidenceEvaluation tuple
+```
+
+Step 4F는 여러 prior-art publication에 흩어진 Step 4E evaluation을 target claim-element
+row별 publication axis로 결정론적으로 재구성한다. 새 semantic 또는 legal judgment를
+생성하지 않는다.
+
+### 확정된 설계 경계
+
+- Step 4E의 `PatentPriorArtEvidenceEvaluation` 객체를 그대로 보존한다.
+- prior-art publication axis는 chart traversal의 first-seen order로 결정한다.
+- 각 row의 publication cell은 전역 publication axis 순서를 따른다.
+- evidence가 없는 publication은 해당 row에 빈 cell을 만들지 않는다.
+- target publication identity, multilingual/provider claim order, element order 및 global
+  row number를 보존한다.
+- `evidence_id`, `source_id`, `document_id`, exact excerpt, character offsets 및 technical
+  relevance judgment를 손실 없이 보존한다.
+- `winner`, `best_patent`, `rank`, `coverage_percentage` 같은 ranking field를 만들지 않는다.
+- novelty, anticipation, obviousness/inventive step, validity/invalidity,
+  infringement/FTO, claim scope 또는 기타 법률 결론을 만들지 않는다.
+- comparison builder/runtime은 외부 호출을 하지 않는다.
+- persistence/export/CLI formatting은 Step 4G로 분리한다.
+
+### Evidence와 검증 범위
+
+현재 comparison evidence는 VERIFIED EPO patent abstract 기반이다. 따라서 Step 4F 결과는:
+
+```text
+claim element
+↔ multiple verified patent abstract passages
+technical comparison
+```
+
+이며 full specification disclosure comparison, chronology 검증 또는 legal prior-art
+qualification이 아니다.
+
+### Offline E2E
+
+multilingual claims fixture와 두 verified patent abstract fixture를 사용하여 다음 연결을
+검증했다.
+
+```text
+EPO claims fixture
+→ Claim Decomposition
+→ two-publication Evidence Mapping
+→ PatentClaimChart
+→ PatentMultiPatentComparison
+```
+
+- language order: `DE → FR → EN`
+- global row number: `1..6`
+- publication cells per tested row: `2`
+- exact evaluation/provenance preservation: PASS
+- legal/ranking field absence: PASS
+
+### Bounded live smoke
+
+실제 EPO OPS target claims와 두 실제 EPO abstracts를 사용하고 `gpt-5` structured
+technical relevance evaluation을 정확히 2회 수행했다.
+
+```text
+target publication          = EP1000000B1
+comparison publications     = EP1000000B1, EP1000000A1
+OpenAI mapping calls        = 2
+EP1000000B1 judgment        = partially_relevant / 0.750
+EP1000000A1 judgment        = partially_relevant / 0.650
+claim chart external calls  = 0
+comparison external calls   = 0
+publication cells           = 2
+exact provenance            = PASS
+legal/ranking boundary      = PASS
+LIVE_SMOKE_RESULT            = PASS
+```
+
+이 smoke는 OpenAI 호출과 structured runtime/provenance 연결을 검증한다. OpenAI semantic
+quality의 일반화, chronology 또는 법률 결론을 검증하지 않는다.
+
+### 최종 검증 기준선
+
+```text
+focused Step 4F regression = 34 passed in 1.05s
+full repository pytest     = 5527 passed in 21.55s
+Ruff                       = PASS
+changed Python format      = PASS
+git diff --check           = PASS
+bounded EPO/OpenAI smoke   = PASS
+working-tree scope         = expected Step 4F 7 files before documentation
+```
+
+### 다음 공식 제품 작업
+
+```text
+Stage 5 — Internet Research Expansion
+Patent Research Vertical Slice
+Step 4G — Persistence / Export / CLI Exposure
+```
+
+Step 4G는 Step 4F artifact를 재판단하지 않고 저장·내보내기·CLI 표시 경계에 연결한다.
+기본 개발 및 테스트는 deterministic/offline으로 수행하며 OpenAI API 호출은 사용하지 않는다.

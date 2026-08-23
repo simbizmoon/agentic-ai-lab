@@ -3635,3 +3635,78 @@ Stage 5 — Internet Research Expansion
 Patent Research Vertical Slice
 Step 4F — Multi-Patent Comparison
 ```
+
+## 2026-08-23 — Patent Step 4F Multi-Patent Comparison 완료
+
+### 학습 목표
+
+여러 patent publication의 element-level technical evaluation을 하나의 비교 구조로 묶되,
+기존 판단과 exact provenance를 손상시키지 않는 방법을 학습했다.
+
+### 핵심 개념
+
+`publication axis`는 비교표에서 publication이 배열되는 안정적인 순서다. Step 4F에서는
+Step 4E chart를 순회하면서 처음 등장한 순서를 사용하므로 동일 입력은 항상 동일한 비교
+구조를 만든다.
+
+작은 예:
+
+```text
+claim element #1
+├─ EP1000000B1 → exact evaluation #1
+└─ EP1000000A1 → exact evaluation #2
+```
+
+comparison은 evaluation을 요약하거나 다시 생성하지 않고 publication cell로 묶기만 한다.
+
+### 구현 결과
+
+- strict frozen Pydantic comparison schema
+- deterministic comparison builder
+- one-comparison-per-chart runtime
+- publication axis 및 row cell ordering validation
+- exact evidence ID/source ID/document ID/excerpt/offset preservation
+- legal/ranking field exclusion
+- multilingual two-publication offline E2E
+- two-call bounded EPO/OpenAI live smoke
+
+### 실패 사례 분석
+
+첫 live smoke는 잘못된 OpenAI client import로 실패했다. repository의 실제 Step 4E 계약을
+재사용한 v2로 수정했다. 이후 API credit가 소진되어 `credit_balance_exhausted`가 발생했고,
+deterministic local evaluator fallback으로 runtime/provenance를 먼저 검증했다. credit 충전 후
+원래 v2를 실행하여 두 structured OpenAI judgment와 전체 live path가 PASS했다.
+
+교훈:
+
+> 외부 quota 실패와 제품 코드 실패를 분리하고, deterministic fallback의 검증 범위를
+> semantic-quality 검증으로 과장하지 않는다.
+
+### 비용 학습
+
+- schema/builder/runtime/offline E2E: OpenAI 호출 0
+- 최종 bounded live smoke: OpenAI 호출 2
+- downstream Step 4E/4F external call: 0
+
+향후에도 offline-first를 기본으로 하고, live call은 offline gate가 모두 통과한 뒤 최소 횟수로
+실행한다.
+
+### 평가
+
+```text
+focused Step 4F regression = 34 passed in 1.05s
+full repository pytest     = 5527 passed in 21.55s
+Ruff                       = PASS
+format check               = PASS
+git diff --check           = PASS
+LIVE_SMOKE_RESULT           = PASS
+```
+
+### 다음 학습 단계
+
+```text
+Step 4G — Persistence / Export / CLI Exposure
+```
+
+Step 4G는 comparison artifact의 의미를 바꾸지 않고 저장·내보내기·사용자 표시 경계에
+연결한다. 개발 기본값은 OpenAI API 호출 0회다.
