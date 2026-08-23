@@ -42,6 +42,9 @@ from app.research.patent_multi_patent_comparison_cli_handler import (
     PatentMultiPatentComparisonCliHandler,
 )
 from app.research.patent_research_cli_handler import PatentResearchCliHandler
+from app.research.scholarly_evidence_cli_handler import (
+    ScholarlyEvidenceCliHandler,
+)
 from app.schemas.patent_multi_patent_comparison_request import (
     PatentMultiPatentComparisonRequest,
 )
@@ -52,6 +55,8 @@ from app.schemas.persistent_cache_status import (
     CachePrunePlan,
     CacheStatus,
 )
+from app.schemas.scholarly_evidence_request import ScholarlyEvidenceRequest
+from app.schemas.scholarly_work import ScholarlyWorkType
 
 ResearchHandler = Callable[
     [
@@ -85,6 +90,10 @@ IntegratedResearchHandlerType = Callable[
 PatentResearchHandlerType = Callable[[PatentResearchRequest], int]
 PatentComparisonHandlerType = Callable[
     [PatentMultiPatentComparisonRequest, Path],
+    int,
+]
+ScholarlyEvidenceHandlerType = Callable[
+    [ScholarlyEvidenceRequest, Path],
     int,
 ]
 
@@ -360,6 +369,51 @@ def build_parser() -> argparse.ArgumentParser:
         default="reports/patent-comparisons",
         metavar="PATH",
         help="Directory for collision-safe Markdown and JSON artifacts.",
+    )
+
+    scholarly_parser = subparsers.add_parser(
+        "research-scholarly-evidence",
+        help="Acquire bounded scholarly metadata and exact abstract evidence.",
+        description=(
+            "Search one bounded OpenAlex metadata page and persist provider-supplied "
+            "metadata plus exact whole-abstract evidence as private Markdown and "
+            "JSON artifacts. This command does not rank or assess papers."
+        ),
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    scholarly_parser.add_argument("--query", required=True)
+    scholarly_parser.add_argument(
+        "--maximum-results",
+        type=int,
+        default=5,
+        metavar="COUNT",
+        help="Maximum accepted works; allowed range is 1 to 25.",
+    )
+    scholarly_parser.add_argument(
+        "--maximum-provider-requests",
+        type=int,
+        default=1,
+        metavar="COUNT",
+        help="External provider request ceiling; Step 5C requires exactly 1.",
+    )
+    scholarly_parser.add_argument("--start-date", metavar="YYYY-MM-DD")
+    scholarly_parser.add_argument("--end-date", metavar="YYYY-MM-DD")
+    scholarly_parser.add_argument(
+        "--work-type",
+        action="append",
+        choices=tuple(item.value for item in ScholarlyWorkType),
+        help="Optional scholarly work type; repeat for multiple types.",
+    )
+    scholarly_parser.add_argument(
+        "--require-abstract",
+        action="store_true",
+        help="Ask the provider to require an abstract when supported.",
+    )
+    scholarly_parser.add_argument(
+        "--output-dir",
+        default="reports/scholarly-evidence",
+        metavar="PATH",
+        help="Directory for collision-safe private Markdown and JSON artifacts.",
     )
 
     cache_parser = subparsers.add_parser(
@@ -828,6 +882,53 @@ def run_patent_comparison_command(
     )
 
 
+def run_scholarly_evidence_command(
+    namespace: argparse.Namespace,
+    *,
+    scholarly_evidence_handler: ScholarlyEvidenceHandlerType,
+) -> int:
+    """Validate and execute one bounded scholarly evidence command."""
+
+    try:
+        request = ScholarlyEvidenceRequest(
+            query=namespace.query,
+            maximum_results=validate_positive_integer(
+                namespace.maximum_results,
+                name="maximum_results",
+            ),
+            maximum_provider_requests=validate_positive_integer(
+                namespace.maximum_provider_requests,
+                name="maximum_provider_requests",
+            ),
+            start_date=validate_optional_iso_date(
+                namespace.start_date,
+                name="start_date",
+            ),
+            end_date=validate_optional_iso_date(
+                namespace.end_date,
+                name="end_date",
+            ),
+            work_types=tuple(
+                ScholarlyWorkType(value) for value in (namespace.work_type or ())
+            ),
+            require_abstract=namespace.require_abstract,
+        )
+    except ValidationError as error:
+        first_error = error.errors(include_url=False)[0]
+        if tuple(first_error.get("loc", ())) == ("maximum_provider_requests",):
+            message = "maximum_provider_requests must be exactly 1"
+        else:
+            message = str(
+                first_error.get("msg", "invalid scholarly evidence request")
+            ).removeprefix("Value error, ")
+        raise ValueError(message) from error
+
+    return scholarly_evidence_handler(
+        request,
+        validate_output_dir(namespace.output_dir),
+    )
+
+
 def run_integrated_research_command(
     namespace: argparse.Namespace,
     *,
@@ -877,6 +978,7 @@ def main(
     integrated_research_handler: (IntegratedResearchHandlerType | None) = None,
     patent_research_handler: (PatentResearchHandlerType | None) = None,
     patent_comparison_handler: (PatentComparisonHandlerType | None) = None,
+    scholarly_evidence_handler: (ScholarlyEvidenceHandlerType | None) = None,
     cache_maintenance_service: PersistentCacheMaintenanceService | None = None,
 ) -> int:
     """Run the AIRA command-line interface."""
@@ -922,6 +1024,14 @@ def main(
                 namespace,
                 patent_comparison_handler=(
                     patent_comparison_handler or PatentMultiPatentComparisonCliHandler()
+                ),
+            )
+
+        if namespace.command == "research-scholarly-evidence":
+            return run_scholarly_evidence_command(
+                namespace,
+                scholarly_evidence_handler=(
+                    scholarly_evidence_handler or ScholarlyEvidenceCliHandler()
                 ),
             )
 
