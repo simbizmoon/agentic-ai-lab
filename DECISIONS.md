@@ -4894,3 +4894,26 @@ Academic Research는 Stage 5의 Internet Research 범위이고 Stage 6는 이미
 Step 4H는 offline scripted UAT를 기본으로 하고 동일 OpenAI/EPO smoke를 불필요하게
 반복하지 않는다. Step 5A도 offline-first로 수행하며 live provider smoke는 명시적 bound
 이후에만 실행한다.
+
+## D-080 — Patent Step 4H UAT를 offline-first 사용자 경계 검증으로 완료한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Patent comparison CLI와 Markdown/JSON artifact의 사용자 인수 기준
+
+### 결정
+
+- Step 4H를 `FINAL PASS`로 닫는다.
+- UAT는 CLI 입력·오류·비용 경계, artifact 가독성, exact provenance 및 technical-only
+  scope 이해 가능성을 검증한다.
+- artifact의 publication 축은 법적 prior-art 판정을 암시하지 않는 `Comparison publication
+  axis`로 표시한다.
+- evidence가 supplied patent abstract excerpts에 한정되며 full specification 또는 chronology
+  검토가 아님을 명시한다.
+- Step 4F의 bounded live 결과를 재사용하고 동일 OpenAI/EPO 요청을 반복하지 않는다.
+- 다음 공식 작업은 Stage 5 Academic Research Step 5A로 전환한다.
+
+### 검증 경계
+
+Step 4H는 OpenAI semantic quality의 일반화, chronology, novelty, validity,
+infringement/FTO 또는 기타 법률 결론을 검증하거나 제공하지 않는다.

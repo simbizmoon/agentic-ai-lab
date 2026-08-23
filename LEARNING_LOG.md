@@ -3788,3 +3788,28 @@ Step 4H 완료 후 `Stage 5 / Academic Research / Step 5A`로 이동한다. Stag
 
 Academic provider 감사 자료는 Step 5A에서 재사용하지만 현재 작업 상태를 바꾸는 근거로
 사용하지 않는다.
+
+## 2026-08-23 — Patent Step 4H Analysis UAT 완료
+
+### 실습 및 평가 결과
+
+offline scripted UAT로 CLI help, 입력 검증, 실행 전 비용 상한, artifact 경로, 두 publication
+cell, exact provenance와 technical-only safety boundary를 확인했다. focused regression 128개와
+전체 5624개 테스트가 통과했고 OpenAI/EPO 요청은 모두 0회였다.
+
+### 실패 사례와 개선
+
+artifact의 `Prior-art publication axis` 표현은 chronology나 법적 prior-art 판정을 수행한
+것처럼 오해될 수 있었다. 이를 `Comparison publication axis`로 바꾸고, 사용한 evidence가
+제공된 abstract excerpt에 한정되며 full specification 또는 chronology 검토가 아님을
+명시했다.
+
+교훈:
+
+> 구조적으로 정확한 결과도 사용자가 법적 의미로 오해할 수 있는 표현을 사용하면 UAT를
+> 통과한 제품 경계라고 볼 수 없다.
+
+### 다음 학습 단계
+
+Stage 5 Academic Research Vertical Slice Step 5A — Existing Capability / Provider Foundation.
+먼저 offline capability와 provider contract를 감사하고, live 호출은 명시적 최소 budget 이후에만 수행한다.

@@ -38,14 +38,15 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 5 — Internet Research Expansion
 - 현재 Vertical Slice: Patent Research Vertical Slice
-- 현재 완료 지점: Step 4G — Persistence / Export / CLI Exposure `FINAL PASS`
+- 현재 완료 지점: Step 4H — Patent Analysis UAT `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
   Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation
-  (Step 4E), Multi-Patent Comparison(Step 4F), Persistence / Export / CLI Exposure(Step 4G)까지 완료했다.
+  (Step 4E), Multi-Patent Comparison(Step 4F), Persistence / Export / CLI Exposure(Step 4G),
+  Patent Analysis UAT(Step 4H)까지 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Patent Research Vertical Slice Step 4H — Patent Analysis UAT
+- 다음 공식 작업: Academic Research Vertical Slice Step 5A — Existing Capability / Provider Foundation
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -4481,63 +4482,54 @@ safety boundary를 검증한다. OpenAI semantic quality, chronology 또는 법�
 합격 주장으로 포함하지 않는다.
 
 
-## 34.23 Step 4H — Patent Analysis UAT 계획
+## 34.23 Step 4H — Patent Analysis UAT 완료
 
-상태: `PLANNED`
+상태: `FINAL PASS` (2026-08-23)
 
-### 목표
+Step 4H는 새 분석 capability를 추가하지 않고 Step 4G의 사용자 경계를 평가했다.
 
-Step 4G의 end-user patent comparison workflow가 실제 사용 가능한지 평가한다.
+### UAT 결과
+
+- CLI help, 필수 입력, 비용 상한 및 artifact path 표시 PASS
+- invalid publication과 budget overflow를 provider 생성 전에 거부 PASS
+- offline happy path와 Markdown/JSON artifact 생성 PASS
+- 두 publication cell과 exact evidence ID/source ID/document ID/excerpt/offset 추적 PASS
+- technical judgment, rationale 및 issues 가독성 PASS
+- legal/ranking field 부재와 nonlegal scope notice PASS
+- `Prior-art publication axis`를 `Comparison publication axis`로 교정
+- evidence가 supplied abstract excerpt에 한정되고 full specification/chronology 검토가 아님을 명시
+
+### 검증 기준선과 비용 경계
 
 ```text
-explicit target/comparison publications
-→ visible pre-execution bounds
-→ bounded technical analysis
-→ Markdown / JSON artifacts
-→ user traceability and scope understanding
+focused comparison regression = 128 passed in 2.36s
+full repository pytest        = 5624 passed in 21.30s
+Ruff / format / diff-check    = PASS
+offline artifact review UAT   = PASS
+Step 4H OpenAI requests       = 0
+Step 4H EPO requests          = 0
+prior Step 4F bounded live    = PASS (reused, not rerun)
 ```
 
-### UAT 평가 항목
+Step 4H는 OpenAI semantic quality의 일반화, prior-art chronology 또는 법률 결론을
+검증하지 않는다. 이 경계는 artifact와 UAT 출력에 명시했다.
 
-1. CLI help와 필수 입력이 초보 사용자에게 이해 가능한가
-2. publication identity와 claim selection이 출력에서 명확한가
-3. planned/actual mapping calls와 artifact path가 명확한가
-4. 잘못된 publication, claim, budget 및 output path 오류가 수정 가능한 메시지인가
-5. Markdown comparison이 두 publication cell과 evidence provenance를 읽기 쉽게 표시하는가
-6. JSON artifact가 exact evidence ID/source ID/document ID/excerpt/offset을 보존하는가
-7. 결과가 technical relevance이며 legal opinion 또는 patent ranking이 아님을 사용자가
-   구분할 수 있는가
-8. 동일 실행의 비용과 외부 호출 범위가 사전에 제한되는가
+### 다음 공식 작업
 
-### 실행 원칙
-
-- offline UAT fixture와 scripted scenarios를 먼저 실행한다.
-- Step 4F에서 이미 검증한 동일 live semantic path를 불필요하게 반복하지 않는다.
-- 새 live smoke가 필요한 경우 별도 승인과 최소 호출 budget을 먼저 명시한다.
-- UAT는 OpenAI semantic quality, prior-art chronology, novelty, validity,
-  infringement/FTO 또는 기타 법률 결론을 검증하지 않는다.
-
-### 완료 기준
-
-- happy path, validation failure, budget rejection, artifact review 및 scope comprehension
-  scenario PASS
-- 외부 provider가 주입되기 전 invalid request rejection 확인
-- exact provenance 및 legal/ranking field absence 확인
-- focused regression, full repository regression, Ruff/format/diff-check PASS
-- UAT 결과와 발견된 usability debt를 문서화
-
-Step 4H 완료 후 다음 공식 작업은 `Stage 5 / Academic Research Vertical Slice /
-Step 5A — Existing Capability / Provider Foundation`이다. Academic Research는 현재 Patent
-작업 번호를 대체하지 않으며, Stage 6는 기존 charter의 Integrated RAG 책임을 유지한다.
+```text
+Stage 5 — Internet Research Expansion
+Academic Research Vertical Slice
+Step 5A — Existing Capability / Provider Foundation
+```
 
 ## 34.24 Stage 5 / Stage 6 실행 순서 확정
 
 ```text
 Stage 5 — Internet Research Expansion
 ├─ Patent Research Vertical Slice
-│  └─ Step 4H — Patent Analysis UAT                         CURRENT / NEXT
+│  └─ Step 4H — Patent Analysis UAT                         FINAL PASS
 └─ Academic Research Vertical Slice
-   └─ Step 5A — Existing Capability / Provider Foundation AFTER 4H
+   └─ Step 5A — Existing Capability / Provider Foundation CURRENT / NEXT
 
 Stage 6 — Integrated RAG                                  AFTER STAGE 5
 ```

@@ -375,7 +375,7 @@ live Patent UAT             = PASS
 | Deterministic Multi-Patent Comparison | Production-aligned / live validated | publication-axis comparison |
 | Markdown / JSON Export | Production-aligned / offline E2E | collision-safe persistence |
 | `aira research-patent` CLI | User-facing / UAT PASS | first technical-research slice |
-| `aira research-patent-compare` CLI | User-facing / offline E2E PASS; Step 4H UAT pending | explicit bounded comparison |
+| `aira research-patent-compare` CLI | User-facing / UAT PASS | explicit bounded technical comparison |
 | Multi-provider Patent Federation | Not implemented | future candidate, not current commitment |
 | Full Specification Disclosure Analysis | Not implemented | abstracts are current comparison evidence |
 | Chronology / Legal Prior-Art Qualification | Not implemented | authoritative legal conclusion excluded |
@@ -393,8 +393,8 @@ live Patent UAT             = PASS
 
 ```text
 Stage 5 — Internet Research Expansion          IN PROGRESS
-Patent Research Vertical Slice Step 4G        FINAL PASS
-Next official work                          Patent Step 4H — Analysis UAT
+Patent Research Vertical Slice Step 4H        FINAL PASS
+Next official work                          Academic Step 5A — Provider Foundation
 After Step 4H                               Academic Step 5A — Provider Foundation
 Next Stage                                  Stage 6 — Integrated RAG
 ```
@@ -408,4 +408,17 @@ Ruff / format / diff-check    = PASS
 Step 4G OpenAI requests       = 0
 Step 4G EPO requests          = 0
 prior bounded patent live     = PASS
+```
+
+## 10. 2026-08-23 Capability Matrix 갱신 — Patent Step 4H FINAL PASS
+
+`aira research-patent-compare`의 offline user acceptance와 artifact review가 PASS했다.
+사용자 경계는 exact provenance, bounded calls, readable technical judgments 및 explicit
+nonlegal scope를 포함한다. Full specification analysis, chronology와 authoritative legal
+analysis는 계속 미구현/제외 상태다.
+
+```text
+Current: Stage 5 / Patent Step 4H FINAL PASS
+Next:    Stage 5 / Academic Step 5A Provider Foundation
+After:   Stage 6 / Integrated RAG
 ```
