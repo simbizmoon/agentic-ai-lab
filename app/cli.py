@@ -38,7 +38,13 @@ from app.research.local_research_handler import (
 from app.research.parsed_document_cache_directory import (
     resolve_parsed_document_cache_directory,
 )
+from app.research.patent_multi_patent_comparison_cli_handler import (
+    PatentMultiPatentComparisonCliHandler,
+)
 from app.research.patent_research_cli_handler import PatentResearchCliHandler
+from app.schemas.patent_multi_patent_comparison_request import (
+    PatentMultiPatentComparisonRequest,
+)
 from app.schemas.patent_research_request import PatentResearchRequest
 from app.schemas.persistent_cache_status import (
     CacheKind,
@@ -77,6 +83,10 @@ IntegratedResearchHandlerType = Callable[
 ]
 
 PatentResearchHandlerType = Callable[[PatentResearchRequest], int]
+PatentComparisonHandlerType = Callable[
+    [PatentMultiPatentComparisonRequest, Path],
+    int,
+]
 
 _SUPPORTED_SOURCE_SUFFIXES: Final[frozenset[str]] = frozenset(
     {
@@ -281,6 +291,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     patent_parser.add_argument(
         "--maximum-bytes", type=int, default=1_000_000, metavar="BYTES"
+    )
+
+    comparison_parser = subparsers.add_parser(
+        "research-patent-compare",
+        help="Compare one explicit patent claim against explicit publications.",
+        description=(
+            "Retrieve exact EPO claims and abstracts, perform a bounded technical "
+            "comparison, and persist Markdown and JSON artifacts. This command "
+            "does not make patent-law conclusions or rank patents."
+        ),
+    )
+    comparison_parser.add_argument("--target-publication", required=True)
+    comparison_parser.add_argument(
+        "--comparison-publication",
+        required=True,
+        action="append",
+        metavar="PUBLICATION",
+    )
+    comparison_parser.add_argument("--claim-language", default="EN")
+    comparison_parser.add_argument("--claim-number", type=int, default=1)
+    comparison_parser.add_argument(
+        "--maximum-claim-elements", type=int, default=1, metavar="COUNT"
+    )
+    comparison_parser.add_argument(
+        "--maximum-mapping-calls", type=int, default=2, metavar="COUNT"
+    )
+    comparison_parser.add_argument(
+        "--maximum-bytes", type=int, default=1_000_000, metavar="BYTES"
+    )
+    comparison_parser.add_argument(
+        "--output-dir",
+        default="reports/patent-comparisons",
+        metavar="PATH",
     )
 
     cache_parser = subparsers.add_parser(
@@ -692,6 +735,47 @@ def run_patent_research_command(
     return patent_research_handler(request)
 
 
+def run_patent_comparison_command(
+    namespace: argparse.Namespace,
+    *,
+    patent_comparison_handler: PatentComparisonHandlerType,
+) -> int:
+    """Validate and execute one explicit bounded patent comparison."""
+
+    try:
+        request = PatentMultiPatentComparisonRequest(
+            target_publication_number=namespace.target_publication,
+            comparison_publication_numbers=tuple(namespace.comparison_publication),
+            claim_language=namespace.claim_language,
+            claim_number=validate_positive_integer(
+                namespace.claim_number,
+                name="claim_number",
+            ),
+            maximum_claim_elements=validate_positive_integer(
+                namespace.maximum_claim_elements,
+                name="maximum_claim_elements",
+            ),
+            maximum_mapping_calls=validate_positive_integer(
+                namespace.maximum_mapping_calls,
+                name="maximum_mapping_calls",
+            ),
+            maximum_bytes=validate_positive_integer(
+                namespace.maximum_bytes,
+                name="maximum_bytes",
+            ),
+        )
+    except ValidationError as error:
+        first_error = error.errors(include_url=False)[0]
+        message = str(first_error.get("msg", "invalid patent comparison request"))
+        message = message.removeprefix("Value error, ")
+        raise ValueError(message) from error
+
+    return patent_comparison_handler(
+        request,
+        validate_output_dir(namespace.output_dir),
+    )
+
+
 def run_integrated_research_command(
     namespace: argparse.Namespace,
     *,
@@ -740,6 +824,7 @@ def main(
     live_research_handler: (LiveResearchHandlerType | None) = None,
     integrated_research_handler: (IntegratedResearchHandlerType | None) = None,
     patent_research_handler: (PatentResearchHandlerType | None) = None,
+    patent_comparison_handler: (PatentComparisonHandlerType | None) = None,
     cache_maintenance_service: PersistentCacheMaintenanceService | None = None,
 ) -> int:
     """Run the AIRA command-line interface."""
@@ -777,6 +862,14 @@ def main(
                 namespace,
                 patent_research_handler=(
                     patent_research_handler or PatentResearchCliHandler()
+                ),
+            )
+
+        if namespace.command == "research-patent-compare":
+            return run_patent_comparison_command(
+                namespace,
+                patent_comparison_handler=(
+                    patent_comparison_handler or PatentMultiPatentComparisonCliHandler()
                 ),
             )
 
