@@ -4829,3 +4829,36 @@ changed Python format      = PASS
 git diff --check           = PASS
 bounded EPO/OpenAI smoke   = PASS
 ```
+
+## D-078 — Patent comparison export와 CLI는 explicit bounded request를 중심으로 구성한다
+
+- 상태: 확정
+- 날짜: 2026-08-23
+- 적용 범위: Stage 5 Patent Research Vertical Slice Step 4G
+
+### 결정
+
+- 사용자가 target publication과 comparison publications를 명시한다.
+- `maximum_claim_elements × comparison_publication_count`를 planned mapping call 수로 계산하고
+  `maximum_mapping_calls`를 넘으면 provider 호출 전에 거부한다.
+- exact EPO claims/abstract acquisition과 OpenAI decomposition/mapping은 factory에서 공유
+  provider client로 구성하되 테스트에서는 모두 주입 가능하게 유지한다.
+- formatter와 writer는 새로운 semantic/legal judgment를 생성하지 않는다.
+- Markdown과 JSON은 collision-safe path에 저장하고 기존 파일을 덮어쓰지 않는다.
+- CLI는 실행 전 비용 상한과 실행 후 실제 mapping call 수 및 artifact path를 표시한다.
+- comparison은 기술 비교이며 ranking, winner, novelty, invalidity, infringement/FTO 또는
+  기타 법률 결론을 생성하지 않는다.
+
+### 이유
+
+외부 호출 비용은 실행 후에만 관찰해서는 안전하지 않다. 입력 규모로부터 최악의 mapping
+호출 수를 실행 전에 계산하고, request schema부터 acquisition, workflow, CLI까지 같은 bound를
+전달해야 한다. downstream artifact는 이미 생성된 exact evaluation을 보존해야 하며 다시
+LLM에 보내 재작성하지 않는다.
+
+### 검증 및 비용
+
+CLI-to-artifact offline E2E에서 두 publication, 두 mapping evaluation, exact provenance,
+Markdown/JSON persistence 및 legal/ranking field 부재를 검증했다. Step 4G 개발과 검증의
+OpenAI/EPO 호출은 0회다. 실제 provider 연결은 Step 4F bounded live smoke 결과를 재사용하며,
+불필요한 동일 live smoke는 반복하지 않는다.

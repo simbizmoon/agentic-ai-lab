@@ -38,14 +38,14 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 5 — Internet Research Expansion
 - 현재 Vertical Slice: Patent Research Vertical Slice
-- 현재 완료 지점: Step 4F — Multi-Patent Comparison `FINAL PASS`
+- 현재 완료 지점: Step 4G — Persistence / Export / CLI Exposure `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
   Element Decomposition(Step 4C), Prior-Art Evidence Mapping(Step 4D), Claim Chart Generation
-  (Step 4E), Multi-Patent Comparison(Step 4F)까지 완료했다.
+  (Step 4E), Multi-Patent Comparison(Step 4F), Persistence / Export / CLI Exposure(Step 4G)까지 완료했다.
 - Stage 5 전체 상태: `IN PROGRESS`
-- 다음 공식 작업: Patent Research Vertical Slice Step 4G — Persistence / Export / CLI Exposure
+- 다음 공식 작업: Step 4G 이후 후속 범위 선정을 위한 Existing Capability Audit 및 계획 확정
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -4421,3 +4421,53 @@ Step 4G — Persistence / Export / CLI Exposure
 
 Step 4G는 Step 4F artifact를 재판단하지 않고 저장·내보내기·CLI 표시 경계에 연결한다.
 기본 개발 및 테스트는 deterministic/offline으로 수행하며 OpenAI API 호출은 사용하지 않는다.
+
+## 34.22 Persistence / Export / CLI Exposure
+
+상태: `FINAL PASS` (2026-08-23)
+
+Step 4G는 Step 4F comparison artifact를 재판단하지 않고 다음 제품 경계에 연결했다.
+
+```text
+PatentMultiPatentComparison
+→ deterministic Markdown / JSON formatting
+→ collision-safe persistence
+→ explicit bounded request
+→ exact EPO acquisition + bounded mapping workflow
+→ production provider composition
+→ research-patent-compare CLI
+```
+
+### 완료 범위
+
+- deterministic Markdown/JSON formatter
+- path traversal, overwrite 및 partial-write를 방지하는 artifact writer
+- explicit target/comparison publication 및 mapping-call/byte budget request
+- exact target claims와 ordered comparison abstracts acquisition
+- Step 4D → Step 4E → Step 4F → persistence full workflow
+- shared EPO/OpenAI client production factory
+- 실행 전 planned mapping-call bound와 실행 후 actual call count를 표시하는 CLI
+- CLI entry point부터 실제 Markdown/JSON artifact까지 offline E2E
+- exact evidence ID/source ID/document ID/excerpt/offset preservation
+- legal conclusion 및 ranking field 부재 검증
+
+### 비용 및 검증 경계
+
+Step 4G 구현과 테스트의 OpenAI/EPO 요청은 모두 0회다. provider factory의 외부 의존성은
+테스트 대역으로 주입했고, Step 4F에서 이미 통과한 bounded EPO/OpenAI live smoke를 다시
+실행하지 않았다. 따라서 Step 4G 검증은 CLI·비용 경계·provenance·artifact persistence를
+검증하지만 OpenAI semantic quality, chronology 또는 법률 결론을 검증하지 않는다.
+
+```text
+focused Step 4G comparison regression = 122 passed in 2.22s
+full repository pytest                = 5618 passed in 21.46s
+Ruff / format / git diff --check      = PASS
+Step 4G OpenAI requests               = 0
+Step 4G EPO requests                  = 0
+```
+
+### 다음 공식 작업
+
+Step 4G 이후 번호와 범위는 기존 문서에 정의되어 있지 않다. 새 단계를 추측하지 않고
+Existing Capability Audit을 통해 다음 vertical-slice gap을 확인한 뒤 계획과 완료 기준을
+먼저 확정한다.

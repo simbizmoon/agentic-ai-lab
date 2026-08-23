@@ -3710,3 +3710,64 @@ Step 4G — Persistence / Export / CLI Exposure
 
 Step 4G는 comparison artifact의 의미를 바꾸지 않고 저장·내보내기·사용자 표시 경계에
 연결한다. 개발 기본값은 OpenAI API 호출 0회다.
+
+## 2026-08-23 — Patent Step 4G Persistence / Export / CLI Exposure 완료
+
+### 학습 목표
+
+검증된 multi-patent comparison을 의미 변화 없이 사람이 읽는 문서와 기계가 읽는 JSON으로
+저장하고, 비용이 예측 가능한 CLI 작업으로 노출하는 방법을 학습했다.
+
+### 핵심 개념
+
+`planned bound`는 실행 전에 입력 크기로 계산하는 최악의 작업량이다. 이번 CLI에서는:
+
+```text
+maximum claim elements × comparison publication count
+= planned maximum mapping calls
+```
+
+이며 사용자가 허용한 `maximum_mapping_calls`보다 크면 외부 provider를 만들기 전에 요청을
+거부한다.
+
+### 구현 및 실습 결과
+
+- deterministic Markdown/JSON formatter와 collision-safe writer
+- bounded request schema와 exact EPO acquisition adapter
+- acquisition부터 Step 4D/4E/4F 및 persistence까지 full workflow
+- provider client를 공유하되 테스트 대역을 주입할 수 있는 factory
+- `research-patent-compare` CLI와 비용·scope 출력
+- CLI 입력부터 실제 artifact 파일까지 offline E2E
+
+### 실패 사례 분석
+
+offline E2E fixture가 처음에는 임의 URL host를 사용해 patent source allowlist 검증에
+실패했다. 테스트 대역도 production provenance 계약을 따라 `https://ops.epo.org/...` 형태를
+사용하도록 수정했다. 또한 writer가 execution별 하위 디렉터리를 만드는 실제 계약에 맞춰
+artifact 탐색을 recursive하게 검증했고, strict model의 JSON 복원에는
+`model_validate_json`을 사용했다.
+
+교훈:
+
+> 외부 호출을 가짜로 바꾸더라도 identity, URL, serialization, directory layout 같은
+> production 경계까지 가짜로 느슨하게 만들면 E2E의 가치가 사라진다.
+
+### 비용 학습과 평가
+
+Step 4G에서는 Step 4F의 성공한 bounded live smoke를 재사용했다. 동일한 provider 연결을
+다시 호출해 크레딧을 소비하지 않고, 새로 추가된 persistence/CLI 경계만 offline E2E로
+검증했다.
+
+```text
+focused Step 4G regression = 122 passed in 2.22s
+full repository pytest     = 5618 passed in 21.46s
+Ruff / format              = PASS
+git diff --check           = PASS
+OpenAI requests            = 0
+EPO requests               = 0
+```
+
+### 다음 학습 단계
+
+Step 4G 이후 공식 범위를 추측하지 않는다. Existing Capability Audit으로 남은 제품 gap을
+확인하고 다음 단계의 이론, 작은 예제, 실습 및 완료 기준을 먼저 정의한다.
