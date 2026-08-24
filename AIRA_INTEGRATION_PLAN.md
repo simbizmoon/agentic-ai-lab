@@ -729,3 +729,35 @@ Step 4 — Persistent Vector Index Lifecycle
 
 Step 4에서는 기존 persistent embedding cache와 별도로 searchable index의 저장, 복원,
 idempotent update, deletion 및 corruption behavior를 typed offline contract로 고정한다.
+
+
+# 20. 2026-08-24 Stage 6 Step 4 Integration Work Item 완료
+
+Step 4는 embedding calculation cache와 별도로 searchable corpus state를 generation snapshot으로
+저장하고 재시작 후 검색하는 lifecycle을 완성했다.
+
+```text
+CrossSourceChunkIngestionResult
+→ deterministic EmbeddedDocumentChunk
+→ PersistentVectorIndexSnapshot (generation + SHA-256)
+→ private atomic FilePersistentVectorIndex
+→ restart-safe PersistentVectorIndexSearchRuntime
+→ RetrievalResult
+→ existing RagContext + exact citations
+```
+
+Upsert와 targeted deletion은 최신 generation을 만들며 동일한 변경은 no-op이다. Missing snapshot은
+정상 empty state지만 corrupt, unsafe path, incompatible model/dimensions 및 clock rollback은
+명시적으로 실패한다. Full repository 5,931 tests와 focused E2E 97 tests가 통과했고 외부 요청은
+0회였다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 5 — Deterministic Hybrid Retrieval Fusion
+```
+
+Step 5는 keyword와 persistent semantic result를 같은 `chunk_id` 기준으로 결합하는 설명 가능한
+baseline을 만든다. Learned reranking, source authority, academic/patent quality 또는 final-answer
+judgment는 포함하지 않는다.

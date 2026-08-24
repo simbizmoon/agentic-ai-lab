@@ -514,3 +514,25 @@ Next:    Stage 6 / Step 4 Persistent Vector Index Lifecycle
 Current: Stage 6 / Step 3 Deterministic Keyword Retrieval FINAL PASS
 Next:    Stage 6 / Step 4 Persistent Vector Index Lifecycle
 ```
+
+
+## 16. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 4 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Persistent index snapshot contract | Production-aligned / offline verified | sealed schema and digest |
+| Private atomic file persistence | Production-aligned / offline verified | `0700`/`0600`, lock, fsync, replace |
+| Corruption and unsafe-path handling | Production-aligned / offline verified | explicit failure; no silent empty fallback |
+| Generation lifecycle | Production-aligned / offline verified | create/upsert/delete/no-op semantics |
+| Restart-safe semantic search | Integrated / offline verified | latest local snapshot, cosine retrieval |
+| Deterministic semantic ranking | Integrated / offline verified | score desc, chunk ID tie break |
+| Cross-source provenance through RAG | Integrated / offline E2E PASS | Patent/Academic fixtures and citations |
+| Production embedding quality | Not validated | deterministic local provider only |
+| Distributed writer coordination | Not implemented | file-local locking only |
+| Hybrid retrieval fusion | Not implemented | Stage 6 Step 5 |
+| Reranking/context budget/final grounding | Not implemented | later Stage 6 boundary |
+
+```text
+Current: Stage 6 / Step 4 Persistent Vector Index Lifecycle FINAL PASS
+Next:    Stage 6 / Step 5 Deterministic Hybrid Retrieval Fusion
+```

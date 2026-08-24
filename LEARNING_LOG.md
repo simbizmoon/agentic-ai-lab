@@ -3982,3 +3982,50 @@ provenance를 통해 citation의 document/chunk/offset을 원문까지 역추적
 
 다음 학습은 Stage 6 Step 4 Persistent Vector Index Lifecycle이다. embedding 결과를 계산해
 cache하는 것과, 검색 가능한 index 상태를 저장하고 갱신하는 것의 차이를 먼저 학습한다.
+
+
+## 2026-08-24 — Stage 6 Step 4 Persistent Vector Index Lifecycle 완료
+
+### 핵심 개념
+
+Embedding cache는 같은 text의 vector 계산을 다시 하지 않게 돕는다. Persistent vector index는
+어떤 chunk들이 현재 검색 corpus에 포함되는지, 어느 generation인지, 재시작 후 무엇을 검색해야
+하는지를 보존한다. 둘은 저장 형태가 비슷해도 책임이 다르다.
+
+### 구현과 실습
+
+```text
+cross-source DocumentChunk
+→ deterministic local embedding
+→ sealed generation snapshot
+→ private atomic file persistence
+→ process restart
+→ latest-generation cosine retrieval
+→ existing RagContext + citations
+```
+
+생성, upsert, targeted deletion과 empty generation을 구현했다. 동일 입력은 불필요한 generation을
+만들지 않고, 모델·차원 불일치와 뒤로 이동한 clock은 저장 전에 거부한다. Snapshot 부재는 정상
+empty state이지만 digest/JSON/UTF-8 손상은 빈 검색 결과로 숨기지 않는다.
+
+### 실패 사례와 교훈
+
+첫 storage 복원 시험에서 strict Pydantic datetime을 Python-object mode로 검증해 JSON timestamp가
+거부되었다. Duplicate-key 선검사를 유지한 뒤 JSON validation mode로 복원하여 해결했다.
+
+또한 repository-wide format check에는 Step 4와 무관한 기존 745-file drift가 있다. 무관한 대규모
+재포맷을 피하고 full Ruff/full pytest와 changed-file format을 분리했다.
+
+### 평가
+
+```text
+focused end-to-end regression     = 97 passed
+full repository pytest            = 5931 passed in 21.81s
+Ruff / changed format / diff      = PASS
+external requests                 = 0
+```
+
+### 다음 학습 단계
+
+Stage 6 Step 5 Deterministic Hybrid Retrieval Fusion. Step 3 lexical baseline과 Step 4 persistent
+semantic results를 설명 가능한 고정 규칙으로 결합하고 exact provenance를 계속 보존한다.

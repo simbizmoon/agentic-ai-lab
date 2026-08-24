@@ -4806,3 +4806,57 @@ Step 4 — Persistent Vector Index Lifecycle
 Step 4는 embedding cache와 구분되는 검색 가능한 vector index의 저장, 재시작 후 복원,
 중복 갱신, 삭제 및 corrupt-state 실패 경계를 먼저 정의한다. 새 외부 vector database는 기존
 local persistence 요구가 typed contract로 확정되기 전에는 도입하지 않는다.
+
+
+## 34.30 Stage 6 Step 4 — Persistent Vector Index Lifecycle 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### 완료 범위
+
+- searchable vector-index content와 integrity-sealed snapshot 계약
+- embedding model/dimensions, generation, timestamps 및 ordered unique chunk identity 검증
+- private `0700` directory와 `0600` snapshot/lock files
+- symlink/non-regular target 거부, bounded read/write 및 duplicate JSON key 거부
+- shared read/exclusive write lock과 atomic temp-write/fsync/replace/directory-fsync
+- 명시적 missing/corrupt/storage failure 구분
+- generation 1 생성, deterministic upsert, targeted deletion 및 no-op generation 보존
+- clock rollback, model mismatch 및 dimension mismatch 거부
+- 재시작 후 latest-generation cosine search와 deterministic chunk-ID tie break
+- 기존 `RetrievalResult`, RAG context 및 citation provenance 호환
+- Patent/Academic cross-source fixture의 저장·재시작·갱신·삭제 offline E2E
+
+### 검증 기준선
+
+```text
+Step 4-2 storage/schema tests      = 43 passed
+Step 4-3 lifecycle tests           = 62 passed
+Step 4-4 search/RAG tests          = 88 passed
+Step 4-5 cross-source E2E tests    = 97 passed
+full repository pytest             = 5931 passed in 21.81s
+full Ruff lint                     = PASS
+Step 4 changed-file format         = PASS (9 files)
+git diff --check / working tree    = PASS / clean
+OpenAI/OpenAlex/EPO/network calls  = 0 / 0 / 0 / 0
+```
+
+Repository-wide formatter의 기존 745-file baseline 차이는 그대로 두고 Step 4 변경 파일만
+format 검증했다.
+
+### 검증하지 않은 범위
+
+- production semantic embedding 품질과 external vector database
+- concurrent read-modify-write transaction 또는 distributed writer coordination
+- keyword/semantic score fusion과 reranking
+- context token/byte budget 및 final-answer grounding quality
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 5 — Deterministic Hybrid Retrieval Fusion
+```
+
+Step 5는 Step 3 keyword retrieval과 Step 4 persistent semantic retrieval의 결과를 provenance
+손실 없이 결합하는 작은 deterministic baseline을 정의한다. Source authority, legal/academic
+quality, semantic reranking 및 final-answer judgment는 별도 후속 gate로 유지한다.

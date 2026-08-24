@@ -5057,3 +5057,35 @@ Cross-source ingestion부터 keyword ranking, standard retrieval result, RAG con
 offset까지 focused 70개 테스트가 통과했다. 전체 repository 5,847개 테스트, Ruff lint,
 Step 3 다섯 파일 format 및 diff check가 통과했고 외부 요청은 0회였다. 이 결정은 BM25 품질,
 semantic quality, hybrid ranking 또는 final-answer grounding을 검증하지 않는다.
+
+
+## D-086 — Persistent vector index는 sealed local snapshot과 explicit corruption semantics를 사용한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 4 Persistent Vector Index Lifecycle
+
+### 결정
+
+- embedding cache와 searchable vector index를 서로 다른 lifecycle로 유지한다.
+- index snapshot은 stable content SHA-256, generation, model/dimensions 및 ordered unique records를
+  포함한다.
+- local persistence는 private permissions, symlink refusal, bounded payload, file lock 및 atomic
+  fsync/replace를 사용한다.
+- snapshot 부재만 empty state로 처리하고 corrupt/unsafe state는 명시적 오류로 중단한다.
+- 실제 record 변경이 있을 때만 generation을 증가시키며 동일 upsert와 missing delete는 no-op이다.
+- search runtime은 매 요청에서 최신 sealed generation을 읽고 cosine score 내림차순,
+  `chunk_id` 오름차순으로 동점을 해결한다.
+- existing `RetrievalResult`와 RAG citation 계약을 유지하고 새 외부 vector database를 추가하지 않는다.
+- 다음 공식 작업은 Step 5 Deterministic Hybrid Retrieval Fusion이다.
+
+### 이유
+
+계산 결과를 재사용하는 embedding cache만으로는 재시작 가능한 검색 corpus의 포함·갱신·삭제
+상태를 설명할 수 없다. 작은 file-backed snapshot 계약을 먼저 고정하면 provider나 vector DB를
+선택하기 전에 lifecycle과 provenance failure semantics를 오프라인에서 검증할 수 있다.
+
+### 제한
+
+이 결정은 production embedding 품질, distributed concurrency, hybrid ranking, reranking,
+source quality 또는 final-answer grounding을 보장하지 않는다.
