@@ -661,3 +661,22 @@ Next:    Stage 7 / Step 1 Agent Loop Existing Capability Audit
     Current: Stage 7 / Bounded Single-Agent Research Loop FINAL PASS
     Stage 7 bounded vertical slice: COMPLETE
     Next: Stage 8 / Step 1 Existing Cost and Provider Capability Audit
+
+## 23. 2026-08-24 Stage 8~11 Essential Scope Decision
+
+| Remaining capability | 수행 여부 | 채택 기준 / 제한 |
+|---|---|---|
+| Provider-neutral usage and price contracts | Required | Stage 8 core |
+| Deterministic cost ledger and monetary budget | Required | Stage 8 core |
+| Existing cache savings observation | Required | no speculative new cache |
+| Additional commercial providers | Excluded by default | add only after measured need |
+| Automatic cost-aware model routing | Deferred | Stage 9 quality baseline required |
+| Real research Golden Dataset and evals | Required | Stage 9 mandatory |
+| Multi-Agent comparative experiment | Required | Stage 10 mandatory |
+| Multi-Agent default adoption | Evidence-dependent | single-agent remains default without improvement |
+| Cross-project Multi-Agent applicability guide | Required | Stage 10 output |
+| Minimal CLI-first productization | Required | Stage 11 core |
+| API/UI/queue/distributed infrastructure | Conditional or excluded | explicit real-use requirement needed |
+
+    Current: Stage 8 / Step 1 Existing Cost and Provider Capability Audit PASS
+    Next: Stage 8 / Step 2 Provider-neutral Usage and Price Contracts

@@ -4257,3 +4257,24 @@ request를 전체 loop budget으로 합산한다. retryable failure라도 ceilin
 Source authority, 최신성, quality, semantic contradiction과 answer usefulness는 orchestration 검증과
 다르다. 다음은 Stage 8 Step 1 Existing Cost and Provider Capability Audit이며 기존 token usage,
 provider selection, cost tracking과 budget 코드를 먼저 read-only로 확인한다.
+
+## 2026-08-24 — Stage 8~11 실효성 범위와 Multi-Agent 필수 비교 확정
+
+### 핵심 개념
+
+필수 실험과 제품 채택은 다르다. Multi-Agent의 효과를 확인하려면 비교 실험은 반드시 해야 하지만,
+Agent 수를 늘린 구조가 실제 기본 Runtime이 되려면 동일 Dataset에서 품질·비용·시간 개선이 입증되어야
+한다.
+
+### 적용 원칙
+
+- Stage 8은 비용 측정·기록·상한에 집중한다.
+- Stage 9는 실제 연구 품질과 Single-Agent baseline을 만든다.
+- Stage 10은 최소 2-Agent 구조를 반드시 비교하고 다른 프로젝트 적용 지침을 작성한다.
+- Stage 11은 검증된 결과를 반복 사용하기 위한 최소 제품화만 수행한다.
+- 필요성이 입증되지 않은 Provider, Router, UI, API와 분산 인프라는 구현하지 않는다.
+
+### 다음 학습
+
+Stage 8 Step 2에서 token, request, provider-reported usage와 비용을 혼동하지 않는 provider-neutral
+Usage/Price 계약을 설계한다.

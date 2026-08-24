@@ -934,3 +934,31 @@ human-review resume, Multi-Agent orchestration과 법률적 결론이다.
 
 Stage 8 Step 1은 usage collector, token/cost accounting, provider selection과 budget enforcement를
 read-only로 감사한다.
+
+# 27. 2026-08-24 Stage 8~11 Essential Execution Scope
+
+남은 Integration은 기능 수가 아니라 측정 가능한 실제 효과를 기준으로 수행한다.
+
+```text
+Stage 8 essential cost control
+→ Stage 9 mandatory Single-Agent real-quality baseline
+→ Stage 10 mandatory Multi-Agent comparative evaluation
+→ evidence-based adoption decision and cross-project guide
+→ Stage 11 minimal productization
+```
+
+Stage 8은 usage/price contract, cost ledger와 monetary guardrail에 집중한다. 추가 Provider와 자동
+Routing은 Stage 9 평가에서 필요성이 확인되기 전에는 구현하지 않는다.
+
+Stage 10 비교 실험 수행은 필수다. 최초 비교는 기존 bounded Single-Agent와 최소
+Researcher+Independent Evidence Critic 구조로 제한하며 동일 Golden Dataset, budget과 rubric을 사용한다.
+채택은 품질·비용·시간·실패 격리 결과에 따른다. 결과와 무관하게 Cross-Project Applicability Guide를
+작성한다.
+
+Stage 11은 CLI-first 최소 제품화만 필수이며 API/UI/queue/distributed infrastructure는 명시적인 실제
+사용 요구가 있을 때만 별도 승인한다.
+
+다음 Integration Work Item:
+
+    Stage 8 — Essential Cost Control and Provider Foundation
+    Step 2 — Provider-neutral Usage and Price Contracts

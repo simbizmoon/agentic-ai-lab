@@ -50,7 +50,8 @@
 - Stage 5 전체 상태: `COMPLETE`
 - Stage 6 전체 상태: COMPLETE
 - Stage 7 bounded single-agent vertical slice 상태: COMPLETE
-- 다음 공식 작업: Stage 8 / Step 1 — Existing Cost and Provider Capability Audit
+- 현재 단계: Stage 8 / Step 1 — Existing Cost and Provider Capability Audit `PASS`
+- 다음 공식 작업: Stage 8 / Step 2 — Provider-neutral Usage and Price Contracts
 - 현재 기준일: 2026-08-24
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -999,226 +1000,220 @@ AIRA가 Evidence의 충분성, Source 품질 및 자료 간 충돌을 판단하�
 
 ---
 
-# 15. Stage 8 — Cost and Provider Optimization
+# 15. Stage 8 — Essential Cost Control and Provider Foundation
 
 ## 목표
 
-비용을 Agent 실행 제약으로 통합하고,
-업무별로 더 저렴한 API 또는 로컬 LLM을 선택할 수 있도록 한다.
+비용을 실행 후 표시값이 아니라 Agent 실행 제약으로 통합한다. 기존 Provider와 Cache를 재사용하고,
+실제 평가 없이 Provider 수나 자동 Routing 복잡도를 늘리지 않는다.
 
 ## 상태
 
-- [ ] 시작 전
+- [x] Step 1 Existing Cost and Provider Capability Audit PASS
+- [ ] Step 2 Provider-neutral Usage and Price Contracts
+- [ ] 후속 essential implementation
 
-## Work Items
+## 반드시 포함하는 Work Items
 
-### 8.1 기존 비용 코드 통합
+### 8.1 Usage와 Price 계약
 
-- [ ] Usage Collector
-- [ ] Token Counter
+- [ ] Provider-neutral Usage Event
+- [ ] input/cached-input/output/reasoning token 보존
+- [ ] provider/model/request/tool identity
 - [ ] Model Price Registry
-- [ ] 실행 전 예상비용
-- [ ] 실행 후 실제비용
-- [ ] 가격 기준일
-- [ ] 실행별 비용
-- [ ] 누적비용
+- [ ] 가격 기준일, 버전, 출처와 통화
+- [ ] unknown cost와 zero cost 구분
+- [ ] estimated/provider-reported/billed/not-applicable cost 구분
 
-### 8.2 Budget Guardrail
+### 8.2 Cost 계산과 Ledger
 
-- [ ] 최대 LLM 호출
-- [ ] 최대 Search 호출
-- [ ] 최대 Tool 호출
-- [ ] 최대 Source
-- [ ] 최대 Chunk
-- [ ] 최대 Token
-- [ ] 최대 반복
-- [ ] 최대 실행시간
-- [ ] 실행당 비용
-- [ ] 중단 또는 승인 요청
+- [ ] 결정론적 실행 전 예상비용
+- [ ] 실행 후 기록비용
+- [ ] 요청별·Stage별·실행별·누적 비용
+- [ ] Decimal 산술과 명시적 반올림
+- [ ] 기존 OpenAI token usage, search credit와 provider-reported cost adapter
 
-### 8.3 Cache
+### 8.3 Cost Budget Guardrail
 
-- [ ] Query Cache
-- [ ] Source Cache
-- [ ] Parsing Cache
-- [ ] Embedding Cache
-- [ ] Result Cache
-- [ ] Cache 무효화
+- [ ] 기존 LLM/Search/Tool/Source/Chunk/Token/반복/시간 제한 재사용
+- [ ] 실행당 비용 상한
+- [ ] projected/accumulated cost 초과 감지
+- [ ] 중단, 범위 축소, 저가 경로 또는 사용자 승인 요청의 명시적 상태
 
-### 8.4 Provider 비교
+### 8.4 기존 Cache와 Provider Foundation
 
-- [ ] OpenAI Baseline
-- [ ] 다른 상용 LLM
-- [ ] OpenAI-compatible API
-- [ ] Ollama
-- [ ] 로컬 LLM
-- [ ] Deterministic Test Provider
+- [ ] 기존 Parsing/Embedding Cache 재사용 및 절감량 관측
+- [ ] OpenAI, Local/Ollama와 Deterministic Provider capability 표현
+- [ ] Provider 교체 가능성 보존
+- [ ] offline E2E와 필요한 최소 bounded live smoke
 
-### 8.5 Model Routing
+## 명시적 제외
 
-- [ ] Query 생성
-- [ ] Search Result 분류
-- [ ] Chunk 관련성
-- [ ] Evidence 분석
-- [ ] 충돌 분석
-- [ ] 최종 Report
-- [ ] 작업별 품질·비용 비교
+- 여러 상용 LLM Provider의 무조건적인 동시 연동
+- 평가 전 자동 최저가 Provider 선택
+- 모든 작업을 위한 복잡한 Model Router
+- 실시간 가격 수집 서비스와 청구서 자동 정산
+- 이미 필요성이 입증되지 않은 Query/Source/Result Cache 신규 구현
+
+Model Routing과 추가 Provider는 Stage 9의 동일 Dataset 품질·비용 결과가 필요성을 입증할 때만
+별도 Work Item으로 승인한다.
 
 ## 완료 결과
 
-- 실행 전·후 비용 추적
-- 실제 Budget 중단
-- Cache 기반 비용 절감
-- Provider 교체 가능한 Runtime
-- 저가 또는 로컬 LLM 적용 범위 결정
+- 실행 전 예상비용과 실행 후 기록비용
+- versioned price provenance와 append-only cost ledger
+- 실제 비용 상한 및 승인 경계
+- 기존 Cache 절감량 관측
+- Provider-neutral 비용 기반
 
 ---
 
-# 16. Stage 9 — Evals and Real Research Validation
+# 16. Stage 9 — Mandatory Real Research Evaluation
 
 ## 목표
 
-AIRA의 기능 수가 아니라 실제 연구 품질, 신뢰성, 비용 및 재현성을
-동일한 평가 기준으로 검증한다.
+기능 수나 테스트 수가 아니라 실제 연구 품질, 신뢰성, 비용, 처리시간과 재현성을 동일한 평가
+기준으로 검증하고 Stage 10 비교의 Single-Agent baseline을 확정한다.
 
 ## 상태
 
 - [ ] 시작 전
+- 수행: 필수
 
-## Work Items
+## 반드시 포함하는 Work Items
 
 ### 9.1 Golden Dataset
 
-- [ ] 관심 분야 조사
-- [ ] 특정 기술 연구주제
-- [ ] 공식 규정 조사
-- [ ] 인터넷과 로컬 문서 통합
-- [ ] 로컬 문서 비교
-- [ ] 선행특허 조사
+- [ ] 실제 관심 분야 기반 10~20개 초기 과제
+- [ ] 일반 기술, 학술, 특허와 인터넷/로컬 통합 과제
+- [ ] 필수 Source, 핵심 Evidence, 금지 주장과 예상 불확실성
+- [ ] 사람의 review rubric
 
 ### 9.2 품질 평가
 
-- [ ] Search Relevance
-- [ ] Retrieval Relevance
-- [ ] Evidence Coverage
-- [ ] Source Quality
-- [ ] Citation Accuracy
-- [ ] Claim Support
-- [ ] Contradiction Detection
-- [ ] Hallucination Rate
-- [ ] Recommendation Grounding
-- [ ] Report Completeness
-- [ ] Trace Completeness
+- [ ] Search/Retrieval Relevance
+- [ ] Evidence Coverage와 Source Quality
+- [ ] Citation Accuracy와 Claim Support
+- [ ] Contradiction Detection과 Hallucination Rate
+- [ ] Recommendation Grounding과 Report Completeness
+- [ ] Trace Completeness와 사람의 유용성 평가
 
 ### 9.3 운영 평가
 
-- [ ] Latency
-- [ ] Token Usage
-- [ ] API Cost
-- [ ] Reproducibility
-- [ ] Failure Recovery
-- [ ] Budget 동작
-- [ ] 동일 요청 Regression
-
-### 9.4 실제 사례
-
-- [ ] Agentic AI 기술 동향
-- [ ] 착석 상태 기반 행동관리 기술 조사
-- [ ] 특허 명세서와 선행특허 통합 분석
-- [ ] 추가 실제 사용자 과제
+- [ ] Latency, Token Usage와 계산 비용
+- [ ] Reproducibility와 Failure Recovery
+- [ ] Budget 동작과 동일 요청 Regression
+- [ ] Single-Agent 기준 점수와 허용 회귀 범위
 
 ## 완료 결과
 
-- Golden Dataset
-- Baseline Score
-- Regression 기준
-- 실제 연구 보고서
-- 품질·비용·처리시간 비교표
+- 재사용 가능한 Golden Dataset과 평가표
+- Single-Agent 품질·비용·시간 baseline
+- 실제 연구 보고서와 사용자 유용성 판정
+- Stage 10의 공정한 비교 기준
 
 ---
 
-# 17. Stage 10 — Multi-Agent Experiment
+# 17. Stage 10 — Mandatory Multi-Agent Comparative Evaluation
 
 ## 목표
 
-Single-Agent 대비 역할 분리가 실제 이점을 제공하는지 평가한다.
+Multi-Agent 비교 실험을 반드시 수행하여 역할 분리가 Single-Agent보다 실제 이점을 제공하는 조건과
+다른 프로젝트로 이전 가능한 적용 기준을 확인한다. 실험 수행은 필수지만 제품 채택은 증거에 따른다.
+
+## 상태
+
+- [ ] 시작 전
+- 비교 실험 수행: 필수
+- 기본 Runtime 채택: 평가 결과에 따라 결정
+
+## 반드시 포함하는 Work Items
+
+### 10.1 최소 비교 실험
+
+- [ ] Stage 9 Bounded Single Research Agent baseline 고정
+- [ ] Research Agent + Independent Evidence Critic 최소 2-Agent 실험
+- [ ] 동일 Dataset, 동일 입력·상한·평가표 사용
+- [ ] exact trace와 Agent별 usage/cost 보존
+
+### 10.2 비교 평가
+
+- [ ] Evidence Coverage
+- [ ] Citation Accuracy와 Claim Support
+- [ ] Contradiction Detection과 Hallucination Rate
+- [ ] Report Completeness와 Context 안정성
+- [ ] 실패 격리와 반복 실행 안정성
+- [ ] 호출·Token·비용·처리시간
+- [ ] 품질 향상 대비 추가 비용 판정
+
+### 10.3 채택 결정
+
+- [ ] 기본 채택, 조건부 채택 또는 채택 보류
+- [ ] 개선이 없으면 Single-Agent 기본 경로 유지
+- [ ] 추가 Coordinator/Specialist 구조는 최소 2-Agent 이점이 확인될 때만 실험
+
+### 10.4 다른 프로젝트 적용 가능성
+
+- [ ] 역할 분리가 효과적인/효과 없는 과제 유형
+- [ ] 최소 역할 수와 Coordinator 필요 조건
+- [ ] 병렬화, Context 분리, Critic과 실패 격리 적용 조건
+- [ ] 추가 비용을 정당화하는 최소 품질 향상
+- [ ] 재사용 가능한 계약·평가방법과 AIRA 전용 부분 구분
+- [ ] Cross-Project Applicability Guide 작성
+
+## 완료 결과
+
+- Single-Agent 대 Multi-Agent 정량·정성 비교표
+- Multi-Agent Adoption Decision
+- Cross-Project Applicability Guide
+- 증거 기반 기본 Architecture 결정
+
+---
+
+# 18. Stage 11 — Minimal Productization
+
+## 목표
+
+Stage 9·10에서 품질과 Architecture가 검증된 AIRA를 실제로 반복 사용하기 위한 최소 제품 형태로
+정리한다. 필요성이 입증되지 않은 플랫폼 기능은 구현하지 않는다.
 
 ## 상태
 
 - [ ] 시작 전
 
-## Work Items
-
-- [ ] 역할 분리 후보 선정
-- [ ] Research Coordinator
-- [ ] Web Search Specialist
-- [ ] Local Document Specialist
-- [ ] Patent Search Specialist
-- [ ] Evidence Analyst
-- [ ] Claim Critic
-- [ ] Verification Agent
-- [ ] Report Writer
-- [ ] 동일 Dataset 비교
-- [ ] 품질 비교
-- [ ] 비용 비교
-- [ ] 처리시간 비교
-- [ ] Context 안정성 비교
-- [ ] 채택 또는 보류 결정
-
-## 채택 조건
-
-다음 중 하나 이상의 의미 있는 개선이 확인되어야 한다.
-
-- Evidence Coverage 향상
-- Citation Accuracy 향상
-- Contradiction Detection 향상
-- 복잡한 분석 품질 향상
-- Context 관리 향상
-- 처리시간 단축
-- 비용 대비 성능 향상
-- 실패 격리 향상
-
-개선이 입증되지 않으면 Single-Agent를 기본 경로로 유지한다.
-
----
-
-# 18. Stage 11 — Productization
-
-## 목표
-
-연구 품질이 검증된 AIRA를 실제로 사용·운영하기 위한 최소 제품 형태로 정리한다.
-
-## 상태
-
-- [ ] 시작 전
-
-## Work Items
+## 반드시 포함하는 Work Items
 
 - [ ] CLI 사용성 개선
-- [ ] 설정 파일
-- [ ] 실행 Profile
-- [ ] 결과 조회
-- [ ] SQLite 필요성 검토
-- [ ] FastAPI 필요성 검토
-- [ ] Background Job 필요성 검토
-- [ ] Dockerfile
-- [ ] 필요한 경우 Docker Compose
-- [ ] Secret 관리
-- [ ] 로그
-- [ ] 기본 Backup
-- [ ] 사용자 가이드
-- [ ] 개발자 운영 메모
+- [ ] 실행 Profile과 비용·Provider·품질 설정
+- [ ] 결과 및 실행 기록 조회
+- [ ] Secret 관리, 로그와 기본 Backup
+- [ ] 재현 가능한 실행환경
+- [ ] 사용자 가이드와 개발자 운영 메모
 - [ ] 알려진 제한
-- [ ] MCP 또는 ChatGPT App 검토
-- [ ] 배포 필요성 검토
+- [ ] Stage 9·10 결과를 반영한 기본 실행 Profile
+
+## 조건부 Work Items
+
+실제 사용 요구가 확인된 항목만 별도 결정 후 구현한다.
+
+- [ ] SQLite
+- [ ] FastAPI
+- [ ] Background Job
+- [ ] Docker / Docker Compose
+- [ ] MCP 또는 ChatGPT App
+
+## 명시적 제외
+
+- 상용 수준 Web UI와 다중 사용자 협업
+- 복잡한 RBAC와 분산 Queue
+- Worker Cluster, Kubernetes와 대규모 Observability 플랫폼
 
 ## 완료 결과
 
-- 재현 가능한 실행환경
-- 사용자 가이드
-- 운영 메모
-- 필요에 맞는 최소 API 또는 Persistence
-- ChatGPT 연동의 후속 방향
+- 실제 반복 사용 가능한 최소 실행환경
+- 결과 조회, 안전한 설정과 운영 지침
+- 증거에 기반한 Single/Multi-Agent 기본 Profile
+- 조건부 제품 기능에 대한 구현 또는 보류 결정
 
 ---
 

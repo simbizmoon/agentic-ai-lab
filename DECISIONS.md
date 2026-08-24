@@ -5257,3 +5257,34 @@ Budget 소진을 실패나 성공으로 꾸미지 않고 incomplete로 보존해
 이 결정은 source authority, 최신성, paper/patent quality, contradiction, semantic quality,
 final-answer usefulness 또는 법률적 결론을 제공하지 않는다. 확장된 Source Evaluation /
 Cross-validation 항목은 backlog로 남으며 controlled local result는 실제 OpenAI 품질 증거가 아니다.
+
+## D-093 — Stage 8~11은 필수 실효성 범위만 수행하고 Multi-Agent 비교 실험은 반드시 실행한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 8 Cost, Stage 9 Evals, Stage 10 Multi-Agent, Stage 11 Productization
+
+### 결정
+
+- Stage 8은 provider-neutral usage, versioned price, deterministic cost ledger와 monetary budget을
+  필수 범위로 한다.
+- 평가 전 다수 Provider 연동, 자동 최저가 Routing, 실시간 가격 수집과 청구서 정산은 제외한다.
+- Stage 9 실제 연구 Golden Dataset과 Single-Agent 품질·비용 baseline은 반드시 수행한다.
+- Stage 10 Multi-Agent 비교 실험은 선택이 아니라 필수다.
+- Stage 10 제품 채택은 별도다. 동일 Dataset에서 의미 있는 품질·비용·시간 또는 실패 격리 개선이
+  없으면 Single-Agent를 기본 경로로 유지한다.
+- 첫 실험은 `Bounded Single Research Agent`와 `Research Agent + Independent Evidence Critic`의
+  최소 비교로 제한한다.
+- Stage 10은 Multi-Agent Adoption Decision과 Cross-Project Applicability Guide를 반드시 산출한다.
+- Stage 11은 CLI, Profile, 결과 조회, secret/log/backup, 가이드와 재현 가능한 환경만 필수다.
+  SQLite, API, Background Job, Docker와 MCP/App은 실제 요구가 확인된 경우에만 승인한다.
+
+### 이유
+
+기능 수와 Agent 수는 제품 효과를 증명하지 않는다. 비용 측정 없이 Provider를 최적화할 수 없고,
+Single-Agent 실제 품질 baseline 없이 Multi-Agent 이점을 공정하게 비교할 수 없다. 반대로
+Multi-Agent 비교 자체를 생략하면 역할 분리의 효과와 다른 프로젝트 적용 조건을 확인할 수 없다.
+
+### 다음 공식 작업
+
+Stage 8 Step 2 Provider-neutral Usage and Price Contracts.
