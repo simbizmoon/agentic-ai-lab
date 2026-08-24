@@ -48,8 +48,10 @@
   Existing Capability / Provider Foundation(Step 5A), Academic Evidence Acquisition
   (Step 5B), Evidence Persistence / CLI Exposure와 사용자 UAT(Step 5C)를 완료했다.
 - Stage 5 전체 상태: `COMPLETE`
-- 다음 공식 작업: Stage 7 / Step 1 — Agent Loop Existing Capability Audit
-- 현재 기준일: 2026-08-23
+- Stage 6 전체 상태: COMPLETE
+- Stage 7 bounded single-agent vertical slice 상태: COMPLETE
+- 다음 공식 작업: Stage 8 / Step 1 — Existing Cost and Provider Capability Audit
+- 현재 기준일: 2026-08-24
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -938,7 +940,8 @@ AIRA가 Evidence의 충분성, Source 품질 및 자료 간 충돌을 판단하�
 
 ## 상태
 
-- [ ] 시작 전
+- [x] Bounded Single-Agent Research Loop vertical slice 완료
+- [ ] Extended Source Evaluation / Cross-validation backlog
 
 ## Work Items
 
@@ -5110,3 +5113,56 @@ Step 1 — Existing Capability Audit
 Stage 7은 기존 planning, tool selection, observation, evidence sufficiency, limited replanning 및
 termination 기능을 먼저 감사한다. Agent 수를 늘리는 단계가 아니며 Single-Agent bounded loop를
 기본선으로 유지한다.
+
+## 34.36 Stage 7 — Bounded Single-Agent Research Loop 완료
+
+상태: FINAL PASS (2026-08-24)
+
+### 완료 범위
+
+- 기존 planning pipeline, tool registry, step executor와 PlanningAgentLoop 재사용
+- provider-neutral loop request, round, observation, usage 및 terminal-result 계약
+- Stage 6 grounded-answer workflow의 planning-tool / observation adapter
+- workflow 상태, retryability와 전체 loop budget 기반 deterministic evidence decision
+- structural plan completion과 evidence sufficiency를 분리한 제한적 재계획
+- round/tool/provider/token/time/external-request 전체 예산
+- 라운드별 새 plan ID, 고유 observation ID 및 exact Stage 6 결과 보존
+- real planning pipeline offline E2E와 독립 UAT
+
+### 검증 기준선
+
+    Step 1 existing capability audit        = PASS
+    Step 2 bounded loop contract             = PASS
+    Step 3 workflow tool/observation adapter = PASS
+    Step 4 evidence decision adapter         = PASS
+    Step 5 planning-loop integration         = PASS
+    Step 6 real pipeline E2E / offline UAT   = PASS / PASS
+    full repository pytest                   = 6252 passed in 15.06s
+    full Ruff / changed-file format          = PASS / PASS
+    git diff --check                         = PASS
+    OpenAI/OpenAlex/EPO/network calls        = 0 / 0 / 0 / 0
+
+### 완료 의미와 남은 경계
+
+Stage 7에서 완료한 것은 bounded single-agent orchestration vertical slice다. 실제 planning
+pipeline이 Stage 6 workflow를 호출하고 exact observation과 누적 사용량을 근거로 종료 또는 제한된
+재계획을 선택하는 경로가 offline에서 검증되었다.
+
+다음 항목은 완료로 주장하지 않는다.
+
+- production OpenAI planning, generation 또는 semantic quality
+- source authority, paper/patent quality, 최신성 또는 중요도
+- supporting/contradicting source의 semantic cross-validation
+- final-answer usefulness와 recommendation quality
+- chronology 또는 법률적 결론
+- human-review resume와 Multi-Agent coordinator
+
+기존 Stage 7 charter의 Source Evaluation과 Cross-validation 세부 항목은 후속 evaluation backlog로
+보존한다.
+
+### 다음 공식 작업
+
+    Stage 8 — Cost and Provider Optimization
+    Step 1 — Existing Cost and Provider Capability Audit
+
+Stage 8도 기존 기능을 먼저 read-only로 감사하며 감사 자체를 위해 live provider 요청을 만들지 않는다.

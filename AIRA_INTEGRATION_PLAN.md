@@ -907,3 +907,30 @@ Step 1 — Existing Capability Audit
 Stage 7 Step 1은 기존 planning, tool selection, observation, evidence sufficiency, limited replanning,
 termination 및 trace capability를 read-only로 감사한다. Single-Agent baseline을 우선하며 Multi-Agent는
 동일 evaluation dataset에서 이점이 입증되기 전에는 도입하지 않는다.
+
+# 26. 2026-08-24 Stage 7 Bounded Agent Loop Integration 완료
+
+완료된 integration:
+
+    PlanningAgentLoop
+    → bounded_grounded_answer planning tool
+    → Stage 6 exact workflow result
+    → ResearchAgentObservation + ResearchAgentRoundUsage
+    → DeterministicEvidenceSufficiencyDecider
+    → BoundedResearchAgentLoopResult
+
+- 기존 planning service, pipeline, scheduler, lifecycle, step executor와 registry 재사용
+- 내부 planning replans를 0으로 고정하고 evidence-aware outer loop가 재계획 통제
+- answer availability, abstention, incomplete, safe failure와 budget exhaustion 분리
+- 전체 loop usage, real pipeline E2E, independent UAT와 full regression PASS
+
+통합하지 않은 항목은 production model quality, source authority/freshness/contradiction,
+human-review resume, Multi-Agent orchestration과 법률적 결론이다.
+
+다음 Integration Work Item:
+
+    Stage 8 — Cost and Provider Optimization
+    Step 1 — Existing Cost and Provider Capability Audit
+
+Stage 8 Step 1은 usage collector, token/cost accounting, provider selection과 budget enforcement를
+read-only로 감사한다.

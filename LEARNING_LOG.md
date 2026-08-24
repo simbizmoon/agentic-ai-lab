@@ -4228,3 +4228,32 @@ Controlled test doubles는 orchestration과 provenance를 검증하지만 실제
 다음 학습은 Stage 7 Step 1 Agent Loop Existing Capability Audit이다. Planning, tool selection,
 observation, evidence sufficiency, limited replanning과 termination 기능이 현재 저장소에 어떻게 존재하는지
 먼저 확인하고 중복 구현을 피한다.
+
+## 2026-08-24 — Stage 7 Bounded Single-Agent Research Loop 완료
+
+### 핵심 개념
+
+계획이 모든 step을 실행했다고 연구 목표가 달성된 것은 아니다. 구조적 완료는 계획 실행기의
+판단이고 evidence sufficiency는 grounded workflow 결과를 확인한 뒤 내려야 하는 별도 판단이다.
+
+    plan → tool execution → exact observation → evidence decision → stop/replan
+
+재계획은 무제한 반복이 아니다. round, tool/provider call, recorded token, elapsed time과 external
+request를 전체 loop budget으로 합산한다. retryable failure라도 ceiling에 도달하면 다시 시도하지 않는다.
+
+최대 외부 요청이 0이고 실제 요청도 0이면 예산 소진이 아니라 금지된 요청을 하지 않은 것이다.
+0-valued optional budget은 실제 양수 사용이 발생했을 때 위반으로 판단한다.
+
+### 검증 결과
+
+- 실제 planning pipeline과 PlanningAgentLoop offline E2E PASS
+- retryable generation failure 이후 새 plan ID로 bounded replan PASS
+- evidence-free explicit abstention과 exact Stage 6 result 보존 PASS
+- hard round ceiling에서 두 번째 plan 미생성 PASS
+- 전체 저장소 6252 passed, 외부/API 요청 0회
+
+### 다음 학습
+
+Source authority, 최신성, quality, semantic contradiction과 answer usefulness는 orchestration 검증과
+다르다. 다음은 Stage 8 Step 1 Existing Cost and Provider Capability Audit이며 기존 token usage,
+provider selection, cost tracking과 budget 코드를 먼저 read-only로 확인한다.

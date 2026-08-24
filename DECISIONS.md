@@ -5233,3 +5233,27 @@ Budget 소진을 실패나 성공으로 꾸미지 않고 incomplete로 보존해
 
 이번 결정은 source authority, answer usefulness, patent/academic quality, chronology 또는 법률적 결론을
 보장하지 않는다. Stage 7은 Multi-Agent 도입을 의미하지 않으며 기존 Single-Agent 기능을 먼저 감사한다.
+
+## D-092 — Stage 7 완료는 bounded single-agent orchestration이며 source-quality 판단을 포함하지 않는다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 7 Agent Loop 및 Stage 8 전환
+
+### 결정
+
+- 기존 PlanningAgentLoop를 복제하지 않고 연구 라운드마다 내부 replanning을 0으로 제한해 재사용한다.
+- 연구 재계획은 structural completion이 아니라 Stage 6 workflow 상태, retryability와 loop budget으로
+  결정한다.
+- answer_available과 명시적 abstained는 goal achieved와 abstention으로 각각 보존한다.
+- incomplete/retryable failure는 예산이 남을 때만 replan하고 nonretryable failure는 terminal로
+  종료한다. 상충하는 실패 신호는 human review로 보낸다.
+- 허용량 0인 선택적 budget에서 실제 사용량도 0이면 소진으로 오판하지 않는다.
+- Stage 7 bounded vertical slice를 완료하고 다음 공식 단계는 Stage 8 Step 1 Existing Cost and
+  Provider Capability Audit으로 한다.
+
+### 제한
+
+이 결정은 source authority, 최신성, paper/patent quality, contradiction, semantic quality,
+final-answer usefulness 또는 법률적 결론을 제공하지 않는다. 확장된 Source Evaluation /
+Cross-validation 항목은 backlog로 남으며 controlled local result는 실제 OpenAI 품질 증거가 아니다.

@@ -641,3 +641,23 @@ Current: Stage 6 / Step 9 Bounded Grounded Answer Workflow FINAL PASS
 Stage 6: COMPLETE
 Next:    Stage 7 / Step 1 Agent Loop Existing Capability Audit
 ```
+
+## 22. 2026-08-24 Capability Matrix 갱신 — Stage 7 Bounded Agent Loop FINAL PASS
+
+| Agent-loop capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Provider-neutral bounded loop contract | Offline verified | explicit rounds, observations, usage, terminal states |
+| Stage 6 workflow planning tool | Integrated / offline verified | exact workflow result preserved |
+| Tool result to observation | Integrated / offline verified | safe failure and usage conversion |
+| Evidence-sufficiency decision | Deterministic / offline verified | status, retryability and budget only |
+| Existing planning integration | Real offline E2E PASS | inner replans fixed at zero |
+| Evidence-aware research replanning | Offline UAT PASS | structural completion alone is insufficient |
+| Loop-wide budget accounting | Offline verified | round/tool/provider/token/time/external requests |
+| Plan and observation identity | Offline verified | new plan per round, unique observations |
+| Production planning/semantic quality | Not validated | controlled local doubles only |
+| Source authority and contradiction | Not implemented | evaluation backlog |
+| Multi-Agent coordination | Not implemented | single-agent baseline retained |
+
+    Current: Stage 7 / Bounded Single-Agent Research Loop FINAL PASS
+    Stage 7 bounded vertical slice: COMPLETE
+    Next: Stage 8 / Step 1 Existing Cost and Provider Capability Audit
