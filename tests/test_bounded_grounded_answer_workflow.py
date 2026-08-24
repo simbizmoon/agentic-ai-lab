@@ -306,6 +306,26 @@ def test_validation_failure_requires_failed_exact_validation() -> None:
     assert value.status is GroundedAnswerWorkflowStatus.VALIDATION_FAILED
 
 
+def test_validation_execution_failure_can_preserve_answer_without_result() -> None:
+    request = _request()
+    value = BoundedGroundedAnswerWorkflowResult(
+        request=request,
+        status=GroundedAnswerWorkflowStatus.VALIDATION_FAILED,
+        generation_usage=_usage(),
+        generation_budget_exhausted=False,
+        answer=_answer(request),
+        citation_validation=None,
+        abstention_detected=False,
+        failure=GroundedAnswerWorkflowFailure(
+            stage=GroundedAnswerWorkflowFailureStage.VALIDATION,
+            code="citation_validation_error",
+            safe_message="Generated answer citation validation failed.",
+            retryable=False,
+        ),
+    )
+    assert value.citation_validation is None
+
+
 def test_incomplete_accepts_generation_budget_exhaustion_before_validation() -> None:
     request = _request()
     value = BoundedGroundedAnswerWorkflowResult(

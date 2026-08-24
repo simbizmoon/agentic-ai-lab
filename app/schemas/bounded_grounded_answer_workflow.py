@@ -192,10 +192,14 @@ class BoundedGroundedAnswerWorkflowResult(BaseModel):
             raise ValueError("generation failure requires generation error details")
 
     def _require_validation_failure(self) -> None:
-        if self.answer is None or self.citation_validation is None:
-            raise ValueError("validation failure requires answer and validation")
-        if self.citation_validation.status is not AnswerCitationValidationStatus.FAILED:
-            raise ValueError("validation failure requires failed citation validation")
+        if self.answer is None:
+            raise ValueError("validation failure requires a generated answer")
+        if self.citation_validation is not None and (
+            self.citation_validation.status is not AnswerCitationValidationStatus.FAILED
+        ):
+            raise ValueError(
+                "validation failure output must contain failed citation validation"
+            )
         if self.abstention_detected or self.generation_budget_exhausted:
             raise ValueError("validation failure cannot be abstained or incomplete")
         if (
