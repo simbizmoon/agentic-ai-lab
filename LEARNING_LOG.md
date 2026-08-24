@@ -4116,3 +4116,49 @@ Controlled evaluator는 흐름과 경계를 검증하지만 OpenAI semantic qual
 
 Stage 6 Step 7 Bounded RAG Context Budget. 선택된 evidence가 prompt 크기 상한을 넘을 때 어떤
 항목을 포함·제외했는지 provenance와 함께 설명하는 deterministic context packing을 학습한다.
+
+
+## 2026-08-24 — Stage 6 Step 7 Bounded RAG Context Budget 완료
+
+### 핵심 개념
+
+Provider가 응답 뒤에 보고하는 token usage와 요청 전에 context가 들어갈 수 있는지 계산하는
+preflight estimate는 다르다. 또한 검색용 lexical token은 모델 token이 아니다. 그래서 추정값에는
+어떤 estimator를 썼는지 이름을 붙이고, byte/item 상한과 분리해 기록해야 한다.
+
+### 구현과 실습
+
+```text
+direct/partial reranked candidates
+→ prospective existing RagContext rendering
+→ item + UTF-8 byte + estimated-token checks
+→ whole chunk included or explicitly omitted
+→ bounded RagContext + exact RagCitation
+```
+
+각 후보를 추가했을 때의 전체 rendered context를 계산했으므로 evidence text뿐 아니라 citation
+header와 blank-line separator도 예산에 포함된다. 큰 후보가 빠져도 다음 작은 후보가 들어갈 수
+있도록 검사를 계속했다.
+
+### 실패 사례와 교훈
+
+처음에는 memory lexical tokenizer를 token budget에 재사용할 가능성을 검토했지만 이는 model
+tokenizer가 아니었다. Contract에 estimator ID를 강제하여 이름 없는 token 숫자를 금지했다.
+또한 excerpt를 잘라 맞추는 방식은 exact provenance를 훼손하므로 whole-chunk packing을 선택했다.
+
+### 평가
+
+```text
+offline context-budget E2E/UAT   = PASS
+full repository pytest           = 6088 passed in 22.44s
+Ruff / changed format / diff     = PASS
+external requests                = 0
+```
+
+Offline word estimator 결과는 provider-exact token count가 아니며, 이번 단계는 final generated
+answer의 citation correctness를 검증하지 않는다.
+
+### 다음 학습 단계
+
+Stage 6 Step 8 Grounded Answer Citation Validation. Bounded context를 받은 답변이 제공된 citation
+marker만 사용하고 unsupported claim이나 missing citation을 어떻게 검출할지 학습한다.

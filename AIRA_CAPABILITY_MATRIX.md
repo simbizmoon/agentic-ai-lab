@@ -578,3 +578,24 @@ Next:    Stage 6 / Step 6 Bounded Evidence Reranking
 Current: Stage 6 / Step 6 Bounded Evidence Reranking FINAL PASS
 Next:    Stage 6 / Step 7 Bounded RAG Context Budget
 ```
+
+
+## 19. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 7 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Typed context packing contract | Production-aligned / offline verified | complete included/omitted classification |
+| Item and rendered UTF-8 byte ceilings | Production-aligned / offline verified | authoritative offline bounds |
+| Named estimated-token ceiling | Production-aligned / offline verified | estimator identity required |
+| Deterministic whole-chunk packer | Production-aligned / offline verified | no excerpt cutting |
+| Explicit omission reasons | Production-aligned / offline verified | item/byte/token reasons |
+| Reranking-to-bounded-context workflow | Integrated / offline verified | legacy unbounded path preserved |
+| Packed citation provenance | Integrated / offline E2E PASS | exact document/chunk/offset |
+| Provider-exact tokenizer parity | Not validated | offline estimator only |
+| Model context/output reservation | Not implemented | provider-specific future boundary |
+| Grounded answer citation validation | Not implemented | Stage 6 Step 8 |
+
+```text
+Current: Stage 6 / Step 7 Bounded RAG Context Budget FINAL PASS
+Next:    Stage 6 / Step 8 Grounded Answer Citation Validation
+```

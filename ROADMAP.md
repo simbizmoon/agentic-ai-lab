@@ -4964,3 +4964,56 @@ Step 7 — Bounded RAG Context Budget
 
 Step 7은 reranking에서 선택된 exact chunks를 final prompt에 넣기 전에 token/byte/item 상한을
 적용한다. 후보를 조용히 자르지 않고 포함·제외 이유와 exact citation provenance를 보존한다.
+
+
+## 34.33 Stage 6 Step 7 — Bounded RAG Context Budget 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### 완료 범위
+
+- 기존 RAG context, grounded prompt, memory truncation 및 token 관련 capability 감사
+- maximum items, rendered UTF-8 bytes 및 estimated tokens의 typed packing budget
+- 모든 relevant 후보의 included/omitted 완전 분류와 explicit omission reason
+- token estimator identity 강제 및 provider-exact token count와의 명시적 구분
+- 기존 `build_rag_context()` 형식의 header/citation/separator까지 포함한 preflight 측정
+- reranked 순서를 유지하는 deterministic greedy whole-chunk packing
+- evidence excerpt 중간 절단 금지와 뒤의 작은 후보에 대한 계속 검사
+- per-item incremental cost와 cumulative usage의 산술 일치 검증
+- Step 6 reranking workflow의 optional bounded packing 통합과 기존 unbounded 호환성
+- packed whole chunk와 최종 `RagCitation`의 document/chunk/offset 일치 검증
+- Patent/Academic/Official/failed persistent-restart offline E2E/UAT
+
+### 검증 기준선
+
+```text
+Step 7-0 existing capability audit = PASS
+Step 7-1 typed contract tests       = 46 passed
+Step 7-2 deterministic packer tests = 64 passed
+Step 7-3 workflow integration tests = 97 passed
+Step 7-4 offline E2E/UAT            = PASS
+full repository pytest              = 6088 passed in 22.44s
+full Ruff lint                      = PASS
+Step 7 changed-file format          = PASS (7 files)
+git diff --check / working tree     = PASS / clean
+OpenAI/OpenAlex/EPO/network calls   = 0 / 0 / 0 / 0
+```
+
+### 검증하지 않은 범위
+
+- exact OpenAI 또는 provider tokenizer parity
+- model-specific context window와 output-token reservation
+- semantic relevance 및 source authority/quality
+- generated answer의 citation correctness와 completeness
+- chronology, novelty, infringement 또는 기타 법률 결론
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 8 — Grounded Answer Citation Validation
+```
+
+Step 8은 bounded exact context 이후의 grounded answer path를 감사하고, 답변에 사용된 citation
+marker가 제공된 evidence에만 연결되는지, unsupported/missing citation을 어떻게 실패시키는지에
+대한 가장 작은 offline-first validation boundary를 정의한다.

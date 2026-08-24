@@ -5145,3 +5145,34 @@ grounding을 판단하지 않는다.
 grounding quality를 보장하지 않는다.
 
 다음 공식 작업은 Stage 6 Step 7 Bounded RAG Context Budget이다.
+
+
+## D-089 — RAG context budget은 rendered whole chunks를 deterministic하게 pack하고 모든 omission을 기록한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 7 Bounded RAG Context Budget
+
+### 결정
+
+- authoritative offline ceilings은 maximum items와 rendered UTF-8 bytes이며 estimated-token ceiling은
+  반드시 명시적인 estimator ID와 함께 사용한다.
+- lexical keyword tokens나 API 응답 후 usage tokens를 preflight provider token count로 재해석하지 않는다.
+- 각 prospective candidate는 기존 `build_rag_context()` 형식으로 렌더링하여 citation header와
+  separator를 포함한 전체 context 비용을 측정한다.
+- evidence chunk 중간을 자르지 않는다. 포함된 chunk의 exact text와 character range를 유지한다.
+- reranked 순서로 greedy packing하되 큰 후보가 제외돼도 뒤의 작은 후보를 계속 검사한다.
+- 모든 relevant candidate는 included 또는 omitted 중 하나로 정확히 분류하고 item, byte, token
+  omission reason을 canonical order로 기록한다.
+- Packing 결과와 최종 `RagContext` citation의 document ID, chunk ID, rank, score 및 offsets가
+  일치하지 않으면 실패한다.
+- 기존 Step 6 request에 packing budget이 없으면 기존 unbounded behavior를 유지한다.
+
+### 이유와 제한
+
+원문을 임의 절단하면 citation offset과 evidence 의미가 바뀔 수 있고, 첫 overflow에서 조용히
+중단하면 어떤 후보가 왜 누락됐는지 알 수 없다. Whole-chunk classification은 품질 최적화보다
+먼저 재현 가능하고 감사 가능한 prompt input boundary를 제공한다. Offline estimator는 orchestration
+검증용이며 OpenAI tokenizer parity나 final answer quality를 보장하지 않는다.
+
+다음 공식 작업은 Stage 6 Step 8 Grounded Answer Citation Validation이다.

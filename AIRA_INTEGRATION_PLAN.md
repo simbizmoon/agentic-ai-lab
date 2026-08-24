@@ -817,3 +817,31 @@ Step 7 — Bounded RAG Context Budget
 
 Step 7은 selected evidence의 item/token/byte ceiling과 deterministic packing을 정의한다. Final
 answer generation이나 citation quality 판정은 이 단계에 포함하지 않는다.
+
+
+# 23. 2026-08-24 Stage 6 Step 7 Integration Work Item 완료
+
+Step 7은 Step 6의 relevant evaluated candidates와 기존 `RagContext` 사이에 auditable whole-chunk
+packing boundary를 추가했다.
+
+```text
+CrossSourceEvidenceRerankingResult
+→ relevant RetrievalResult candidates
+→ DeterministicRagContextPacker
+→ RagContextPackingResult
+→ bounded existing RagContext + exact RagCitation
+```
+
+각 candidate는 included 또는 omitted로 완전히 분류되며 rendered item/byte/estimated-token 비용과
+omission reason을 보존한다. Full repository 6,088 tests와 offline persistent-restart context-budget
+E2E/UAT가 통과했으며 외부 요청은 0회였다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 8 — Grounded Answer Citation Validation
+```
+
+Step 8은 existing grounded prompt/answer service와 citation contracts를 감사한 뒤 bounded context에
+없는 marker, missing support 및 answer/citation mismatch를 검출하는 offline-first boundary를 정한다.
