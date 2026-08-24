@@ -471,6 +471,26 @@ After:   Stage 6 implementation sequence selected by audit
 | PDF/full-text permission | Not implemented | separate future boundary |
 
 ```text
-Current: Stage 5 / Academic Step 5C FINAL PASS — Stage 5 COMPLETE
-Next:    Stage 6 / Step 1 Integrated RAG Existing Capability Audit
+Current: Stage 6 / Step 2 Cross-Source Chunk Ingestion FINAL PASS
+Next:    Stage 6 / Step 3 Deterministic Keyword Retrieval
+```
+
+## 14. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 1–2 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Existing RAG capability audit | Accepted / offline verified | reuse boundaries documented |
+| Cross-source ingestion contract | Production-aligned / offline verified | exact source/document/range provenance |
+| Deterministic ingestion runtime | Production-aligned / offline verified | read documents only; failures explicit |
+| Existing paragraph chunker compatibility | Integrated / regression verified | exact character slices preserved |
+| Deterministic embedding compatibility | Integrated / offline verified | local SHA-256 test provider only |
+| In-memory vector retrieval compatibility | Integrated / offline verified | process-local, not persistent index |
+| Deterministic keyword/BM25 retrieval | Not implemented | Stage 6 Step 3 |
+| Persistent vector index lifecycle | Not implemented | separate later Step |
+| Hybrid retrieval fusion | Not implemented | keyword + semantic fusion pending |
+| Reranking/context budget/final grounding | Not implemented | later Stage 6 boundary |
+
+```text
+Current: Stage 6 / Step 2 Cross-Source Chunk Ingestion FINAL PASS
+Next:    Stage 6 / Step 3 Deterministic Keyword Retrieval
 ```

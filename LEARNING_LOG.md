@@ -3896,3 +3896,45 @@ artifact를 오프라인으로 재검증해 불필요한 OpenAlex 호출을 피�
 
 Stage 6 Step 1 — Integrated RAG Existing Capability Audit. 기존 parsing, chunking,
 retrieval, cache, evidence 및 citation 구조를 감사한 뒤 최소 통합 slice를 설계한다.
+
+## 2026-08-24 — Stage 6 Step 1–2 Cross-Source Chunk Ingestion 완료
+
+### 이론과 작은 예제
+
+Integrated RAG에서 chunk는 단순한 문자열 조각이 아니다. 예를 들어 학술 초록과 공식 문서의
+문장이 함께 검색되더라도 각 결과는 어느 source와 document의 몇 번째 문자 범위인지 다시
+확인할 수 있어야 한다. 이 연결을 provenance라고 한다.
+
+```text
+source → document → exact character range → chunk → retrieval result
+```
+
+### 실습 및 구현 결과
+
+기존 paragraph chunker를 여러 `ResearchSourceDocument`에 순서대로 적용하고, 학술·공식 등
+source type과 무관하게 같은 `DocumentChunk` 계약으로 변환했다. failed document는 빈 chunk를
+만들지 않고 명시적인 failure accounting으로 남겼다. 생성된 chunk는 기존 deterministic
+embedding과 in-memory vector store에 수정 없이 연결됐다.
+
+### 실패 사례 분석
+
+1. 다운로드 폴더에서 Ruff를 실행했을 때 파일 경로 분류가 달라 import blank-line 수정이 두 번
+   필요했다. 이후 실제 `tests/` 경로를 가진 임시 저장소에서 검증했다.
+2. 전체 formatter 검사는 Step 2와 무관한 기존 745개 파일을 재포맷 대상으로 보고했다. 전체
+   lint/test와 changed-file format을 분리해 검증하고 대규모 무관 변경을 피했다.
+
+교훈:
+
+> 통합은 부품을 연결하는 것만이 아니라, 연결 후에도 원문 identity와 offset을 역추적할 수
+> 있음을 계약과 테스트로 증명하는 일이다.
+
+### 평가 결과와 다음 학습
+
+- focused integration `71 passed`
+- full repository `5808 passed`
+- Step 2 files format / full Ruff / diff check PASS
+- external requests 0
+
+다음 학습은 Stage 6 Step 3 Deterministic Keyword Retrieval이다. 먼저 작은 corpus에서 query
+term과 exact chunk text를 이용한 재현 가능한 lexical baseline을 만들고, semantic/hybrid
+판단은 뒤 단계로 분리한다.

@@ -664,13 +664,41 @@ Step 5C는 exact scholarly evidence를 private deterministic Markdown/JSON과 bo
 연결하고 offline E2E, one-request OpenAlex live smoke, full regression 및 artifact review UAT를
 통과했다. Stage 5 Internet Research Expansion은 사용자 gate까지 완료했다.
 
+Stage 6 Step 1 감사와 Step 2 cross-source ingestion은 완료됐다.
+
 다음 Integration Work Item:
 
 ```text
 Stage 6 — Integrated RAG
-Step 1 — Existing Capability Audit
+Step 3 — Deterministic Keyword Retrieval
 ```
 
-Step 1는 새 구현 전에 기존 parser/chunker, keyword/semantic retrieval, embedding/parsed cache,
-evidence selection 및 citation grounding의 실제 재사용 가능 범위를 감사한다. 감사 전에는 새
-vector database, retrieval provider 또는 OpenAI 호출을 추가하지 않는다.
+Step 3는 exact `DocumentChunk` corpus를 대상으로 external call 없는 lexical retrieval
+baseline을 만든다. Persistent vector index, hybrid fusion, reranking과 context budget은 각각
+독립된 후속 integration gate로 유지한다.
+
+# 18. 2026-08-24 Stage 6 Step 1–2 Integration Work Item 완료
+
+Step 1 감사에서 기존 chunking, embedding/cache, semantic top-k, context/citation 및 eval 부품의
+재사용 범위를 확인했다. Step 2는 Web/Patent/Academic 등 서로 다른 source document가 같은
+chunk boundary로 들어갈 때 exact source/document/range provenance를 보존하는 최소 통합
+slice를 완성했다.
+
+```text
+ResearchSourceDocumentSet
+→ CrossSourceChunkIngestionRuntime
+→ DocumentChunk + typed provenance
+→ existing deterministic embedding
+→ existing InMemoryVectorStore
+→ retrieval result with traceable source/document/offset
+```
+
+Step 2는 external provider, OpenAI, persistent index 또는 ranking judgment를 추가하지 않는다.
+Full repository 5,808 tests와 focused 71 tests가 통과했다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 3 — Deterministic Keyword Retrieval
+```

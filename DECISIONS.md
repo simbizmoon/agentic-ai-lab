@@ -4992,3 +4992,36 @@ claim support를 판단하지 않는다.
 
 이 결정은 semantic relevance, paper quality, citation impact, systematic-review completeness,
 PDF/full-text acquisition 또는 이용 permission을 제공하거나 보장하지 않는다.
+
+## D-084 — Stage 6는 기존 RAG 부품을 재사용하고 cross-source exact provenance부터 통합한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 1 Existing Capability Audit 및 Step 2 Cross-Source Chunk Ingestion
+
+### 결정
+
+- 기존 `DocumentChunk`, paragraph-aware chunker, embedding provider와 vector-store 계약을
+  교체하지 않고 재사용한다.
+- 각 chunk는 `source_id`, `document_id`, `source_type` 및 exact document character range를
+  별도 typed provenance로 보존한다.
+- 성공적으로 읽은 모든 문서는 최소 한 chunk를 생성하고 failed document는 chunker에 전달하지
+  않은 채 `failed_document_ids`로 정확히 기록한다.
+- runtime이 생성한 chunk metadata에는 request/task/source/source-type identity를 포함한다.
+- Step 2에서 새 embedding provider, OpenAI 호출, vector database 또는 ranking judgment를
+  추가하지 않는다.
+- 다음 작업은 Step 3 Deterministic Keyword Retrieval이며 persistent vector index와 hybrid
+  fusion은 별도 후속 Step으로 유지한다.
+
+### 이유
+
+Integrated RAG의 첫 위험은 retrieval algorithm 선택보다 서로 다른 출처의 문서가 동일한
+chunk/index 경계로 들어갈 때 원문 provenance를 잃는 것이다. exact range와 identity를 먼저
+강제하면 이후 keyword, semantic, hybrid retrieval 결과를 같은 근거로 검증할 수 있다.
+
+### 검증과 제한
+
+Step 2 focused integration 71개와 전체 repository 5,808개 테스트가 통과했다. Ruff lint,
+Step 2 다섯 파일 format 및 diff check도 통과했고 외부 요청은 0회였다. 기존 745개 파일의
+formatter drift는 Step 2 변경이 아니므로 일괄 수정하지 않는다. Keyword relevance, hybrid
+fusion, persistent index, reranking, context budget 및 final answer quality는 아직 검증하지 않았다.

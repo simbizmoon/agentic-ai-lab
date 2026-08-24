@@ -4535,8 +4535,10 @@ Stage 5 — Internet Research Expansion
    ├─ Step 5B — Academic Evidence Acquisition             FINAL PASS
    └─ Step 5C — Evidence Persistence / CLI Exposure       FINAL PASS
 
-Stage 6 — Integrated RAG                                  CURRENT / NEXT
-└─ Step 1 — Existing Capability Audit                    NEXT
+Stage 6 — Integrated RAG                                  CURRENT
+├─ Step 1 — Existing Capability Audit                    FINAL PASS
+├─ Step 2 — Cross-Source Chunk Ingestion                 FINAL PASS
+└─ Step 3 — Deterministic Keyword Retrieval              NEXT
 ```
 
 Step 5A는 academic identity, DOI/version, metadata, abstract/full-text/license,
@@ -4698,8 +4700,61 @@ Step 5C 사용자 gate까지 통과했으므로 Stage 5 Internet Research Expans
 
 ```text
 Stage 6 — Integrated RAG
-Step 1 — Existing Capability Audit
+Step 3 — Deterministic Keyword Retrieval
 ```
 
-Step 1는 기존 parsing, chunking, keyword/semantic retrieval, cache, evidence 및 citation
-capability를 먼저 감사한다. 새 vector database나 provider를 감사 전에 도입하지 않는다.
+Step 1 감사와 Step 2 cross-source ingestion을 완료했다. Step 3는 외부 API 없이 exact
+`DocumentChunk` text를 대상으로 deterministic keyword retrieval baseline을 정의한다.
+Persistent vector index와 hybrid fusion은 각각 후속 Step으로 유지한다.
+
+## 34.28 Stage 6 Step 1–2 — Audit / Cross-Source Chunk Ingestion 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### Step 1 감사 결과
+
+재사용 가능한 기존 capability는 exact character/paragraph chunking, typed chunk metadata,
+deterministic/OpenAI embeddings, persistent private embedding cache, in-memory vector store,
+semantic top-k, citation context, grounded-answer validation 및 retrieval/citation/abstention eval이다.
+
+감사에서 확인한 미구현 경계는 generic keyword/BM25 retrieval, hybrid fusion, persistent vector
+index lifecycle, cross-source ingestion, context budget 및 Stage 6 workflow/CLI였다. 새 provider나
+vector database를 추가하지 않고 가장 작은 미구현 경계인 cross-source ingestion부터 진행했다.
+
+### Step 2 완료 범위
+
+- heterogeneous `ResearchSourceDocumentSet`을 기존 `DocumentChunk`로 변환하는 typed contract
+- `source_id → document_id → chunk_id`와 exact character range provenance
+- read document의 최소 한 chunk 및 failed document의 명시적 무청크 accounting
+- 기존 paragraph-aware chunker를 재사용하는 deterministic runtime
+- request/task/source/source-type retrieval metadata 보존
+- deterministic local embedding과 in-memory vector search 호환성 검증
+- 검색 결과에서 원문 text, source/document identity 및 offsets 역추적
+
+### 검증 기준선
+
+```text
+focused Step 2 integration       = 71 passed in 0.70s
+full repository pytest           = 5808 passed in 13.89s / 16.86s
+full Ruff lint                   = PASS
+Step 2 changed-file format       = PASS (5 files)
+git diff --check / working tree  = PASS / clean
+OpenAI/OpenAlex/EPO requests     = 0 / 0 / 0
+```
+
+Repository-wide formatter에는 기존 745개 파일의 baseline 차이가 있다. Step 2의 다섯 파일은
+format check를 통과했으며 무관한 파일을 일괄 재포맷하지 않았다.
+
+### 검증하지 않은 범위
+
+- keyword/BM25 retrieval과 hybrid score fusion
+- persistent vector index lifecycle
+- semantic reranking과 context token/byte budget
+- final citation grounding workflow/CLI 및 live/UAT
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 3 — Deterministic Keyword Retrieval
+```
