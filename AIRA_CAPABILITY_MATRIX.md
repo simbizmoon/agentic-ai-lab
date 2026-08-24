@@ -491,6 +491,26 @@ Next:    Stage 6 / Step 3 Deterministic Keyword Retrieval
 | Reranking/context budget/final grounding | Not implemented | later Stage 6 boundary |
 
 ```text
-Current: Stage 6 / Step 2 Cross-Source Chunk Ingestion FINAL PASS
-Next:    Stage 6 / Step 3 Deterministic Keyword Retrieval
+Current: Stage 6 / Step 3 Deterministic Keyword Retrieval FINAL PASS
+Next:    Stage 6 / Step 4 Persistent Vector Index Lifecycle
+```
+
+## 15. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 3 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Keyword retrieval contract | Production-aligned / offline verified | bounded, auditable explanation |
+| Unicode token normalization | Reused / regression verified | NFKC, whitespace, casefold |
+| Unique-token coverage scorer | Production-aligned / offline verified | no IDF or hidden weights |
+| Deterministic keyword ranking | Production-aligned / offline verified | score desc, chunk ID tie break |
+| Cross-source keyword retrieval | Integrated / offline verified | exact provenance preserved |
+| Existing RAG context compatibility | Integrated / offline verified | standard retrieval/citation path |
+| BM25 / corpus-frequency weighting | Not implemented | future evidence-driven enhancement |
+| Persistent vector index lifecycle | Not implemented | Stage 6 Step 4 |
+| Hybrid retrieval / reranking | Not implemented | later Stage 6 boundary |
+| Context budget / final grounding | Not implemented | later Stage 6 boundary |
+
+```text
+Current: Stage 6 / Step 3 Deterministic Keyword Retrieval FINAL PASS
+Next:    Stage 6 / Step 4 Persistent Vector Index Lifecycle
 ```

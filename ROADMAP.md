@@ -4538,7 +4538,8 @@ Stage 5 — Internet Research Expansion
 Stage 6 — Integrated RAG                                  CURRENT
 ├─ Step 1 — Existing Capability Audit                    FINAL PASS
 ├─ Step 2 — Cross-Source Chunk Ingestion                 FINAL PASS
-└─ Step 3 — Deterministic Keyword Retrieval              NEXT
+├─ Step 3 — Deterministic Keyword Retrieval              FINAL PASS
+└─ Step 4 — Persistent Vector Index Lifecycle            NEXT
 ```
 
 Step 5A는 academic identity, DOI/version, metadata, abstract/full-text/license,
@@ -4758,3 +4759,50 @@ format check를 통과했으며 무관한 파일을 일괄 재포맷하지 않�
 Stage 6 — Integrated RAG
 Step 3 — Deterministic Keyword Retrieval
 ```
+
+## 34.29 Stage 6 Step 3 — Deterministic Keyword Retrieval 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### 완료 범위
+
+- bounded keyword retrieval request/response와 auditable score explanation 계약
+- 기존 memory Unicode NFKC/casefold tokenizer의 document-chunk 재사용
+- unique query token coverage 기반 점수: `round(matches / query_tokens, 6)`
+- score와 explanation token coverage의 schema-level 일치 강제
+- exact phrase 여부 기록, phrase boost 및 hidden weight 미사용
+- minimum score, top-k, duplicate chunk rejection 및 deterministic chunk-ID tie break
+- 기존 `RetrievalResult`와 RAG context builder 호환
+- cross-source source/document/chunk/offset provenance와 failed-document exclusion 검증
+
+### 검증 기준선
+
+```text
+focused Step 3 integration       = 70 passed in 0.62s
+full repository pytest           = 5847 passed in 21.10s
+full Ruff lint                   = PASS
+Step 3 changed-file format       = PASS (5 files)
+git diff --check / working tree  = PASS / clean
+OpenAI/OpenAlex/EPO requests     = 0 / 0 / 0
+```
+
+Repository-wide formatter의 기존 745-file baseline 차이는 그대로 두고 Step 3 변경 파일만
+format 검증했다.
+
+### 검증하지 않은 범위
+
+- BM25, inverse document frequency 및 stemming/morphological analysis
+- persistent vector index의 저장·재시작·갱신·삭제 lifecycle
+- keyword/semantic hybrid fusion과 reranking
+- context budget 및 최종 답변 citation quality
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 4 — Persistent Vector Index Lifecycle
+```
+
+Step 4는 embedding cache와 구분되는 검색 가능한 vector index의 저장, 재시작 후 복원,
+중복 갱신, 삭제 및 corrupt-state 실패 경계를 먼저 정의한다. 새 외부 vector database는 기존
+local persistence 요구가 typed contract로 확정되기 전에는 도입하지 않는다.

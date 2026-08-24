@@ -5025,3 +5025,35 @@ Step 2 focused integration 71개와 전체 repository 5,808개 테스트가 통�
 Step 2 다섯 파일 format 및 diff check도 통과했고 외부 요청은 0회였다. 기존 745개 파일의
 formatter drift는 Step 2 변경이 아니므로 일괄 수정하지 않는다. Keyword relevance, hybrid
 fusion, persistent index, reranking, context budget 및 final answer quality는 아직 검증하지 않았다.
+
+## D-085 — 첫 document keyword baseline은 unique-token coverage와 투명한 동점 규칙을 사용한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 3 Deterministic Keyword Retrieval
+
+### 결정
+
+- query와 chunk는 기존 Unicode NFKC, whitespace normalization, casefold tokenizer로 처리한다.
+- query의 중복 token은 한 번만 계산하며 점수는
+  `round(matched_unique_query_tokens / unique_query_tokens, 6)`이다.
+- exact phrase match는 설명 신호로 보존하지만 baseline 점수에는 가산하지 않는다.
+- 검색 결과는 score 내림차순, 동점이면 `chunk_id` 오름차순으로 정렬한다.
+- 결과는 기존 `RetrievalResult`를 포함하고 matched terms, query tokens, token coverage 및 phrase
+  여부를 별도 explanation으로 제공한다.
+- score가 explanation의 rounded token coverage와 다르면 schema가 거부한다.
+- Step 3에서 BM25/IDF, source authority, paper quality, semantic relevance 또는 winner를
+  계산하지 않는다.
+
+### 이유
+
+첫 lexical baseline은 품질이 완성된 검색기가 아니라 이후 BM25와 hybrid fusion을 비교할 수
+있는 설명 가능하고 재현 가능한 기준선이어야 한다. 숨겨진 가중치를 사용하지 않으면 검색
+순위가 왜 생성됐는지 token 단위로 감사할 수 있다.
+
+### 검증과 제한
+
+Cross-source ingestion부터 keyword ranking, standard retrieval result, RAG context와 citation
+offset까지 focused 70개 테스트가 통과했다. 전체 repository 5,847개 테스트, Ruff lint,
+Step 3 다섯 파일 format 및 diff check가 통과했고 외부 요청은 0회였다. 이 결정은 BM25 품질,
+semantic quality, hybrid ranking 또는 final-answer grounding을 검증하지 않는다.

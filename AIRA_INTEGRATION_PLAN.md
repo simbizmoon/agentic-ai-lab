@@ -700,5 +700,32 @@ Full repository 5,808 tests와 focused 71 tests가 통과했다.
 
 ```text
 Stage 6 — Integrated RAG
-Step 3 — Deterministic Keyword Retrieval
+Step 4 — Persistent Vector Index Lifecycle
 ```
+
+# 19. 2026-08-24 Stage 6 Step 3 Integration Work Item 완료
+
+Step 3는 cross-source exact chunks를 external call 없는 keyword retrieval에 연결하고 표준
+`RetrievalResult`와 기존 RAG context/citation path까지 통합했다.
+
+```text
+CrossSourceChunkIngestionResult
+→ unique Unicode query tokens
+→ transparent token-coverage score
+→ deterministic ranked RetrievalResult
+→ existing RagContext + citations
+→ exact source/document/chunk/offset trace
+```
+
+점수는 corpus statistics나 semantic judgment 없이 query coverage만 사용한다. 따라서 BM25나
+hybrid retrieval을 대체하는 최종 알고리즘이 아니라 이후 개선을 비교하는 baseline이다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 4 — Persistent Vector Index Lifecycle
+```
+
+Step 4에서는 기존 persistent embedding cache와 별도로 searchable index의 저장, 복원,
+idempotent update, deletion 및 corruption behavior를 typed offline contract로 고정한다.

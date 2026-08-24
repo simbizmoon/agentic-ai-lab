@@ -3938,3 +3938,47 @@ embedding과 in-memory vector store에 수정 없이 연결됐다.
 다음 학습은 Stage 6 Step 3 Deterministic Keyword Retrieval이다. 먼저 작은 corpus에서 query
 term과 exact chunk text를 이용한 재현 가능한 lexical baseline을 만들고, semantic/hybrid
 판단은 뒤 단계로 분리한다.
+
+## 2026-08-24 — Stage 6 Step 3 Deterministic Keyword Retrieval 완료
+
+### 핵심 개념
+
+Lexical retrieval은 단어 형태가 실제로 겹치는지를 이용하는 검색이다. 의미가 비슷하지만 다른
+단어를 쓰는 문장을 찾는 semantic retrieval과 다르다. 이번 baseline은 query의 고유 단어 중
+chunk에 존재하는 비율만 점수로 사용했다.
+
+```text
+query = retrieval source citations
+match = retrieval, citations
+score = round(2 / 3, 6) = 0.666667
+```
+
+### 실습 결과
+
+memory 검색에서 검증된 Unicode tokenizer를 문서 chunk에 재사용했다. 결과는 기존
+`RetrievalResult`로 전달되어 context builder가 citation을 만들 수 있었고, cross-source
+provenance를 통해 citation의 document/chunk/offset을 원문까지 역추적했다.
+
+### 실패 사례 분석
+
+1. score를 소수 여섯 자리로 반올림하도록 계약을 강화한 뒤 기존 test fixture의 raw `2/3`과
+   `1/3`이 거부됐다. fixture도 실제 production score 규칙과 동일한 값으로 수정했다.
+2. 같은 이름의 다운로드 파일이 기존 파일을 덮어쓰지 않아 이전 테스트가 다시 실행됐다.
+   고유 이름의 idempotent updater로 필요한 fixture와 누락 테스트를 보정했다.
+3. 긴 shell 명령이 붙여넣기 과정에서 섞인 사례를 줄이기 위해 전체 회귀는 syntax-checked
+   runner와 별도 log file로 실행했다.
+
+교훈:
+
+> 설명 가능한 검색은 점수 공식만 문서화하는 것이 아니라, 실제 score와 표시된 matched
+> terms가 항상 같은 공식을 만족하도록 schema에서 강제해야 한다.
+
+### 평가와 다음 학습
+
+- focused integration `70 passed`
+- full repository `5847 passed`
+- Step 3 files format / full Ruff / diff check PASS
+- external requests 0
+
+다음 학습은 Stage 6 Step 4 Persistent Vector Index Lifecycle이다. embedding 결과를 계산해
+cache하는 것과, 검색 가능한 index 상태를 저장하고 갱신하는 것의 차이를 먼저 학습한다.
