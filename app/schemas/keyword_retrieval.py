@@ -95,6 +95,16 @@ class KeywordRetrievalMatch(BaseModel):
             raise ValueError("keyword retrieval score must not be negative")
         if not self.explanation.matched_terms:
             raise ValueError("keyword retrieval match must contain a matched term")
+        expected_score = round(self.explanation.token_coverage, 6)
+        if not math.isclose(
+            self.retrieval.score,
+            expected_score,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise ValueError(
+                "keyword retrieval score must equal rounded token_coverage"
+            )
         return self
 
 

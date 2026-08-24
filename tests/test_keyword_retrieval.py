@@ -133,7 +133,7 @@ def test_explanation_rejects_invalid_token_lists(
 def test_match_reuses_standard_retrieval_result() -> None:
     match = _match(
         chunk_id="chunk-a",
-        score=2 / 3,
+        score=0.666667,
         rank=1,
         matched_terms=["retrieval", "source"],
     )
@@ -144,6 +144,16 @@ def test_match_reuses_standard_retrieval_result() -> None:
 def test_match_rejects_empty_lexical_signal() -> None:
     with pytest.raises(ValidationError, match="must contain a matched term"):
         _match(chunk_id="chunk-a", score=0.0, rank=1, matched_terms=[])
+
+
+def test_match_rejects_score_not_explained_by_token_coverage() -> None:
+    with pytest.raises(ValidationError, match="equal rounded token_coverage"):
+        _match(
+            chunk_id="chunk-a",
+            score=0.9,
+            rank=1,
+            matched_terms=["retrieval"],
+        )
 
 
 def test_response_accepts_score_then_chunk_id_order() -> None:
@@ -157,13 +167,13 @@ def test_response_accepts_score_then_chunk_id_order() -> None:
         matches=[
             _match(
                 chunk_id="chunk-a",
-                score=2 / 3,
+                score=0.666667,
                 rank=1,
                 matched_terms=["retrieval", "source"],
             ),
             _match(
                 chunk_id="chunk-b",
-                score=1 / 3,
+                score=0.333333,
                 rank=2,
                 matched_terms=["citations"],
             ),
@@ -180,13 +190,13 @@ def test_response_rejects_nondeterministic_tie_order() -> None:
             matches=[
                 _match(
                     chunk_id="chunk-b",
-                    score=1 / 3,
+                    score=0.333333,
                     rank=1,
                     matched_terms=["retrieval"],
                 ),
                 _match(
                     chunk_id="chunk-a",
-                    score=1 / 3,
+                    score=0.333333,
                     rank=2,
                     matched_terms=["source"],
                 ),
@@ -202,7 +212,7 @@ def test_response_rejects_noncontiguous_ranks() -> None:
             matches=[
                 _match(
                     chunk_id="chunk-a",
-                    score=1 / 3,
+                    score=0.333333,
                     rank=2,
                     matched_terms=["retrieval"],
                 )
@@ -221,7 +231,7 @@ def test_response_rejects_score_below_request_minimum() -> None:
             matches=[
                 _match(
                     chunk_id="chunk-a",
-                    score=1 / 3,
+                    score=0.333333,
                     rank=1,
                     matched_terms=["retrieval"],
                 )
@@ -237,13 +247,13 @@ def test_response_rejects_duplicate_chunks() -> None:
             matches=[
                 _match(
                     chunk_id="chunk-a",
-                    score=2 / 3,
+                    score=0.666667,
                     rank=1,
                     matched_terms=["retrieval", "source"],
                 ),
                 _match(
                     chunk_id="chunk-a",
-                    score=1 / 3,
+                    score=0.333333,
                     rank=2,
                     matched_terms=["citations"],
                 ),
