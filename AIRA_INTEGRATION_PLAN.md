@@ -877,3 +877,33 @@ Step 9 — Bounded Grounded Answer Workflow
 Step 9는 bounded context, answer generation과 citation validation을 하나의 typed workflow로 연결한다.
 Provider 호출·token budget, generation failure, validation failure/incomplete 및 abstention을 서로 다른
 결과 상태로 보존하며 offline controlled path를 먼저 검증한다.
+
+
+# 25. 2026-08-24 Stage 6 Step 9 Integration Work Item 완료 / Stage 6 COMPLETE
+
+Step 9는 Step 7 packed context, 기존 grounded answer provider path와 Step 8 citation validation을
+generation/validation budget 및 explicit terminal state 아래 결합했다.
+
+완료된 integration:
+
+- typed workflow request, generation usage, safe failure와 five-state result
+- bounded generation and citation validation orchestration
+- existing Responses API grounded-answer adapter with usage capture
+- side-effect-free provider/evaluator factory composition
+- exact packed evidence to answer and validation identity checks
+- Patent/Academic offline cross-source E2E/UAT
+- full repository regression `6172 passed`
+
+Stage 6 Integrated RAG는 charter에 명시된 parsing부터 citation grounding까지 bounded answer workflow로
+연결했으므로 COMPLETE다.
+
+다음 Integration Work Item:
+
+```text
+Stage 7 — Agent Loop
+Step 1 — Existing Capability Audit
+```
+
+Stage 7 Step 1은 기존 planning, tool selection, observation, evidence sufficiency, limited replanning,
+termination 및 trace capability를 read-only로 감사한다. Single-Agent baseline을 우선하며 Multi-Agent는
+동일 evaluation dataset에서 이점이 입증되기 전에는 도입하지 않는다.

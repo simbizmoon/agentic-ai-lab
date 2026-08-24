@@ -619,3 +619,25 @@ Next:    Stage 6 / Step 8 Grounded Answer Citation Validation
 Current: Stage 6 / Step 8 Grounded Answer Citation Validation FINAL PASS
 Next:    Stage 6 / Step 9 Bounded Grounded Answer Workflow
 ```
+
+
+## 21. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 9 / Stage 6 COMPLETE
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Typed bounded answer workflow | Production-aligned / offline verified | five explicit terminal states |
+| Packed evidence to answer generation | Integrated / offline verified | exact included retrievals only |
+| Existing grounded provider adapter | Integrated / offline verified | prompt/output checks reused |
+| Provider generation usage | Integrated / offline verified | token and elapsed usage preserved when supplied |
+| Answer to Step 8 validation | Integrated / offline E2E PASS | exact response/model/evidence binding |
+| Generation and validation budgets | Integrated / offline verified | exhausted work remains incomplete |
+| Cross-source final provenance | Integrated / offline E2E PASS | Patent/Academic source/document/chunk/offset |
+| Evidence-free abstention | Integrated / offline verified | no semantic validation call |
+| Production semantic/final-answer quality | Not validated | controlled test doubles only |
+| Agent planning and replanning loop | Next stage | Stage 7 Existing Capability Audit |
+
+```text
+Current: Stage 6 / Step 9 Bounded Grounded Answer Workflow FINAL PASS
+Stage 6: COMPLETE
+Next:    Stage 7 / Step 1 Agent Loop Existing Capability Audit
+```

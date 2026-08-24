@@ -4196,3 +4196,35 @@ quality, 생성 답변의 유용성, source authority 또는 법률적 결론을
 Stage 6 Step 9 Bounded Grounded Answer Workflow. Bounded context를 answer generation에 전달하고 생성된
 답변을 Step 8 validator로 검증하는 전체 orchestration에서 생성 실패, 검증 실패, incomplete 및
 abstention을 어떻게 반환하는지 학습한다.
+
+
+## 2026-08-24 — Stage 6 Step 9 Bounded Grounded Answer Workflow 완료
+
+### 핵심 개념
+
+Orchestrator는 이미 존재하는 작은 부품들의 실행 순서와 상태를 책임지는 구성요소다. Step 9에서는
+packed evidence를 답변 생성기에 전달하고, generation budget을 확인하고, 답변을 citation verifier에
+전달한 뒤 최종 상태를 결정했다.
+
+`failed`와 `incomplete`는 다르다. Provider call이나 citation이 잘못되면 failed이고, 호출은 끝났지만
+token 또는 validation budget 때문에 모든 검사를 마치지 못하면 incomplete다. 이 차이가 있어야
+사용자가 재시도와 수정 중 무엇이 필요한지 알 수 있다.
+
+### 직접 실습과 검증
+
+- Patent/Academic 두 근거로 `answer_available` 전체 경로를 실행했다.
+- provider usage 12 tokens와 generation attempt 1회를 보존했다.
+- contradicted citation은 `validation_failed`, unknown marker는 기존 generation 경계에서
+  `generation_failed`가 되는 것을 확인했다.
+- generation token ceiling 초과는 answer를 보존하면서 `incomplete`가 됐다.
+- evidence-free abstention은 generation 1회, semantic validation 0회였다.
+- full Ruff, Step 9 파일 format, full repository `6172 passed`, diff check가 모두 통과했다.
+
+### 제한과 다음 학습
+
+Controlled test doubles는 orchestration과 provenance를 검증하지만 실제 OpenAI semantic quality나 답변
+유용성을 검증하지 않는다. Stage 6 Integrated RAG는 COMPLETE다.
+
+다음 학습은 Stage 7 Step 1 Agent Loop Existing Capability Audit이다. Planning, tool selection,
+observation, evidence sufficiency, limited replanning과 termination 기능이 현재 저장소에 어떻게 존재하는지
+먼저 확인하고 중복 구현을 피한다.

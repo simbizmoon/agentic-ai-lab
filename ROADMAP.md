@@ -38,7 +38,7 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 6 — Integrated RAG
 - 직전 완료 Vertical Slice: Stage 5 / Academic Research Vertical Slice
-- 현재 완료 지점: Stage 6 / Step 8 — Grounded Answer Citation Validation `FINAL PASS`
+- 현재 완료 지점: Stage 6 / Step 9 — Bounded Grounded Answer Workflow `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
@@ -48,7 +48,7 @@
   Existing Capability / Provider Foundation(Step 5A), Academic Evidence Acquisition
   (Step 5B), Evidence Persistence / CLI Exposure와 사용자 UAT(Step 5C)를 완료했다.
 - Stage 5 전체 상태: `COMPLETE`
-- 다음 공식 작업: Stage 6 / Step 9 — Bounded Grounded Answer Workflow
+- 다음 공식 작업: Stage 7 / Step 1 — Agent Loop Existing Capability Audit
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -5062,3 +5062,51 @@ Step 9 — Bounded Grounded Answer Workflow
 Step 9는 Step 7 bounded context, 기존 answer generation service와 Step 8 citation validator를 하나의
 bounded orchestration path로 연결한다. 기본 개발·회귀 경로는 offline controlled generator/evaluator를
 사용하며 실제 OpenAI 호출은 별도의 명시적이고 작은 live gate 전에는 수행하지 않는다.
+
+
+## 34.35 Stage 6 Step 9 — Bounded Grounded Answer Workflow 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+Stage 6 전체 상태: `COMPLETE`
+
+### 완료 범위
+
+- Step 7 packed exact evidence, generation budget와 Step 8 citation budget의 typed workflow 계약
+- `answer_available`, `abstained`, `generation_failed`, `validation_failed`, `incomplete` 상태 분리
+- packed retrieval과 answer/validation citation의 exact document/chunk/rank/offset identity 검증
+- 기존 grounded prompt와 `generate_grounded_answer` provider path 재사용
+- provider token usage와 elapsed time을 generation attempt에 보존
+- generation attempt/token/time budget 초과를 `incomplete`로 보존
+- unknown/missing citation, validation exception 및 contradicted support의 안전한 실패 경계
+- evidence-free abstention과 semantic evaluation 0회 경계
+- provider adapter와 Step 8 verifier를 조립하는 side-effect-free factory
+- Patent/Academic controlled cross-source offline E2E/UAT PASS
+- full Ruff PASS, Step 9 changed-file format PASS, full repository `6172 passed`
+
+### 검증 경계
+
+```text
+OpenAI requests       = 0
+OpenAlex requests     = 0
+EPO requests          = 0
+network requests      = 0
+semantic quality      = NOT TESTED
+final answer quality  = NOT TESTED
+source authority      = NOT TESTED
+legal conclusions     = NOT APPLICABLE
+```
+
+Stage 6는 charter의 Parsing, Chunking, Keyword Search, Embedding, Hybrid Retrieval, Reranking 및
+Citation Grounding 책임을 하나의 offline-verified bounded answer path까지 통합했으므로 완료한다.
+
+### 다음 공식 작업
+
+```text
+Stage 7 — Agent Loop
+Step 1 — Existing Capability Audit
+```
+
+Stage 7은 기존 planning, tool selection, observation, evidence sufficiency, limited replanning 및
+termination 기능을 먼저 감사한다. Agent 수를 늘리는 단계가 아니며 Single-Agent bounded loop를
+기본선으로 유지한다.

@@ -5206,3 +5206,30 @@ Budget 소진을 실패나 성공으로 꾸미지 않고 incomplete로 보존해
 
 이 결정은 final-answer correctness, source authority, academic/patent quality, chronology 또는 법률적
 결론을 제공하지 않는다. 다음 공식 작업은 Stage 6 Step 9 Bounded Grounded Answer Workflow이다.
+
+
+## D-091 — Bounded grounded-answer workflow 완료를 Stage 6 Integrated RAG의 종료 gate로 사용한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 9 및 Stage 7 전환
+
+### 결정
+
+- Step 7 packed evidence, 기존 grounded generation과 Step 8 citation validation을 하나의 typed
+  provider-neutral workflow로 결합한다.
+- generation과 validation의 budget·usage·실패를 섞지 않고 별도로 보존한다.
+- 정상 답변, 명시적 abstention, generation failure, validation failure와 budget incomplete를 서로
+  다른 최종 상태로 반환한다.
+- 기존 OpenAI grounded-answer service는 adapter로 재사용하고 factory 생성은 provider call을 하지 않는다.
+- provider response usage가 있으면 generation usage에 보존한다.
+- controlled offline generator/evaluator 결과를 production semantic 또는 final-answer quality 증거로
+  해석하지 않는다.
+- Stage 6의 charter 책임이 모두 bounded integrated path에 연결되었으므로 Stage 6를 COMPLETE로 닫는다.
+- 다음 공식 단계는 charter에 이미 정의된 Stage 7 Agent Loop이며 Step 1 Existing Capability Audit부터
+  시작한다.
+
+### 제한
+
+이번 결정은 source authority, answer usefulness, patent/academic quality, chronology 또는 법률적 결론을
+보장하지 않는다. Stage 7은 Multi-Agent 도입을 의미하지 않으며 기존 Single-Agent 기능을 먼저 감사한다.
