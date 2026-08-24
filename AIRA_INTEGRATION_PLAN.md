@@ -845,3 +845,35 @@ Step 8 — Grounded Answer Citation Validation
 
 Step 8은 existing grounded prompt/answer service와 citation contracts를 감사한 뒤 bounded context에
 없는 marker, missing support 및 answer/citation mismatch를 검출하는 offline-first boundary를 정한다.
+
+
+# 24. 2026-08-24 Stage 6 Step 8 Integration Work Item 완료
+
+Step 8은 Step 7의 bounded exact context 이후 답변 text를 statement/citation/evidence pair로 분해하고
+각 pair의 semantic evaluation 상태를 bounded하게 분류하는 validation boundary를 완성했다.
+
+완료된 integration:
+
+- typed request, budget, statement, pair, usage 및 passed/failed/incomplete result
+- deterministic exact-line parser와 strict citation marker validation
+- context citation과 exact retrieval evidence의 pair binding
+- bounded batch/single semantic evaluator orchestration
+- explicit uncited, rejected, unevaluated 및 abstention behavior
+- controlled cross-source offline E2E/UAT와 full repository regression
+
+운영 경계:
+
+- OpenAI/OpenAlex/EPO/network requests 0
+- semantic quality, final-answer quality 및 source authority는 검증하지 않음
+- chronology, patent/academic quality 및 legal conclusion을 생성하지 않음
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 9 — Bounded Grounded Answer Workflow
+```
+
+Step 9는 bounded context, answer generation과 citation validation을 하나의 typed workflow로 연결한다.
+Provider 호출·token budget, generation failure, validation failure/incomplete 및 abstention을 서로 다른
+결과 상태로 보존하며 offline controlled path를 먼저 검증한다.

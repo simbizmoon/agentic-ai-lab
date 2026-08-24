@@ -5176,3 +5176,33 @@ grounding quality를 보장하지 않는다.
 검증용이며 OpenAI tokenizer parity나 final answer quality를 보장하지 않는다.
 
 다음 공식 작업은 Stage 6 Step 8 Grounded Answer Citation Validation이다.
+
+
+## D-090 — Grounded answer validation은 marker 존재와 semantic support를 분리하고 incomplete를 보존한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 8 Grounded Answer Citation Validation
+
+### 결정
+
+- 알려진 citation marker를 사용했다는 사실만으로 claim이 근거에 의해 지원된다고 보지 않는다.
+- 답변의 각 비어 있지 않은 line을 exact statement로 보존하고 statement의 모든 marker를 제공된
+  `RagContext` citation과 exact `RetrievalResult`에 결합한다.
+- semantic evaluation 전에 unknown/malformed/duplicate marker, marker-only claim 및 pair budget 초과를
+  실패시킨다.
+- evaluated pair와 budget 때문에 평가하지 못한 `unevaluated` pair를 구분한다.
+- unsupported 또는 contradicted pair와 citation-required answer의 uncited statement는 `failed`, 남은
+  unevaluated pair가 있으면 `incomplete`, 그 외에는 `passed`로 분류한다.
+- batch evaluation 실패를 조용히 무시하지 않고 한 attempt로 기록한 뒤 허용된 budget 안에서 single
+  evaluation으로 fallback한다.
+- offline E2E/UAT의 controlled evaluator 결과를 OpenAI semantic quality 증거로 사용하지 않는다.
+
+### 근거와 제한
+
+Citation 문법 검사는 표지가 존재하는지만 확인하고 semantic verification은 주장과 근거의 관계를
+평가한다. 두 경계를 분리해야 잘못된 marker와 근거 불충분을 서로 다른 원인으로 추적할 수 있다.
+Budget 소진을 실패나 성공으로 꾸미지 않고 incomplete로 보존해야 미평가 항목도 감사할 수 있다.
+
+이 결정은 final-answer correctness, source authority, academic/patent quality, chronology 또는 법률적
+결론을 제공하지 않는다. 다음 공식 작업은 Stage 6 Step 9 Bounded Grounded Answer Workflow이다.

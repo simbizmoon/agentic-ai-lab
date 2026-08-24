@@ -4162,3 +4162,37 @@ answer의 citation correctness를 검증하지 않는다.
 
 Stage 6 Step 8 Grounded Answer Citation Validation. Bounded context를 받은 답변이 제공된 citation
 marker만 사용하고 unsupported claim이나 missing citation을 어떻게 검출할지 학습한다.
+
+
+## 2026-08-24 — Stage 6 Step 8 Grounded Answer Citation Validation 완료
+
+### 핵심 개념
+
+Citation marker는 답변에 붙는 근거 번호이고 semantic support는 그 근거가 실제로 문장을 뒷받침하는
+정도다. 예를 들어 `[S1]`이 존재해도 S1의 내용이 답변과 반대라면 올바른 인용이 아니다. 따라서
+marker 문법, exact evidence binding, semantic judgment를 별도 단계로 검사해야 한다.
+
+`incomplete`는 실패의 다른 이름이 아니다. 비용 또는 시간 상한 때문에 두 citation 중 하나만
+검사했다면 아직 전체 답변을 통과나 실패로 확정할 근거가 부족하다는 명시적 상태다.
+
+### 직접 실습과 실패 사례
+
+- 두 cross-source statement와 S1/S2 evidence pair가 정확히 보존되는 경로를 검증했다.
+- contradicted citation과 uncited factual statement가 각각 `failed`가 되는지 확인했다.
+- maximum attempts가 1일 때 첫 pair는 evaluated, 둘째 pair는 unevaluated로 남고 전체 결과가
+  `incomplete`가 되는지 확인했다.
+- evidence가 없는 명시적 abstention은 semantic call 0회로 처리했다.
+- 최초 전체 regression에서 기능 테스트 `6124 passed`였지만 기존 780개 파일의 전역 format drift로
+  format status만 실패했다. 무관한 대량 포맷 변경을 피하고 전체 Ruff/pytest와 Step 8 변경 파일
+  format check로 gate를 교정해 최종 PASS를 얻었다.
+
+### 평가와 제한
+
+Controlled local evaluator는 orchestration, 상태 분류와 provenance를 검증한다. OpenAI semantic
+quality, 생성 답변의 유용성, source authority 또는 법률적 결론을 검증하지 않는다.
+
+### 다음 학습 단계
+
+Stage 6 Step 9 Bounded Grounded Answer Workflow. Bounded context를 answer generation에 전달하고 생성된
+답변을 Step 8 validator로 검증하는 전체 orchestration에서 생성 실패, 검증 실패, incomplete 및
+abstention을 어떻게 반환하는지 학습한다.

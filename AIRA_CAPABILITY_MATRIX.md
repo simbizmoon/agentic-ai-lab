@@ -599,3 +599,23 @@ Next:    Stage 6 / Step 7 Bounded RAG Context Budget
 Current: Stage 6 / Step 7 Bounded RAG Context Budget FINAL PASS
 Next:    Stage 6 / Step 8 Grounded Answer Citation Validation
 ```
+
+
+## 20. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 8 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Typed answer citation validation contract | Production-aligned / offline verified | passed/failed/incomplete states |
+| Deterministic answer statement parser | Integrated / offline verified | exact line ranges and marker order |
+| Exact statement/citation/evidence binding | Integrated / offline E2E PASS | retrieval and chunk provenance preserved |
+| Bounded semantic citation verifier | Integrated / offline verified | batch fallback and explicit unevaluated state |
+| Unsupported and uncited boundaries | Integrated / offline E2E PASS | contradicted/unsupported and missing citation fail |
+| Evidence-free abstention | Integrated / offline verified | zero semantic attempts |
+| Production semantic quality | Not validated | controlled local evaluator only |
+| Final-answer usefulness and source authority | Not validated | separate later evaluation boundary |
+| End-to-end answer orchestration | Not implemented | Stage 6 Step 9 |
+
+```text
+Current: Stage 6 / Step 8 Grounded Answer Citation Validation FINAL PASS
+Next:    Stage 6 / Step 9 Bounded Grounded Answer Workflow
+```

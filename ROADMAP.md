@@ -38,7 +38,7 @@
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
 - 현재 제품 단계: Stage 6 — Integrated RAG
 - 직전 완료 Vertical Slice: Stage 5 / Academic Research Vertical Slice
-- 현재 완료 지점: Step 5C — Evidence Persistence / CLI Exposure `FINAL PASS`
+- 현재 완료 지점: Stage 6 / Step 8 — Grounded Answer Citation Validation `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
@@ -48,7 +48,7 @@
   Existing Capability / Provider Foundation(Step 5A), Academic Evidence Acquisition
   (Step 5B), Evidence Persistence / CLI Exposure와 사용자 UAT(Step 5C)를 완료했다.
 - Stage 5 전체 상태: `COMPLETE`
-- 다음 공식 작업: Stage 6 / Step 1 — Integrated RAG Existing Capability Audit
+- 다음 공식 작업: Stage 6 / Step 9 — Bounded Grounded Answer Workflow
 - 현재 기준일: 2026-08-23
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
@@ -5017,3 +5017,48 @@ Step 8 — Grounded Answer Citation Validation
 Step 8은 bounded exact context 이후의 grounded answer path를 감사하고, 답변에 사용된 citation
 marker가 제공된 evidence에만 연결되는지, unsupported/missing citation을 어떻게 실패시키는지에
 대한 가장 작은 offline-first validation boundary를 정의한다.
+
+
+## 34.34 Stage 6 Step 8 — Grounded Answer Citation Validation 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### 완료 범위
+
+- exact answer line과 citation marker를 deterministic statement로 분리
+- statement/citation/evidence retrieval pair의 순서와 exact provenance 보존
+- 제공된 bounded `RagContext` 밖의 marker, malformed marker 및 marker-only claim 사전 거부
+- semantic evaluation의 attempts, recorded tokens, elapsed time 및 pair 수 상한 적용
+- batch-first 평가와 structured batch failure의 명시적 single-item fallback
+- budget 소진 후 미평가 pair를 `unevaluated`로 보존하고 결과를 `incomplete`로 분류
+- unsupported/contradicted citation과 citation-required answer의 미인용 statement를 `failed`로 분류
+- evidence-free abstention을 semantic evaluator 호출 없이 허용
+- controlled local evaluator를 사용한 cross-source offline E2E/UAT PASS
+- full Ruff PASS, Step 8 changed-file format PASS, full repository `6124 passed`
+
+### 검증 경계
+
+```text
+OpenAI requests     = 0
+OpenAlex requests   = 0
+EPO requests        = 0
+network requests    = 0
+semantic quality    = NOT TESTED
+final answer quality= NOT TESTED
+source authority    = NOT TESTED
+legal conclusions   = NOT APPLICABLE
+```
+
+전체 저장소 format check는 Step 8과 무관한 기존 780개 파일의 재포맷을 요구했으므로 대량 변경하지
+않았다. 전체 Ruff와 전체 pytest를 실행하고, format gate는 이번 Step 8 변경 파일 6개에 적용했다.
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 9 — Bounded Grounded Answer Workflow
+```
+
+Step 9는 Step 7 bounded context, 기존 answer generation service와 Step 8 citation validator를 하나의
+bounded orchestration path로 연결한다. 기본 개발·회귀 경로는 offline controlled generator/evaluator를
+사용하며 실제 OpenAI 호출은 별도의 명시적이고 작은 live gate 전에는 수행하지 않는다.
