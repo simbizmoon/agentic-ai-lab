@@ -4029,3 +4029,44 @@ external requests                 = 0
 
 Stage 6 Step 5 Deterministic Hybrid Retrieval Fusion. Step 3 lexical baseline과 Step 4 persistent
 semantic results를 설명 가능한 고정 규칙으로 결합하고 exact provenance를 계속 보존한다.
+
+
+## 2026-08-24 — Stage 6 Step 5 Deterministic Hybrid Retrieval Fusion 완료
+
+### 핵심 개념
+
+Keyword score `0.8`은 query token coverage이고 semantic score `0.8`은 vector cosine similarity다.
+숫자가 같아도 의미가 다르므로 그대로 더하면 설명할 수 없는 순위가 된다. RRF는 각 채널에서의
+순위만 사용해 이 calibration 문제를 피한다.
+
+### 구현과 실습
+
+```text
+Step 3 keyword RetrievalResult ─┐
+                                ├─ exact chunk-ID union → equal RRF → RagContext
+Step 4 semantic RetrievalResult ─┘
+```
+
+각 결과에 원래 rank/score, channel contribution과 fused score를 남겼다. 동일 chunk ID의 원문,
+document identity, offsets 또는 metadata가 다르면 결합을 거부한다. 한 채널에만 나타난 결과도
+명시적으로 남기고, 동점은 chunk ID로 해결한다.
+
+### 실패 사례와 교훈
+
+초기 runtime 시험 fixture가 semantic 결과 한 개에 rank 2를 부여해 contiguous-rank 계약을
+위반했다. 실제로 rank 차이를 시험하도록 rank 1 후보를 추가했다. Production invariant를
+느슨하게 만들지 않고 fixture가 계약을 따르게 수정했다.
+
+### 평가
+
+```text
+focused cross-source E2E          = 90 passed
+full repository pytest            = 6001 passed in 22.17s
+Ruff / changed format / diff      = PASS
+external requests                 = 0
+```
+
+### 다음 학습 단계
+
+Stage 6 Step 6 Bounded Evidence Reranking. 기존 reranker를 감사하고 hybrid shortlist 이후의
+semantic judgment, provenance와 비용 상한을 분리해 설계한다.

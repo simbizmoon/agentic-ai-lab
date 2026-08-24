@@ -536,3 +536,24 @@ Next:    Stage 6 / Step 4 Persistent Vector Index Lifecycle
 Current: Stage 6 / Step 4 Persistent Vector Index Lifecycle FINAL PASS
 Next:    Stage 6 / Step 5 Deterministic Hybrid Retrieval Fusion
 ```
+
+
+## 17. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 5 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Typed hybrid fusion contract | Production-aligned / offline verified | raw signals and RRF math auditable |
+| Equal-weight RRF runtime | Production-aligned / offline verified | rank-only, default `k=60` |
+| Single-channel candidate preservation | Production-aligned / offline verified | absent contribution is explicit |
+| Chunk conflict detection | Production-aligned / offline verified | exact payload/provenance required |
+| Keyword + persistent semantic workflow | Integrated / offline verified | bounded candidate pools |
+| Cross-source hybrid RAG citations | Integrated / offline E2E PASS | Academic/Patent/Official fixtures |
+| Source authority or quality judgment | Not implemented | no winner/best-source meaning |
+| Learned fusion / BM25 | Not implemented | evidence-driven future enhancement |
+| Bounded evidence reranking | Not implemented | Stage 6 Step 6 |
+| Context budget / final grounding | Not implemented | later Stage 6 boundary |
+
+```text
+Current: Stage 6 / Step 5 Deterministic Hybrid Retrieval Fusion FINAL PASS
+Next:    Stage 6 / Step 6 Bounded Evidence Reranking
+```

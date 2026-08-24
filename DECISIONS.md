@@ -5089,3 +5089,29 @@ semantic quality, hybrid ranking 또는 final-answer grounding을 검증하지 �
 
 이 결정은 production embedding 품질, distributed concurrency, hybrid ranking, reranking,
 source quality 또는 final-answer grounding을 보장하지 않는다.
+
+
+## D-087 — 첫 cross-source hybrid baseline은 raw score 합산 대신 equal-weight RRF를 사용한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 5 Deterministic Hybrid Retrieval Fusion
+
+### 결정
+
+- keyword coverage와 cosine similarity의 원시 점수는 서로 다른 척도이므로 직접 합하지 않는다.
+- 각 채널의 순위를 `1 / (k + rank)`로 변환하며 기본 `k=60`, channel weight는 동일하게 둔다.
+- 채널에 없는 chunk의 contribution은 `0`이고 가상 tail rank를 만들지 않는다.
+- raw score, source rank, RRF contribution과 fused score를 모두 분리해 보존한다.
+- normalized exact `chunk_id`로 union하며 두 채널의 exact chunk payload가 다르면 실패한다.
+- 최종 정렬은 fused score 내림차순, exact chunk ID 오름차순으로 하여 특정 채널을 tie-break에서
+  우대하지 않는다.
+- 최종 결과는 기존 `RetrievalResult`와 RAG citation 계약을 사용한다.
+- 다음 공식 작업은 Step 6 Bounded Evidence Reranking이다.
+
+### 이유와 제한
+
+RRF는 점수 calibration 없이도 서로 다른 검색기의 순위를 재현 가능하게 결합하며 repository의
+기존 paragraph shortlist에서도 검증된 패턴이다. 이번 구현은 retrieval recall baseline이지
+semantic relevance, source authority, academic/patent quality, learned reranking 또는 final-answer
+grounding을 판단하지 않는다.

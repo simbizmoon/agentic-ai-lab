@@ -4860,3 +4860,55 @@ Step 5 — Deterministic Hybrid Retrieval Fusion
 Step 5는 Step 3 keyword retrieval과 Step 4 persistent semantic retrieval의 결과를 provenance
 손실 없이 결합하는 작은 deterministic baseline을 정의한다. Source authority, legal/academic
 quality, semantic reranking 및 final-answer judgment는 별도 후속 gate로 유지한다.
+
+
+## 34.31 Stage 6 Step 5 — Deterministic Hybrid Retrieval Fusion 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### 완료 범위
+
+- Step 3 keyword와 Step 4 persistent semantic 결과를 결합하는 typed contract
+- 원시 lexical/cosine score를 직접 합하지 않는 equal-weight RRF (`k=60`)
+- keyword/semantic rank, raw score와 channel contribution의 분리 보존
+- channel contribution, fused score와 final `RetrievalResult.score` 산술 일치 검증
+- exact case-insensitive `chunk_id` union과 conflicting chunk/provenance 거부
+- 한 채널에만 존재하는 결과의 명시적 보존
+- fused score 내림차순과 chunk ID 오름차순의 channel-neutral tie break
+- bounded candidate pools, fusion `top_k`와 contiguous final ranks
+- 실제 keyword/persistent search workflow와 기존 RAG context/citation 통합
+- Academic/Patent/Official/failed cross-source fixture offline E2E
+- quality, authority, winner 및 법률 판단 필드 부재 검증
+
+### 검증 기준선
+
+```text
+Step 5-1 typed contract tests      = 64 passed
+Step 5-2 RRF runtime tests         = 54 passed
+Step 5-3 integrated workflow tests = 83 passed
+Step 5-4 cross-source E2E tests    = 90 passed
+full repository pytest             = 6001 passed in 22.17s
+full Ruff lint                     = PASS
+Step 5 changed-file format         = PASS (8 files)
+git diff --check / working tree    = PASS / clean
+OpenAI/OpenAlex/EPO/network calls  = 0 / 0 / 0 / 0
+```
+
+### 검증하지 않은 범위
+
+- BM25/IDF, learned fusion 또는 trained reranking
+- semantic relevance와 source authority/quality judgment
+- production embedding quality
+- context token/byte budget
+- final-answer citation grounding quality
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 6 — Bounded Evidence Reranking
+```
+
+Step 6는 기존 deterministic/local/OpenAI semantic reranking capability를 먼저 감사하고, hybrid
+후보의 exact provenance와 비용 상한을 유지하는 가장 작은 통합 경계를 정한다. 기본 개발 및
+회귀검사는 offline/local evaluator로 수행한다.

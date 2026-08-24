@@ -761,3 +761,31 @@ Step 5 — Deterministic Hybrid Retrieval Fusion
 Step 5는 keyword와 persistent semantic result를 같은 `chunk_id` 기준으로 결합하는 설명 가능한
 baseline을 만든다. Learned reranking, source authority, academic/patent quality 또는 final-answer
 judgment는 포함하지 않는다.
+
+
+# 21. 2026-08-24 Stage 6 Step 5 Integration Work Item 완료
+
+Step 5는 Step 3 lexical 결과와 Step 4 restart-safe semantic 결과를 exact chunk identity로 결합해
+표준 RAG context/citation path까지 연결했다.
+
+```text
+DeterministicKeywordRetriever ───────────┐
+                                        ├─ DeterministicHybridRetriever (RRF)
+PersistentVectorIndexSearchRuntime ─────┘
+→ HybridRetrievalWorkflowResult
+→ existing RetrievalResult / RagContext / RagCitation
+```
+
+RRF는 raw score를 합하지 않고 source ranks만 결합한다. 각 channel signal과 contribution을
+보존하고 conflict/duplicate/rank drift를 명시적으로 거부한다. Full repository 6,001 tests와
+focused cross-source E2E 90 tests가 통과했으며 외부 요청은 0회였다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 6 — Bounded Evidence Reranking
+```
+
+Step 6는 기존 semantic reranking 부품을 감사한 뒤 hybrid candidate pool 이후의 bounded
+relevance ordering을 통합한다. Context budget과 final citation grounding은 각각 후속 gate다.
