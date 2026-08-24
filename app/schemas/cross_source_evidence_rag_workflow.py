@@ -15,6 +15,10 @@ from app.schemas.hybrid_retrieval_workflow import (
     HybridRetrievalWorkflowResult,
 )
 from app.schemas.rag_context import RagContext
+from app.schemas.rag_context_packing import (
+    RagContextPackingBudget,
+    RagContextPackingResult,
+)
 from app.schemas.retrieval_result import RetrievalResult
 
 
@@ -25,6 +29,7 @@ class CrossSourceEvidenceRagWorkflowRequest(BaseModel):
 
     retrieval: HybridRetrievalWorkflowRequest
     reranking: CrossSourceEvidenceRerankingRequest
+    context_packing_budget: RagContextPackingBudget | None = None
 
     @model_validator(mode="after")
     def validate_candidate_bounds(self) -> Self:
@@ -41,6 +46,7 @@ class CrossSourceEvidenceRagWorkflowResult(BaseModel):
     request: CrossSourceEvidenceRagWorkflowRequest
     retrieval: HybridRetrievalWorkflowResult
     reranking: CrossSourceEvidenceRerankingResult
+    packing: RagContextPackingResult | None = None
     context_retrievals: list[RetrievalResult] = Field(default_factory=list)
     context: RagContext
     excluded_irrelevant_count: int = Field(ge=0)
@@ -55,23 +61,44 @@ class CrossSourceEvidenceRagWorkflowResult(BaseModel):
         if self.reranking.hybrid_response != self.retrieval.fusion:
             raise ValueError("reranking must consume the exact fused response")
 
-        expected = [
+        relevant = [
             item
             for item in self.reranking.items
             if item.judgment is not None
             and item.judgment.relevance_level.value
             in {"directly_relevant", "partially_relevant"}
         ]
-        if len(self.context_retrievals) != len(expected):
+        relevant_retrievals = [
+            RetrievalResult(
+                chunk=item.hybrid_match.retrieval.chunk,
+                score=item.judgment.relevance_score,
+                rank=rank,
+            )
+            for rank, item in enumerate(relevant, start=1)
+            if item.judgment is not None
+        ]
+        if self.request.context_packing_budget is None:
+            if self.packing is not None:
+                raise ValueError("packing result requires a context packing budget")
+            expected_retrievals = relevant_retrievals
+        else:
+            if self.packing is None:
+                raise ValueError("context packing budget requires a packing result")
+            if self.packing.request.budget != self.request.context_packing_budget:
+                raise ValueError("packing result must use the requested context budget")
+            if self.packing.request.candidates != relevant_retrievals:
+                raise ValueError("packing must classify every relevant reranked item")
+            expected_retrievals = [item.retrieval for item in self.packing.included]
+        if len(self.context_retrievals) != len(expected_retrievals):
             raise ValueError("context retrievals must contain all relevant items")
-        for rank, (retrieval, item) in enumerate(
-            zip(self.context_retrievals, expected, strict=True), start=1
+        for rank, (retrieval, expected) in enumerate(
+            zip(self.context_retrievals, expected_retrievals, strict=True), start=1
         ):
             if retrieval.rank != rank:
                 raise ValueError("context retrieval ranks must be contiguous")
-            if retrieval.chunk != item.hybrid_match.retrieval.chunk:
+            if retrieval.chunk != expected.chunk:
                 raise ValueError("context retrieval must preserve the exact chunk")
-            if retrieval.score != item.judgment.relevance_score:
+            if retrieval.score != expected.score:
                 raise ValueError("context score must preserve relevance score")
 
         if len(self.context.citations) != len(self.context_retrievals):

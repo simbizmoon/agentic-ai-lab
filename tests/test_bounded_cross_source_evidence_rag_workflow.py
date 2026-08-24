@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import pytest
+
 from app.research.bounded_cross_source_evidence_rag_workflow import (
     BoundedCrossSourceEvidenceRagWorkflow,
 )
@@ -12,6 +14,9 @@ from app.research.bounded_cross_source_evidence_reranker import (
 )
 from app.research.bounded_hybrid_retrieval_workflow import (
     BoundedHybridRetrievalWorkflow,
+)
+from app.research.deterministic_rag_context_packer import (
+    DeterministicRagContextPacker,
 )
 from app.research.openai_evidence_relevance_evaluator import (
     EvidenceRelevanceEvaluationResult,
@@ -33,6 +38,10 @@ from app.schemas.evidence_relevance_judgment import (
 from app.schemas.hybrid_retrieval import HybridRetrievalRequest
 from app.schemas.hybrid_retrieval_workflow import HybridRetrievalWorkflowRequest
 from app.schemas.keyword_retrieval import KeywordRetrievalRequest
+from app.schemas.rag_context_packing import (
+    RagContextOmissionReason,
+    RagContextPackingBudget,
+)
 from app.schemas.retrieval_result import RetrievalResult
 from app.services.text_generation import TokenUsage
 
@@ -111,7 +120,11 @@ class ControlledEvaluator:
         )
 
 
-def _request(*, attempts: int = 3) -> CrossSourceEvidenceRagWorkflowRequest:
+def _request(
+    *,
+    attempts: int = 3,
+    packing_budget: RagContextPackingBudget | None = None,
+) -> CrossSourceEvidenceRagWorkflowRequest:
     return CrossSourceEvidenceRagWorkflowRequest(
         retrieval=HybridRetrievalWorkflowRequest(
             keyword_request=KeywordRetrievalRequest(
@@ -136,10 +149,15 @@ def _request(*, attempts: int = 3) -> CrossSourceEvidenceRagWorkflowRequest:
                 maximum_elapsed_seconds=10.0,
             ),
         ),
+        context_packing_budget=packing_budget,
     )
 
 
-def _workflow(evaluator: ControlledEvaluator):
+def _workflow(
+    evaluator: ControlledEvaluator,
+    *,
+    context_packer: DeterministicRagContextPacker | None = None,
+):
     semantic = SemanticStub(
         results=[
             RetrievalResult(chunk=ACADEMIC, score=0.95, rank=1),
@@ -151,6 +169,24 @@ def _workflow(evaluator: ControlledEvaluator):
     return BoundedCrossSourceEvidenceRagWorkflow(
         retrieval_workflow=retrieval,
         reranker=BoundedCrossSourceEvidenceReranker(evaluator=evaluator),
+        context_packer=context_packer,
+    )
+
+
+@dataclass(frozen=True)
+class WordEstimator:
+    estimator_id: str = "stage6-step7-word-estimate-test-v1"
+
+    def estimate_tokens(self, text: str) -> int:
+        return len(text.split())
+
+
+def _packing_budget(*, maximum_items: int = 2) -> RagContextPackingBudget:
+    return RagContextPackingBudget(
+        maximum_items=maximum_items,
+        maximum_utf8_bytes=10_000,
+        maximum_estimated_tokens=10_000,
+        token_estimator_id=WordEstimator().estimator_id,
     )
 
 
@@ -253,3 +289,87 @@ def test_workflow_makes_no_provider_choice_or_quality_judgment() -> None:
         "legal_conclusion",
     }
     assert forbidden.isdisjoint(fields)
+
+
+def test_bounded_packing_limits_final_context_but_preserves_audit_result() -> None:
+    evaluator = ControlledEvaluator(
+        {
+            PATENT.text: EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+            ACADEMIC.text: EvidenceRelevanceLevel.PARTIALLY_RELEVANT,
+            OFFICIAL.text: EvidenceRelevanceLevel.IRRELEVANT,
+        }
+    )
+    packer = DeterministicRagContextPacker(token_estimator=WordEstimator())
+    result = _workflow(evaluator, context_packer=packer).run(
+        chunks=[PATENT, ACADEMIC, OFFICIAL],
+        request=_request(packing_budget=_packing_budget(maximum_items=1)),
+    )
+    assert result.packing is not None
+    assert result.packing.usage.candidate_count == 2
+    assert result.packing.usage.included_count == 1
+    assert result.packing.usage.omitted_count == 1
+    assert result.packing.omitted[0].reasons == [RagContextOmissionReason.ITEM_LIMIT]
+    assert len(result.reranking.items) == 3
+    assert [item.chunk.chunk_id for item in result.context_retrievals] == [
+        PATENT.chunk_id
+    ]
+    assert PATENT.text in result.context.context_text
+    assert ACADEMIC.text not in result.context.context_text
+
+
+def test_packed_context_citation_matches_included_whole_chunk() -> None:
+    evaluator = ControlledEvaluator(
+        {
+            PATENT.text: EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+            ACADEMIC.text: EvidenceRelevanceLevel.PARTIALLY_RELEVANT,
+            OFFICIAL.text: EvidenceRelevanceLevel.IRRELEVANT,
+        }
+    )
+    result = _workflow(
+        evaluator,
+        context_packer=DeterministicRagContextPacker(token_estimator=WordEstimator()),
+    ).run(
+        chunks=[PATENT, ACADEMIC, OFFICIAL],
+        request=_request(packing_budget=_packing_budget(maximum_items=1)),
+    )
+    assert result.packing is not None
+    included = result.packing.included[0].retrieval.chunk
+    citation = result.context.citations[0]
+    assert citation.chunk_id == included.chunk_id
+    assert citation.document_id == included.document_id
+    assert (citation.start_char, citation.end_char) == (
+        included.start_char,
+        included.end_char,
+    )
+    assert included.text in result.context.context_text
+
+
+def test_packing_budget_requires_runtime_packer() -> None:
+    evaluator = ControlledEvaluator(
+        {
+            PATENT.text: EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+            ACADEMIC.text: EvidenceRelevanceLevel.PARTIALLY_RELEVANT,
+            OFFICIAL.text: EvidenceRelevanceLevel.IRRELEVANT,
+        }
+    )
+    with pytest.raises(ValueError, match="context_packer is required"):
+        _workflow(evaluator).run(
+            chunks=[PATENT, ACADEMIC, OFFICIAL],
+            request=_request(packing_budget=_packing_budget()),
+        )
+
+
+def test_legacy_unbounded_request_remains_compatible() -> None:
+    evaluator = ControlledEvaluator(
+        {
+            PATENT.text: EvidenceRelevanceLevel.DIRECTLY_RELEVANT,
+            ACADEMIC.text: EvidenceRelevanceLevel.PARTIALLY_RELEVANT,
+            OFFICIAL.text: EvidenceRelevanceLevel.IRRELEVANT,
+        }
+    )
+    result = _workflow(evaluator).run(
+        chunks=[PATENT, ACADEMIC, OFFICIAL], request=_request()
+    )
+    assert result.request.context_packing_budget is None
+    assert result.packing is None
+    assert len(result.context_retrievals) == 2
