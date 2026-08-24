@@ -186,6 +186,19 @@ def test_each_reached_loop_ceiling_terminates_as_budget_exhausted(
     assert result.code is EvidenceSufficiencyDecisionCode.LOOP_BUDGET_REACHED
 
 
+def test_zero_optional_budget_with_zero_usage_is_not_exhausted() -> None:
+    result = _decide(
+        [_workflow_observation(GroundedAnswerWorkflowStatus.INCOMPLETE)],
+        usage=_usage(provider_calls=0, recorded_tokens=0, external_requests=0),
+        budget=_budget(
+            maximum_provider_calls=0,
+            maximum_recorded_tokens=0,
+            maximum_external_requests=0,
+        ),
+    )
+    assert result.decision is ResearchAgentLoopDecision.REPLAN
+
+
 @pytest.mark.parametrize("retryable", [True, False])
 def test_tool_failure_respects_retryability(retryable: bool) -> None:
     result = _decide([_tool_failure(retryable=retryable)])

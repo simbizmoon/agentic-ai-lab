@@ -113,10 +113,19 @@ class DeterministicEvidenceSufficiencyDecider:
         return (
             usage.rounds >= budget.maximum_rounds
             or usage.tool_calls >= budget.maximum_tool_calls
-            or usage.provider_calls >= budget.maximum_provider_calls
-            or usage.recorded_tokens >= budget.maximum_recorded_tokens
+            or (
+                usage.provider_calls > 0
+                and usage.provider_calls >= budget.maximum_provider_calls
+            )
+            or (
+                usage.recorded_tokens > 0
+                and usage.recorded_tokens >= budget.maximum_recorded_tokens
+            )
             or usage.elapsed_seconds >= budget.maximum_elapsed_seconds
-            or usage.external_requests >= budget.maximum_external_requests
+            or (
+                usage.external_requests > 0
+                and usage.external_requests >= budget.maximum_external_requests
+            )
         )
 
     @staticmethod
