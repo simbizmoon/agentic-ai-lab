@@ -789,3 +789,31 @@ Step 6 — Bounded Evidence Reranking
 
 Step 6는 기존 semantic reranking 부품을 감사한 뒤 hybrid candidate pool 이후의 bounded
 relevance ordering을 통합한다. Context budget과 final citation grounding은 각각 후속 gate다.
+
+
+# 22. 2026-08-24 Stage 6 Step 6 Integration Work Item 완료
+
+Step 6는 Step 5 hybrid candidate pool에 bounded relevance evaluation을 연결하고 exact RAG
+context/citation path까지 통합했다.
+
+```text
+HybridRetrievalWorkflowResult
+→ bounded evidence relevance evaluation
+→ CrossSourceEvidenceRerankingResult
+→ relevant evaluated RetrievalResult
+→ existing RagContext + exact RagCitation
+```
+
+예산 소진 후보는 `unevaluated`로 보존하고 irrelevant와 구분한다. Direct/partial 후보만 context에
+포함하지만 모든 hybrid signal과 provider execution identity는 audit result에 남는다. Full
+repository 6,039 tests와 offline cross-source E2E/UAT가 통과했으며 외부 요청은 0회였다.
+
+다음 Integration Work Item:
+
+```text
+Stage 6 — Integrated RAG
+Step 7 — Bounded RAG Context Budget
+```
+
+Step 7은 selected evidence의 item/token/byte ceiling과 deterministic packing을 정의한다. Final
+answer generation이나 citation quality 판정은 이 단계에 포함하지 않는다.

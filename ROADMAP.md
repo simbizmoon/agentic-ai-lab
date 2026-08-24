@@ -4912,3 +4912,55 @@ Step 6 — Bounded Evidence Reranking
 Step 6는 기존 deterministic/local/OpenAI semantic reranking capability를 먼저 감사하고, hybrid
 후보의 exact provenance와 비용 상한을 유지하는 가장 작은 통합 경계를 정한다. 기본 개발 및
 회귀검사는 offline/local evaluator로 수행한다.
+
+
+## 34.32 Stage 6 Step 6 — Bounded Evidence Reranking 완료
+
+상태: `FINAL PASS` (2026-08-24)
+
+### 완료 범위
+
+- 기존 semantic reranking, budget 및 OpenAI evaluator 계약 감사
+- hybrid 후보 전체를 보존하는 typed reranking request/result 계약
+- attempts, recorded tokens 및 elapsed time의 명시적 실행 상한
+- batch-first 평가와 structured batch failure의 bounded single-item fallback
+- 예산 소진 후 미평가 후보의 `unevaluated` 상태 보존
+- direct, partial, unevaluated, irrelevant 순서의 결정론적 relevance ordering
+- 원래 hybrid channel rank, score, RRF contribution 및 exact chunk provenance 보존
+- direct/partial 후보만 연속 rank와 relevance score로 RAG context에 전달
+- irrelevant/unevaluated 후보는 audit result에 보존하고 context에서는 제외
+- Patent/Academic/Official/failed cross-source persistent-restart offline E2E/UAT
+- source authority, quality, winner 및 법률 판단 필드 부재 검증
+
+### 검증 기준선
+
+```text
+Step 6-1 typed contract tests      = 72 passed
+Step 6-2 bounded runtime tests     = 72 passed
+Step 6-3 RAG integration tests     = 57 passed
+Step 6-4 offline E2E/UAT           = PASS
+full repository pytest             = 6039 passed in 22.22s
+full Ruff lint                     = PASS
+Step 6 changed-file format         = PASS (7 files)
+git diff --check / working tree    = PASS / clean
+OpenAI/OpenAlex/EPO/network calls  = 0 / 0 / 0 / 0
+```
+
+### 검증하지 않은 범위
+
+- OpenAI 또는 다른 production evaluator의 semantic quality
+- source authority, academic paper quality 또는 patent quality
+- learned/trained reranking 및 production embedding quality
+- context token/byte budget
+- final-answer citation grounding quality
+- chronology, novelty, infringement 또는 기타 법률 결론
+
+### 다음 공식 작업
+
+```text
+Stage 6 — Integrated RAG
+Step 7 — Bounded RAG Context Budget
+```
+
+Step 7은 reranking에서 선택된 exact chunks를 final prompt에 넣기 전에 token/byte/item 상한을
+적용한다. 후보를 조용히 자르지 않고 포함·제외 이유와 exact citation provenance를 보존한다.

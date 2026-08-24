@@ -557,3 +557,24 @@ Next:    Stage 6 / Step 5 Deterministic Hybrid Retrieval Fusion
 Current: Stage 6 / Step 5 Deterministic Hybrid Retrieval Fusion FINAL PASS
 Next:    Stage 6 / Step 6 Bounded Evidence Reranking
 ```
+
+
+## 18. 2026-08-24 Capability Matrix 갱신 — Stage 6 Step 6 FINAL PASS
+
+| Integrated RAG capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Typed cross-source reranking contract | Production-aligned / offline verified | exact hybrid candidate set preserved |
+| Attempts/token/time budget | Production-aligned / offline verified | explicit exhaustion state |
+| Batch-first bounded fallback | Production-aligned / offline verified | structured failures only |
+| Deterministic relevance ordering | Production-aligned / offline verified | direct, partial, unevaluated, irrelevant |
+| Reranked RAG context integration | Integrated / offline verified | direct/partial only, contiguous ranks |
+| Exact citation provenance | Integrated / offline E2E PASS | source/document/chunk/offset retained |
+| Production semantic quality | Not validated | controlled local test double only |
+| Source authority / paper / patent quality | Not implemented | no winner or best-source judgment |
+| Context token/byte budget | Not implemented | Stage 6 Step 7 |
+| Final-answer grounding quality | Not validated | later Stage 6 gate |
+
+```text
+Current: Stage 6 / Step 6 Bounded Evidence Reranking FINAL PASS
+Next:    Stage 6 / Step 7 Bounded RAG Context Budget
+```

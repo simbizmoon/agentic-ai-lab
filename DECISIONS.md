@@ -5115,3 +5115,33 @@ RRF는 점수 calibration 없이도 서로 다른 검색기의 순위를 재현 
 기존 paragraph shortlist에서도 검증된 패턴이다. 이번 구현은 retrieval recall baseline이지
 semantic relevance, source authority, academic/patent quality, learned reranking 또는 final-answer
 grounding을 판단하지 않는다.
+
+
+## D-088 — Bounded reranking은 모든 hybrid 후보를 보존하고 relevant evaluated evidence만 context로 전달한다
+
+- 상태: 확정
+- 날짜: 2026-08-24
+- 적용 범위: Stage 6 Step 6 Bounded Evidence Reranking
+
+### 결정
+
+- reranking 입력은 Step 5의 exact `HybridRetrievalResponse`이며 최대 후보 수를 평가 전에 검증한다.
+- execution budget은 attempts, recorded tokens 및 elapsed time을 각각 제한한다.
+- batch evaluator가 있으면 먼저 사용하고 structured response failure만 단건 fallback 대상으로 삼는다.
+- programming error나 임의 provider error를 fallback으로 숨기지 않는다.
+- 예산 소진 시 아직 평가하지 못한 후보를 삭제하지 않고 `unevaluated`로 보존한다.
+- 최종 순서는 direct, partial, unevaluated, irrelevant이며 같은 범주에서는 relevance score와 기존
+  hybrid rank 및 chunk ID로 결정론적으로 정렬한다.
+- RAG context에는 direct/partial 평가 결과만 넣고 contiguous context rank를 새로 부여한다.
+- irrelevant/unevaluated 후보와 원래 hybrid signal은 audit 가능한 reranking result에 계속 남긴다.
+- production local semantic evaluator가 존재한다고 주장하지 않는다. 기본 회귀검사는 controlled
+  local test double이며 실제 OpenAI semantic quality는 별도 live/evaluation gate다.
+
+### 이유와 제한
+
+예산 부족을 relevance 부재로 오해하거나 irrelevant 후보를 final prompt에 넣으면 결과 의미가
+흐려진다. 평가 상태와 relevance judgment를 분리하면 비용 상한을 지키면서 누락 이유를 감사할
+수 있다. 이 결정은 source authority, paper/patent quality, legal conclusion 또는 final-answer
+grounding quality를 보장하지 않는다.
+
+다음 공식 작업은 Stage 6 Step 7 Bounded RAG Context Budget이다.

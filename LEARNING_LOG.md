@@ -4070,3 +4070,49 @@ external requests                 = 0
 
 Stage 6 Step 6 Bounded Evidence Reranking. 기존 reranker를 감사하고 hybrid shortlist 이후의
 semantic judgment, provenance와 비용 상한을 분리해 설계한다.
+
+
+## 2026-08-24 — Stage 6 Step 6 Bounded Evidence Reranking 완료
+
+### 핵심 개념
+
+Retrieval은 관련 가능성이 있는 후보를 넓게 찾고, reranking은 질문과 목적에 비추어 그 후보의
+사용 가치를 다시 판단한다. `irrelevant`는 평가 후 관련 없다고 판단된 상태지만 `unevaluated`는
+예산 때문에 아직 판단하지 못한 상태다. 두 상태를 같은 것으로 취급하면 안 된다.
+
+### 구현과 실습
+
+```text
+hybrid candidates with exact provenance
+→ bounded batch/single relevance evaluation
+→ direct / partial / unevaluated / irrelevant ordering
+→ direct + partial only
+→ existing RagContext + exact RagCitation
+```
+
+원래 hybrid match는 모든 rerank item에 그대로 보존했다. Context용 `RetrievalResult`는 relevance
+score와 새 연속 rank를 사용하지만, 원래 lexical/semantic/RRF 신호는 audit result에서 사라지지
+않는다.
+
+### 실패 사례와 교훈
+
+초기 통합 fixture에서 `TextEmbedding.model_name`, 완전한 `TokenUsage`, evaluator result 필드를
+실제 계약과 다르게 구성해 실패했다. Production 계약을 느슨하게 만들지 않고 fixture를 실제
+필드에 맞췄다. Provenance 레코드가 excerpt를 중복 저장한다고 가정한 UAT도 문서 원문의 exact
+character slice를 확인하도록 수정했다.
+
+### 평가
+
+```text
+offline cross-source E2E/UAT      = PASS
+full repository pytest            = 6039 passed in 22.22s
+Ruff / changed format / diff      = PASS
+external requests                 = 0
+```
+
+Controlled evaluator는 흐름과 경계를 검증하지만 OpenAI semantic quality를 검증하지 않는다.
+
+### 다음 학습 단계
+
+Stage 6 Step 7 Bounded RAG Context Budget. 선택된 evidence가 prompt 크기 상한을 넘을 때 어떤
+항목을 포함·제외했는지 provenance와 함께 설명하는 deterministic context packing을 학습한다.
