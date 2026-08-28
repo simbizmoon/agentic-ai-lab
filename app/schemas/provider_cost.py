@@ -14,6 +14,11 @@ class UsageUnit(StrEnum):
     """A measurable provider resource without assigning a monetary value."""
 
     REQUEST = "request"
+    PROVIDER_CALL = "provider_call"
+    TOOL_CALL = "tool_call"
+    EXTERNAL_REQUEST = "external_request"
+    AGENT_ROUND = "agent_round"
+    RECORDED_TOKEN = "recorded_token"
     INPUT_TOKEN = "input_token"
     CACHED_INPUT_TOKEN = "cached_input_token"
     OUTPUT_TOKEN = "output_token"
@@ -44,6 +49,11 @@ class CostKind(StrEnum):
 
 _INTEGRAL_USAGE_UNITS = {
     UsageUnit.REQUEST,
+    UsageUnit.PROVIDER_CALL,
+    UsageUnit.TOOL_CALL,
+    UsageUnit.EXTERNAL_REQUEST,
+    UsageUnit.AGENT_ROUND,
+    UsageUnit.RECORDED_TOKEN,
     UsageUnit.INPUT_TOKEN,
     UsageUnit.CACHED_INPUT_TOKEN,
     UsageUnit.OUTPUT_TOKEN,
