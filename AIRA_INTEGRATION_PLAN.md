@@ -962,3 +962,31 @@ Stage 11은 CLI-first 최소 제품화만 필수이며 API/UI/queue/distributed 
 
     Stage 8 — Essential Cost Control and Provider Foundation
     Step 2 — Provider-neutral Usage and Price Contracts
+
+# 28. 2026-08-28 Stage 8 Essential Cost Control FINAL PASS Integration 완료
+
+완료된 integration:
+
+```text
+existing provider usage
+→ provider-neutral usage event
+→ effective-dated deterministic cost calculation
+→ immutable execution ledger
+→ projected monetary guardrail
+
+existing embedding / parsed-document cache
+→ observational wrapper
+→ exact cache counters
+→ optional counterfactual avoided-cost estimate
+→ never appended as actual spend
+```
+
+추가 Provider, 실시간 가격 수집, currency conversion과 automatic routing은 연결하지 않았다. Stage 9의
+실제 연구 평가가 동일 Dataset에서 품질·비용·시간 필요성을 입증할 때만 후속 integration으로 승인한다.
+
+다음 Integration Work Item:
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 1 — Existing Capability Audit
+```

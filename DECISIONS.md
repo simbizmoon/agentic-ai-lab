@@ -5288,3 +5288,27 @@ Multi-Agent 비교 자체를 생략하면 역할 분리의 효과와 다른 프�
 ### 다음 공식 작업
 
 Stage 8 Step 2 Provider-neutral Usage and Price Contracts.
+
+## D-094 — 2026-08-28 Stage 8 Essential Cost Control FINAL PASS와 비용·절감 authority 분리
+
+- 상태: 확정
+- 날짜: 2026-08-28
+- 적용 범위: Stage 8 종료 및 Stage 9 전환
+
+### 결정
+
+- actual/provider-reported/billed/estimated/unavailable/not-applicable 비용을 동일 값으로 간주하지 않는다.
+- 실행 비용은 immutable ledger에 기록하고 monetary ceiling은 accumulated와 proposed cost를 합산해 실행 전에
+  판단한다.
+- 한도 초과 시 자동 증액하지 않고 scope reduction, lower-cost path, human approval, stop 순서의 명시적
+  가능 상태를 사용한다.
+- 기존 Parsing/Embedding Cache는 재구현하지 않고 관측 wrapper로 hit/miss/write와 입력 byte만 계측한다.
+- cache hit 수를 avoided provider call 또는 exact token savings로 자동 환산하지 않는다.
+- avoided monetary cost는 명시적 planned counterfactual usage와 effective price entry가 있을 때만 estimated로
+  계산하며 실제 지출 ledger에는 추가하지 않는다.
+- Stage 8을 COMPLETE로 닫고 Stage 9 실제 연구 평가 baseline으로 이동한다.
+
+### 제외 및 제한
+
+현재 가격 자동 수집, 환율 변환, 청구서 정산, 자동 예산 증액, 다수 Provider 연동과 자동 Model Routing은
+포함하지 않는다. 필요성은 Stage 9 동일 Golden Dataset의 품질·비용·시간 결과로 판단한다.

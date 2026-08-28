@@ -680,3 +680,23 @@ Next:    Stage 7 / Step 1 Agent Loop Existing Capability Audit
 
     Current: Stage 8 / Step 1 Existing Cost and Provider Capability Audit PASS
     Next: Stage 8 / Step 2 Provider-neutral Usage and Price Contracts
+
+## 24. 2026-08-28 Stage 8 Essential Cost Control FINAL PASS
+
+| Cost-control capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Provider-neutral usage and price contracts | Offline verified | identity, unit, authority, effective date preserved |
+| Deterministic price registry/calculator | Offline verified | exact match and Decimal arithmetic |
+| Unified immutable usage/cost ledger | Offline verified | request/execution provenance and currency totals |
+| Monetary execution ceiling | Offline verified | explicit remediation; no automatic increase |
+| Existing embedding/parsed cache observation | Offline verified | hit/miss/write/input bytes |
+| Counterfactual avoided-cost estimate | Offline verified | separate from actual-spend ledger |
+| Exact avoided provider calls/tokens | Not validated | never inferred from cache hits |
+| Current price and billed-cost reconciliation | Not implemented | offline fixtures only |
+| Automatic model routing | Deferred | Stage 9 evidence required |
+
+```text
+Current: Stage 8 Essential Cost Control FINAL PASS
+Stage 8: COMPLETE
+Next:    Stage 9 / Step 1 Real Research Evaluation Existing Capability Audit
+```

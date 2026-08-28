@@ -4278,3 +4278,26 @@ Agent 수를 늘린 구조가 실제 기본 Runtime이 되려면 동일 Dataset�
 
 Stage 8 Step 2에서 token, request, provider-reported usage와 비용을 혼동하지 않는 provider-neutral
 Usage/Price 계약을 설계한다.
+
+## 2026-08-28 Stage 8 Essential Cost Control FINAL PASS
+
+### 핵심 개념
+
+사용량은 작업량이고 비용은 가격표를 적용한 화폐 값이다. 캐시 적중은 반복 작업을 피했다는 관측이지만,
+API 호출이나 토큰이 정확히 얼마나 줄었는지는 별도 근거 없이는 알 수 없다. 따라서 실제 사용, 계획된
+반사실적 사용과 추정 절감액을 서로 다른 계약으로 보존했다.
+
+### 직접 실습과 검증
+
+- 실제 관측 usage 4 requests를 offline price fixture로 USD 0.40으로 계산하고 ledger에 기록했다.
+- 추가 USD 0.70의 projected cost가 USD 1.00 상한을 넘자 scope reduction을 요구했다.
+- 실제 persistent embedding cache에서 miss 1, write 1, hit 1을 관측했다.
+- USD 0.10 avoided-cost estimate는 counterfactual로만 남고 실제 ledger entry는 1개로 유지됐다.
+- 전체 저장소 6335 tests, Ruff, Stage 8 format과 diff check가 통과했다.
+- 외부/API 요청은 0회였다.
+
+### 다음 학습
+
+Stage 8은 비용 통제 기반을 완성했지만 실제 연구 품질이나 현재 Provider 가격을 검증하지 않았다. 다음은
+Stage 9 Step 1 Existing Capability Audit이며, 실제 연구 Golden Dataset과 동일 rubric으로 Single-Agent의
+품질·비용·시간 baseline을 만들 기존 eval 기능을 먼저 감사한다.

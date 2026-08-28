@@ -36,7 +36,7 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
-- 현재 제품 단계: Stage 6 — Integrated RAG
+- 현재 제품 단계: Stage 8 — Essential Cost Control and Provider Foundation `COMPLETE`
 - 직전 완료 Vertical Slice: Stage 5 / Academic Research Vertical Slice
 - 현재 완료 지점: Stage 6 / Step 9 — Bounded Grounded Answer Workflow `FINAL PASS`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
@@ -50,9 +50,10 @@
 - Stage 5 전체 상태: `COMPLETE`
 - Stage 6 전체 상태: COMPLETE
 - Stage 7 bounded single-agent vertical slice 상태: COMPLETE
-- 현재 단계: Stage 8 / Step 1 — Existing Cost and Provider Capability Audit `PASS`
-- 다음 공식 작업: Stage 8 / Step 2 — Provider-neutral Usage and Price Contracts
-- 현재 기준일: 2026-08-24
+- Stage 8 전체 상태: `COMPLETE`
+- 현재 단계: Stage 8 — Essential Cost Control and Provider Foundation `FINAL PASS`
+- 다음 공식 작업: Stage 9 / Step 1 — Real Research Evaluation Existing Capability Audit
+- 현재 기준일: 2026-08-28
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -1010,42 +1011,46 @@ AIRA가 Evidence의 충분성, Source 품질 및 자료 간 충돌을 판단하�
 ## 상태
 
 - [x] Step 1 Existing Cost and Provider Capability Audit PASS
-- [ ] Step 2 Provider-neutral Usage and Price Contracts
-- [ ] 후속 essential implementation
+- [x] Step 2 Provider-neutral Usage and Price Contracts PASS
+- [x] Step 3 Versioned Price Registry and Deterministic Cost Calculator PASS
+- [x] Step 4 Unified Usage and Cost Ledger PASS
+- [x] Step 5 Monetary Cost Budget Guardrail PASS
+- [x] Step 6 Existing Cache Savings Observation PASS
+- [x] Final Offline Cost-Control UAT and Full Regression PASS
 
 ## 반드시 포함하는 Work Items
 
 ### 8.1 Usage와 Price 계약
 
-- [ ] Provider-neutral Usage Event
-- [ ] input/cached-input/output/reasoning token 보존
-- [ ] provider/model/request/tool identity
-- [ ] Model Price Registry
-- [ ] 가격 기준일, 버전, 출처와 통화
-- [ ] unknown cost와 zero cost 구분
-- [ ] estimated/provider-reported/billed/not-applicable cost 구분
+- [x] Provider-neutral Usage Event
+- [x] input/cached-input/output/reasoning token 보존
+- [x] provider/model/request/tool identity
+- [x] Model Price Registry
+- [x] 가격 기준일, 버전, 출처와 통화
+- [x] unknown cost와 zero cost 구분
+- [x] estimated/provider-reported/billed/not-applicable cost 구분
 
 ### 8.2 Cost 계산과 Ledger
 
-- [ ] 결정론적 실행 전 예상비용
-- [ ] 실행 후 기록비용
-- [ ] 요청별·Stage별·실행별·누적 비용
-- [ ] Decimal 산술과 명시적 반올림
-- [ ] 기존 OpenAI token usage, search credit와 provider-reported cost adapter
+- [x] 결정론적 실행 전 예상비용
+- [x] 실행 후 기록비용
+- [x] 요청별·Stage별·실행별·누적 비용
+- [x] Decimal 산술과 명시적 반올림
+- [x] 기존 OpenAI token usage, search credit와 provider-reported cost adapter
 
 ### 8.3 Cost Budget Guardrail
 
-- [ ] 기존 LLM/Search/Tool/Source/Chunk/Token/반복/시간 제한 재사용
-- [ ] 실행당 비용 상한
-- [ ] projected/accumulated cost 초과 감지
-- [ ] 중단, 범위 축소, 저가 경로 또는 사용자 승인 요청의 명시적 상태
+- [x] 기존 LLM/Search/Tool/Source/Chunk/Token/반복/시간 제한 재사용
+- [x] 실행당 비용 상한
+- [x] projected/accumulated cost 초과 감지
+- [x] 중단, 범위 축소, 저가 경로 또는 사용자 승인 요청의 명시적 상태
 
 ### 8.4 기존 Cache와 Provider Foundation
 
-- [ ] 기존 Parsing/Embedding Cache 재사용 및 절감량 관측
-- [ ] OpenAI, Local/Ollama와 Deterministic Provider capability 표현
-- [ ] Provider 교체 가능성 보존
-- [ ] offline E2E와 필요한 최소 bounded live smoke
+- [x] 기존 Parsing/Embedding Cache 재사용 및 절감량 관측
+- [x] 기존 Provider identity와 provider-neutral capability 보존
+- [x] Provider 교체 가능성 보존
+- [x] offline E2E/UAT 완료; live smoke는 실제 가격·청구 검증 전까지 보류
 
 ## 명시적 제외
 
@@ -5161,3 +5166,46 @@ pipeline이 Stage 6 workflow를 호출하고 exact observation과 누적 사용�
     Step 1 — Existing Cost and Provider Capability Audit
 
 Stage 8도 기존 기능을 먼저 read-only로 감사하며 감사 자체를 위해 live provider 요청을 만들지 않는다.
+
+## 34.37 2026-08-28 Stage 8 Essential Cost Control FINAL PASS
+
+### 완료 범위
+
+- provider-neutral usage, price, cost authority와 provenance 계약
+- effective-dated price registry와 Decimal 기반 deterministic cost calculation
+- 기존 OpenAI token, search, scholarly, agent-loop usage adapter
+- immutable execution usage/cost ledger와 currency별 합계
+- accumulated/projected monetary ceiling 및 deterministic remediation decision
+- 기존 embedding/parsed-document cache를 변경하지 않는 관측 wrapper
+- cache hit/miss/write/input-byte exact counter와 counterfactual avoided-cost estimate 분리
+
+### 검증 기준선
+
+```text
+Step 2 usage/price contract             = PASS
+Step 3 registry/calculator              = PASS
+Step 4 unified ledger                   = PASS
+Step 5 monetary budget guardrail        = PASS
+Step 6 existing cache observation       = PASS
+Stage 8 final offline UAT               = PASS
+full repository pytest                  = 6335 passed in 17.51s
+full Ruff / Stage 8 file format         = PASS / PASS
+git diff --check                        = PASS
+OpenAI/OpenAlex/EPO/network requests    = 0 / 0 / 0 / 0
+```
+
+### 완료 의미와 제한
+
+실제 지출, provider-reported 비용, 추정 비용과 unavailable/not-applicable 상태를 분리했다. 비용 상한은
+자동으로 증가하지 않으며 초과 시 범위 축소, 저가 경로, 사용자 승인 또는 중단을 명시한다. 캐시 적중은
+회피된 작업 항목으로만 직접 측정하며 API 호출·정확한 토큰·청구 절감으로 임의 환산하지 않는다.
+
+실시간 가격 수집, 청구서 정산, 다수 상용 Provider 추가와 자동 Model Routing은 구현하지 않았다. 현재
+Provider 가격과 실제 청구 절감은 Stage 8 완료 주장에 포함되지 않는다.
+
+### 다음 공식 작업
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 1 — Existing Capability Audit
+```
