@@ -4301,3 +4301,32 @@ API 호출이나 토큰이 정확히 얼마나 줄었는지는 별도 근거 없
 Stage 8은 비용 통제 기반을 완성했지만 실제 연구 품질이나 현재 Provider 가격을 검증하지 않았다. 다음은
 Stage 9 Step 1 Existing Capability Audit이며, 실제 연구 Golden Dataset과 동일 rubric으로 Single-Agent의
 품질·비용·시간 baseline을 만들 기존 eval 기능을 먼저 감사한다.
+
+## 2026-08-29 — Stage 9 Step 3 Curated Golden Dataset 완료
+
+### 핵심 개념
+
+Golden Dataset은 평가에 사용할 질문과 검토 가능한 근거를 변경 통제한 모음이다. 여기서 사람의
+`LOCKED` 결정과 development/holdout 구분은 같은 뜻이 아니다. 10건은 모두 사람이 잠갔지만, 4건만
+개발 중 구조 확인에 쓰고 6건은 최종 비교 전까지 보지 않는 holdout으로 유지한다.
+
+### 직접 실습과 검증
+
+- general technical 2건, academic 2건, patent 3건, cross-source 3건을 직접 검토했다.
+- 각 검토표에 source identity, original access, exact excerpt, location과 uncertainty boundary를 기록했다.
+- EPO claim/abstract처럼 필요한 원문은 제한된 요청으로 확보했고 suggestion만으로 lock하지 않았다.
+- human-locked Dataset 10건을 canonical JSON과 SHA-256으로 저장소에 통합했다.
+- typed import 결과는 development 4건, blind holdout 6건, development domain coverage 4/4였다.
+- 전체 저장소 `6352 passed`, Ruff, 대상 파일 format, diff와 clean working tree가 통과했다.
+- 최종 통합과 regression에는 OpenAI 및 외부 요청이 0회였다.
+
+### 실패를 막는 경계
+
+`LOCKED` 표시는 답이 참임을 자동 인증하지 않는다. 출처 권위, semantic quality, 법률적 판단과 표준
+준수는 별도 평가다. 또한 holdout을 보고 prompt나 rubric을 조정하면 blind comparison이 아니므로
+development와 holdout을 엄격히 분리한다.
+
+### 다음 학습
+
+Stage 9 Step 4에서 Single-Agent baseline 실험의 provider/model, 가격 기준, budget, 반복 횟수, rubric과
+실행 순서를 사전에 고정하고, 먼저 development에서 harness를 검증한 뒤 holdout을 실행한다.

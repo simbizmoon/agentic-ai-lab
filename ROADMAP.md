@@ -5209,3 +5209,46 @@ Provider 가격과 실제 청구 절감은 Stage 8 완료 주장에 포함되지
 Stage 9 — Mandatory Real Research Evaluation
 Step 1 — Existing Capability Audit
 ```
+
+## 34.38 2026-08-29 Stage 9 Step 3 Curated Golden Dataset FINAL PASS
+
+### 완료 범위
+
+- 4개 domain(`general_technical`, `academic`, `patent`, `cross_source`)의 후보 10건 작성
+- 원문 identity, exact excerpt, location, uncertainty boundary에 대한 사람의 직접 검토
+- 사람의 명시적 결정으로 10건 모두 `LOCKED`; 자동 locking은 금지
+- human-locked 원본 Dataset과 SHA-256 sidecar를 저장소에 고정
+- typed importer로 development 4건과 blind holdout 6건을 분리
+- development partition의 4/4 domain coverage 검증
+
+### 고정 기준선
+
+```text
+human-reviewed candidates     = 10
+human LOCKED cases            = 10
+development / holdout cases   = 4 / 6
+development domain coverage   = 4 / 4
+dataset SHA-256               = 9405c96ec598c89ba2d7097dea61d01a9485c7f71a5bb4ac872da728999d0b2a
+full repository pytest        = 6352 passed in 26.01s
+Ruff / changed-file format    = PASS / PASS
+git diff / working tree       = PASS / CLEAN
+OpenAI / external requests    = 0 / 0
+```
+
+### 완료 의미와 제한
+
+`LOCKED`는 사람이 출처와 문구를 확인해 평가 사례를 변경 통제 대상으로 승인했다는 뜻이다. 정답
+품질, source authority, 법률적 결론, NIST 준수 또는 실제 모델 성능을 이미 검증했다는 뜻은 아니다.
+개발 4건은 평가 harness와 rubric을 조정하는 데 사용할 수 있지만 holdout 6건은 그 조정에 사용하지
+않는다. Provider, model, price entry, 실행 budget, 반복 횟수와 rubric runtime field는 아직 고정하지
+않았다.
+
+### 다음 공식 작업
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 4 — Single-Agent Baseline Experiment Manifest and Harness
+```
+
+Step 4에서는 동일 Dataset 비교가 가능하도록 provider/model, 가격 기준일, monetary·request·token·time
+budget, 반복 횟수, rubric과 실행 순서를 실행 전에 고정한다. Holdout 결과를 본 뒤 설정을 바꾸지 않는다.

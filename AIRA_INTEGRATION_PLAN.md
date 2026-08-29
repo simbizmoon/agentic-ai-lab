@@ -990,3 +990,31 @@ existing embedding / parsed-document cache
 Stage 9 — Mandatory Real Research Evaluation
 Step 1 — Existing Capability Audit
 ```
+
+# 29. 2026-08-29 Stage 9 Step 3 Curated Golden Dataset Integration 완료
+
+완료된 integration:
+
+```text
+candidate catalog
+→ human source/excerpt/location review
+→ explicit LOCKED decision
+→ canonical JSON + SHA-256 sidecar
+→ typed importer
+→ development 4 / blind holdout 6
+```
+
+10건 모두 human-locked이며 partition은 별도로 4/6으로 고정했다. Development는 네 domain을 각 1건
+포함하고 holdout은 설정 조정에 사용하지 않는다. 이 integration은 Dataset identity와 review provenance를
+보장하지만 실제 모델 품질, source authority, 법률적 결론 또는 표준 준수를 보장하지 않는다.
+
+다음 Integration Work Item:
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 4 — Single-Agent Baseline Experiment Manifest and Harness
+```
+
+Step 4는 기존 Stage 8 cost contracts와 Stage 7 bounded Single-Agent path를 연결하되 실행 전에
+provider/model, effective price, request/token/time/monetary budget, repetitions, rubric과 execution order를
+고정한다. Development로 harness를 검증하고 blind holdout은 고정된 설정으로만 실행한다.

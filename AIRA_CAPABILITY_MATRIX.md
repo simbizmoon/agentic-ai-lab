@@ -700,3 +700,23 @@ Current: Stage 8 Essential Cost Control FINAL PASS
 Stage 8: COMPLETE
 Next:    Stage 9 / Step 1 Real Research Evaluation Existing Capability Audit
 ```
+
+## 25. 2026-08-29 Stage 9 Step 3 Curated Golden Dataset FINAL PASS
+
+| Evaluation capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Four-domain candidate catalog | Complete | 10 human-reviewed cases |
+| Original identity/excerpt/location review | Human verified | suggestion alone is insufficient |
+| Human locking control | Complete | automatic locking forbidden |
+| Canonical Dataset + SHA-256 | Repository integrated | immutable evaluation input |
+| Development partition | Locked | 4 cases, 4/4 domain coverage |
+| Blind holdout partition | Locked | 6 cases, no tuning use |
+| Typed Dataset importer | Offline verified | human lock preserved |
+| Provider/model/runtime manifest | Not yet locked | Stage 9 Step 4 |
+| Real Single-Agent quality/cost/time | Not measured | later baseline run |
+| Source authority/legal/NIST compliance | Not validated | outside Dataset-lock claim |
+
+```text
+Current: Stage 9 / Step 3 Curated Golden Dataset FINAL PASS
+Next:    Stage 9 / Step 4 Single-Agent Baseline Experiment Manifest and Harness
+```

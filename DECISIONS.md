@@ -5312,3 +5312,29 @@ Stage 8 Step 2 Provider-neutral Usage and Price Contracts.
 
 현재 가격 자동 수집, 환율 변환, 청구서 정산, 자동 예산 증액, 다수 Provider 연동과 자동 Model Routing은
 포함하지 않는다. 필요성은 Stage 9 동일 Golden Dataset의 품질·비용·시간 결과로 판단한다.
+
+## D-095 — Stage 9 Golden Dataset은 human lock과 evaluation partition을 분리해 보존한다
+
+- 상태: 확정
+- 날짜: 2026-08-29
+- 적용 범위: Stage 9 Step 3 및 이후 Single/Multi-Agent 비교 평가
+
+### 결정
+
+- 후보 10건은 사람이 원본 identity, exact excerpt, location과 불확실성 경계를 직접 확인한 뒤에만
+  `LOCKED`로 전환한다. suggestion 파일이나 자동화 결과만으로 lock하지 않는다.
+- human lock 상태와 evaluation partition은 서로 다른 축이다. 10건 모두 human-locked이지만 typed
+  evaluation에서는 4건을 development, 6건을 blind holdout으로 사용한다.
+- development는 네 domain에서 각 1건이며 harness와 rubric의 구조 검증에만 사용한다.
+- holdout은 설정·prompt·rubric 조정에 사용하지 않고 고정된 baseline 실행에서만 공개한다.
+- 저장소의 canonical Dataset과 SHA-256 sidecar를 평가 입력으로 사용한다.
+- canonical Dataset SHA-256은
+  `9405c96ec598c89ba2d7097dea61d01a9485c7f71a5bb4ac872da728999d0b2a`로 고정한다.
+- 다음 단계에서 provider/model, price entry, budget, repetition, rubric과 execution order를 먼저
+  고정한 뒤 Single-Agent baseline을 실행한다.
+
+### 제한
+
+Dataset lock은 source authority, semantic correctness, patent/academic quality, 법률적 결론 또는 NIST
+준수를 인증하지 않는다. 현재 단계는 OpenAI 품질이나 실제 비용을 측정하지 않았고, 외부 요청도 만들지
+않았다.
