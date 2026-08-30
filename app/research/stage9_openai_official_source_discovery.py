@@ -21,6 +21,24 @@ class Stage9OpenAIOfficialSourceDiscoveryError(RuntimeError):
     """OpenAI discovery did not preserve the locked URL-only boundary."""
 
 
+class Stage9OfficialSourceDiscoveryIncompleteError(
+    Stage9OpenAIOfficialSourceDiscoveryError
+):
+    """Discovery was incomplete and exposed no source URL."""
+
+
+class Stage9OfficialSourceDiscoveryFailedError(
+    Stage9OpenAIOfficialSourceDiscoveryError
+):
+    """Discovery failed and exposed no source URL."""
+
+
+class Stage9OfficialSourceDiscoveryNoSourcesError(
+    Stage9OpenAIOfficialSourceDiscoveryError
+):
+    """Discovery completed without an auditable source URL."""
+
+
 class Stage9OpenAIOfficialSourceDiscovery:
     """Discover official URLs through one forced, domain-filtered web search."""
 
@@ -62,11 +80,6 @@ class Stage9OpenAIOfficialSourceDiscovery:
             max_output_tokens=128,
             store=False,
         )
-        if getattr(response, "status", None) != "completed":
-            raise Stage9OpenAIOfficialSourceDiscoveryError(
-                "web-search discovery did not complete"
-            )
-
         candidates: list[Stage9OfficialSourceCandidate] = []
         seen: set[str] = set()
         for item in getattr(response, "output", ()):
@@ -82,4 +95,18 @@ class Stage9OpenAIOfficialSourceDiscovery:
                 candidates.append(Stage9OfficialSourceCandidate(url=url, title=title))
                 if len(candidates) == maximum_results:
                     return tuple(candidates)
-        return tuple(candidates)
+        if candidates:
+            return tuple(candidates)
+
+        status = getattr(response, "status", None)
+        if status == "incomplete":
+            raise Stage9OfficialSourceDiscoveryIncompleteError(
+                "web-search discovery was incomplete without sources"
+            )
+        if status != "completed":
+            raise Stage9OfficialSourceDiscoveryFailedError(
+                "web-search discovery failed without sources"
+            )
+        raise Stage9OfficialSourceDiscoveryNoSourcesError(
+            "web-search discovery completed without sources"
+        )

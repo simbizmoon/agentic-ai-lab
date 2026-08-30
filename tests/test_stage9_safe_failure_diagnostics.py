@@ -82,6 +82,15 @@ def test_classifies_known_provider_type_without_retaining_message() -> None:
 
 def test_classifies_stage9_runtime_boundaries_without_retaining_messages() -> None:
     cases = {
+        "Stage9OfficialSourceDiscoveryIncompleteError": (
+            "official_source_discovery_incomplete"
+        ),
+        "Stage9OfficialSourceDiscoveryFailedError": (
+            "official_source_discovery_response_failed"
+        ),
+        "Stage9OfficialSourceDiscoveryNoSourcesError": (
+            "official_source_discovery_no_sources"
+        ),
         "Stage9OfficialDocumentDomainError": "official_document_domain_failed",
         "Stage9OfficialDocumentRedirectError": "official_document_redirected",
         "Stage9OfficialDocumentTimeoutError": "official_document_timeout",

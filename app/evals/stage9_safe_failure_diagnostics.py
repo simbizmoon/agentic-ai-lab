@@ -26,6 +26,18 @@ _CLASS_CODE_PRIORITY = (
         "official_document_read_failed",
     ),
     (
+        "Stage9OfficialSourceDiscoveryIncompleteError",
+        "official_source_discovery_incomplete",
+    ),
+    (
+        "Stage9OfficialSourceDiscoveryFailedError",
+        "official_source_discovery_response_failed",
+    ),
+    (
+        "Stage9OfficialSourceDiscoveryNoSourcesError",
+        "official_source_discovery_no_sources",
+    ),
+    (
         "Stage9OpenAIOfficialSourceDiscoveryError",
         "official_source_discovery_failed",
     ),

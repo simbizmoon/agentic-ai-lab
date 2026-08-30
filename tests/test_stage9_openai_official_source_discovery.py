@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from app.research.stage9_openai_official_source_discovery import (
+    Stage9OfficialSourceDiscoveryIncompleteError,
+    Stage9OfficialSourceDiscoveryNoSourcesError,
     Stage9OpenAIOfficialSourceDiscovery,
     Stage9OpenAIOfficialSourceDiscoveryError,
 )
@@ -98,7 +100,49 @@ def test_rejects_noncompleted_discovery() -> None:
         model="gpt-5.6-terra",
     )
 
-    with pytest.raises(Stage9OpenAIOfficialSourceDiscoveryError, match="complete"):
+    with pytest.raises(Stage9OpenAIOfficialSourceDiscoveryError, match="sources"):
         discovery.discover(
+            query="NIST", allowed_domains=("nist.gov",), maximum_results=1
+        )
+
+
+def test_accepts_auditable_sources_from_an_incomplete_response() -> None:
+    discovery = Stage9OpenAIOfficialSourceDiscovery(
+        client=SimpleNamespace(
+            responses=FixtureResponses(
+                _response(
+                    _source("https://www.nist.gov/auditable"),
+                    status="incomplete",
+                )
+            )
+        ),
+        model="gpt-5.6-terra",
+    )
+
+    candidates = discovery.discover(
+        query="NIST", allowed_domains=("nist.gov",), maximum_results=1
+    )
+
+    assert [item.url for item in candidates] == ["https://www.nist.gov/auditable"]
+
+
+def test_distinguishes_incomplete_and_completed_responses_without_sources() -> None:
+    incomplete = Stage9OpenAIOfficialSourceDiscovery(
+        client=SimpleNamespace(
+            responses=FixtureResponses(_response(status="incomplete"))
+        ),
+        model="gpt-5.6-terra",
+    )
+    completed = Stage9OpenAIOfficialSourceDiscovery(
+        client=SimpleNamespace(responses=FixtureResponses(_response())),
+        model="gpt-5.6-terra",
+    )
+
+    with pytest.raises(Stage9OfficialSourceDiscoveryIncompleteError):
+        incomplete.discover(
+            query="NIST", allowed_domains=("nist.gov",), maximum_results=1
+        )
+    with pytest.raises(Stage9OfficialSourceDiscoveryNoSourcesError):
+        completed.discover(
             query="NIST", allowed_domains=("nist.gov",), maximum_results=1
         )
