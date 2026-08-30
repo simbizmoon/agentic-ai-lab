@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from app.research.bounded_scholarly_evidence_workflow import (
     BoundedScholarlyEvidenceWorkflow,
 )
@@ -19,11 +21,40 @@ from app.schemas.stage9_development_acquisition import (
 )
 from app.schemas.stage9_evaluation_manifest import Stage9EvaluationDomain
 
+_QUESTION_BOILERPLATE = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "between",
+        "components",
+        "define",
+        "defines",
+        "differ",
+        "do",
+        "does",
+        "how",
+        "original",
+        "formulation",
+        "the",
+        "what",
+        "which",
+    }
+)
+
 
 def _scholarly_search_query(question: str) -> str:
-    """Keep the locked question while removing its sentence-final wildcard."""
+    """Derive a concise provider query without adding golden evidence."""
 
-    query = question.removesuffix("?").strip()
+    tokens = re.findall(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*", question)
+    has_rag = any(token.casefold() == "rag" for token in tokens)
+    retained = [
+        token
+        for token in tokens
+        if token.casefold() != "rag" and token.casefold() not in _QUESTION_BOILERPLATE
+    ]
+    parts = (['"retrieval augmented generation"'] if has_rag else []) + retained
+    query = " ".join(parts).strip()
     if not query:
         raise ValueError("scholarly search query must not be blank")
     return query

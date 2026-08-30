@@ -149,7 +149,7 @@ def _adapter(provider: ScholarlyMetadataProvider):
     )
 
 
-def test_removes_terminal_wildcard_without_golden_source_injection() -> None:
+def test_builds_question_derived_keyphrase_query_without_golden_source() -> None:
     provider = DynamicFixtureProvider(ScholarlySearchStatus.SUCCEEDED)
     request = _request("academic-01")
     result = _adapter(provider).acquire(
@@ -159,12 +159,16 @@ def test_removes_terminal_wildcard_without_golden_source_injection() -> None:
 
     provider_request = provider.requests[0]
     assert request.question.endswith("?")
-    assert provider_request.query == request.question.removesuffix("?")
+    assert provider_request.query == (
+        '"retrieval augmented generation" parametric non-parametric'
+    )
     assert "?" not in provider_request.query
     assert provider_request.require_abstract is True
     assert provider_request.maximum_provider_requests == 1
     assert provider_request.metadata["golden_evidence_supplied"] == "false"
     assert "2005.11401" not in provider_request.query
+    assert "Lewis" not in provider_request.query
+    assert "doi.org" not in provider_request.query
     assert result.status is Stage9AcquisitionStatus.EVIDENCE_AVAILABLE
     assert len(result.evidence_set.evidence) == 1
     assert result.provider_requests == result.external_requests == 1
@@ -201,6 +205,10 @@ def test_cross_source_case_may_use_scholarly_channel() -> None:
     )
 
     assert result.status is Stage9AcquisitionStatus.EVIDENCE_AVAILABLE
+    query = provider.requests[0].query
+    assert query.startswith('"retrieval augmented generation"')
+    assert "AIRA roadmap" in query
+    assert "2005.11401" not in query
 
 
 def test_adapter_rejects_wrong_channel() -> None:
