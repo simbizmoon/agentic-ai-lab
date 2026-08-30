@@ -82,6 +82,16 @@ def test_classifies_known_provider_type_without_retaining_message() -> None:
 
 def test_classifies_stage9_runtime_boundaries_without_retaining_messages() -> None:
     cases = {
+        "Stage9TavilyTimeoutError": "official_web_provider_timeout",
+        "Stage9TavilyConnectionError": "official_web_provider_connection_failed",
+        "Stage9TavilyHttpStatusError": "official_web_provider_http_failed",
+        "Stage9TavilyResponseValidationError": (
+            "official_web_provider_response_invalid"
+        ),
+        "Stage9TavilyRawContentUnavailableError": (
+            "official_web_raw_content_unavailable"
+        ),
+        "Stage9TavilyBoundaryError": "official_web_provider_boundary_failed",
         "Stage9TavilyOfficialWebProviderError": "official_web_provider_failed",
         "Stage9OfficialWebAcquisitionError": "official_web_evidence_invalid",
         "Stage9DevelopmentAcquisitionRouterError": "acquisition_routing_failed",

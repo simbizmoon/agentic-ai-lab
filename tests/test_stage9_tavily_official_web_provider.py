@@ -10,8 +10,10 @@ import httpx
 import pytest
 
 from app.research.stage9_tavily_official_web_provider import (
+    Stage9TavilyBoundaryError,
+    Stage9TavilyHttpStatusError,
     Stage9TavilyOfficialWebProvider,
-    Stage9TavilyOfficialWebProviderError,
+    Stage9TavilyRawContentUnavailableError,
 )
 
 CONTENT = "# NIST AI RMF\n\nGovern, Map, Measure, and Manage are core functions."
@@ -83,12 +85,30 @@ def test_rejects_summary_fallback_when_raw_content_is_absent() -> None:
             200, json=_response(_result(raw_content=None)), request=request
         )
 
-    with pytest.raises(Stage9TavilyOfficialWebProviderError, match="raw content"):
+    with pytest.raises(Stage9TavilyRawContentUnavailableError, match="raw content"):
         _provider(handler).acquire(
             query="NIST AI RMF",
             allowed_domains=("nist.gov",),
             maximum_results=1,
         )
+
+
+def test_retains_valid_exact_document_when_another_result_lacks_raw_content() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_response(_result(raw_content=None), _result()),
+            request=request,
+        )
+
+    documents = _provider(handler).acquire(
+        query="NIST GAI profile",
+        allowed_domains=("nist.gov",),
+        maximum_results=2,
+    )
+
+    assert len(documents) == 1
+    assert documents[0].content == CONTENT
 
 
 @pytest.mark.parametrize(
@@ -99,7 +119,7 @@ def test_rejects_non_https_or_cross_domain_results(url: str) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_response(_result(url=url)), request=request)
 
-    with pytest.raises(Stage9TavilyOfficialWebProviderError, match="allowlist"):
+    with pytest.raises(Stage9TavilyBoundaryError, match="allowlist"):
         _provider(handler).acquire(
             query="NIST AI RMF",
             allowed_domains=("nist.gov",),
@@ -113,7 +133,7 @@ def test_rejects_provider_result_count_over_requested_boundary() -> None:
             200, json=_response(_result(), _result()), request=request
         )
 
-    with pytest.raises(Stage9TavilyOfficialWebProviderError, match="result boundary"):
+    with pytest.raises(Stage9TavilyBoundaryError, match="result boundary"):
         _provider(handler).acquire(
             query="NIST AI RMF",
             allowed_domains=("nist.gov",),
@@ -129,7 +149,7 @@ def test_maps_http_failure_without_retrying() -> None:
         calls += 1
         return httpx.Response(429, json={"detail": "limited"}, request=request)
 
-    with pytest.raises(Stage9TavilyOfficialWebProviderError, match="HTTP 429"):
+    with pytest.raises(Stage9TavilyHttpStatusError, match="HTTP 429"):
         _provider(handler).acquire(
             query="NIST AI RMF",
             allowed_domains=("nist.gov",),

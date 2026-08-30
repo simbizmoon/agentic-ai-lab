@@ -35,6 +35,30 @@ class Stage9TavilyOfficialWebProviderError(RuntimeError):
     """Tavily failed or returned data outside the locked Stage 9 boundary."""
 
 
+class Stage9TavilyTimeoutError(Stage9TavilyOfficialWebProviderError):
+    """Tavily exceeded the one-request timeout."""
+
+
+class Stage9TavilyConnectionError(Stage9TavilyOfficialWebProviderError):
+    """Tavily could not be reached."""
+
+
+class Stage9TavilyHttpStatusError(Stage9TavilyOfficialWebProviderError):
+    """Tavily returned a non-success HTTP status."""
+
+
+class Stage9TavilyResponseValidationError(Stage9TavilyOfficialWebProviderError):
+    """Tavily returned an invalid response envelope."""
+
+
+class Stage9TavilyRawContentUnavailableError(Stage9TavilyOfficialWebProviderError):
+    """No result retained exact raw content suitable for evidence."""
+
+
+class Stage9TavilyBoundaryError(Stage9TavilyOfficialWebProviderError):
+    """Tavily data crossed a locked count, size, or identity boundary."""
+
+
 class Stage9TavilyOfficialWebProvider:
     """Fetch exact markdown from explicitly allowlisted official domains once."""
 
@@ -91,34 +115,32 @@ class Stage9TavilyOfficialWebProvider:
             response.raise_for_status()
             envelope = _TavilyResponse.model_validate(response.json())
         except httpx.TimeoutException as exc:
-            raise Stage9TavilyOfficialWebProviderError("Tavily timed out") from exc
+            raise Stage9TavilyTimeoutError("Tavily timed out") from exc
         except httpx.RequestError as exc:
-            raise Stage9TavilyOfficialWebProviderError(
-                "Tavily could not be reached"
-            ) from exc
+            raise Stage9TavilyConnectionError("Tavily could not be reached") from exc
         except httpx.HTTPStatusError as exc:
-            raise Stage9TavilyOfficialWebProviderError(
+            raise Stage9TavilyHttpStatusError(
                 f"Tavily returned HTTP {exc.response.status_code}"
             ) from exc
         except (ValueError, ValidationError) as exc:
-            raise Stage9TavilyOfficialWebProviderError(
+            raise Stage9TavilyResponseValidationError(
                 "Tavily returned an invalid response envelope"
             ) from exc
 
         if len(envelope.results) > maximum_results:
-            raise Stage9TavilyOfficialWebProviderError(
+            raise Stage9TavilyBoundaryError(
                 "Tavily exceeded the requested result boundary"
             )
         retrieved_at = self._clock().isoformat()
         documents: list[Stage9OfficialWebDocument] = []
+        missing_raw_content = 0
         for result in envelope.results:
             content = result.raw_content
             if content is None or not content.strip():
-                raise Stage9TavilyOfficialWebProviderError(
-                    "Tavily result did not include exact raw content"
-                )
+                missing_raw_content += 1
+                continue
             if len(content.encode("utf-8")) > _MAXIMUM_DOCUMENT_BYTES:
-                raise Stage9TavilyOfficialWebProviderError(
+                raise Stage9TavilyBoundaryError(
                     "Tavily raw content exceeded the byte boundary"
                 )
             self._validate_url(result.url, allowed_domains)
@@ -131,6 +153,10 @@ class Stage9TavilyOfficialWebProvider:
                     response_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
                 )
             )
+        if envelope.results and not documents and missing_raw_content:
+            raise Stage9TavilyRawContentUnavailableError(
+                "Tavily results did not include exact raw content"
+            )
         return tuple(documents)
 
     @staticmethod
@@ -141,7 +167,7 @@ class Stage9TavilyOfficialWebProvider:
         if parsed.scheme != "https" or not any(
             host == domain or host.endswith(f".{domain}") for domain in allowed
         ):
-            raise Stage9TavilyOfficialWebProviderError(
+            raise Stage9TavilyBoundaryError(
                 "Tavily result URL was outside the allowlist"
             )
 
