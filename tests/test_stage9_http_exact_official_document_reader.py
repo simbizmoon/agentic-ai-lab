@@ -10,7 +10,9 @@ import pytest
 
 from app.research.stage9_http_exact_official_document_reader import (
     Stage9HttpExactOfficialDocumentReader,
-    Stage9HttpExactOfficialDocumentReaderError,
+    Stage9OfficialDocumentContentTypeError,
+    Stage9OfficialDocumentDomainError,
+    Stage9OfficialDocumentRedirectError,
 )
 
 CONTENT = b"<html><title>NIST</title><body>Exact GAI content.</body></html>"
@@ -48,7 +50,7 @@ def test_rejects_input_outside_allowlist_before_request() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError("request must not be sent")
 
-    with pytest.raises(Stage9HttpExactOfficialDocumentReaderError, match="allowlist"):
+    with pytest.raises(Stage9OfficialDocumentDomainError, match="allowlist"):
         _reader(handler).read(url="https://example.com/untrusted")
 
 
@@ -64,7 +66,7 @@ def test_does_not_follow_redirects() -> None:
             request=request,
         )
 
-    with pytest.raises(Stage9HttpExactOfficialDocumentReaderError, match="redirect"):
+    with pytest.raises(Stage9OfficialDocumentRedirectError, match="redirect"):
         _reader(handler).read(url="https://www.nist.gov/example")
 
     assert calls == 1
@@ -79,7 +81,5 @@ def test_rejects_nontext_content_without_using_it_as_evidence() -> None:
             request=request,
         )
 
-    with pytest.raises(
-        Stage9HttpExactOfficialDocumentReaderError, match="content type"
-    ):
+    with pytest.raises(Stage9OfficialDocumentContentTypeError, match="content type"):
         _reader(handler).read(url="https://nvlpubs.nist.gov/example.pdf")

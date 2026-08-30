@@ -82,6 +82,27 @@ def test_classifies_known_provider_type_without_retaining_message() -> None:
 
 def test_classifies_stage9_runtime_boundaries_without_retaining_messages() -> None:
     cases = {
+        "Stage9OfficialDocumentDomainError": "official_document_domain_failed",
+        "Stage9OfficialDocumentRedirectError": "official_document_redirected",
+        "Stage9OfficialDocumentTimeoutError": "official_document_timeout",
+        "Stage9OfficialDocumentConnectionError": (
+            "official_document_connection_failed"
+        ),
+        "Stage9OfficialDocumentHttpStatusError": "official_document_http_failed",
+        "Stage9OfficialDocumentContentTypeError": (
+            "official_document_type_unsupported"
+        ),
+        "Stage9OfficialDocumentContentBoundaryError": (
+            "official_document_content_boundary_failed"
+        ),
+        "Stage9OfficialDocumentDecodingError": "official_document_decoding_failed",
+        "Stage9HttpExactOfficialDocumentReaderError": "official_document_read_failed",
+        "Stage9OpenAIOfficialSourceDiscoveryError": (
+            "official_source_discovery_failed"
+        ),
+        "Stage9VerifiedOfficialSourceProviderError": (
+            "verified_official_source_failed"
+        ),
         "Stage9TavilyTimeoutError": "official_web_provider_timeout",
         "Stage9TavilyConnectionError": "official_web_provider_connection_failed",
         "Stage9TavilyHttpStatusError": "official_web_provider_http_failed",
