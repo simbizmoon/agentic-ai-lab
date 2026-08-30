@@ -10,9 +10,17 @@ _CLASS_CODE_PRIORITY = (
     ("RateLimitError", "provider_rate_limited"),
     ("APITimeoutError", "provider_timeout"),
     ("APIConnectionError", "provider_connection_failed"),
+    ("Stage9TavilyOfficialWebProviderError", "official_web_provider_failed"),
+    ("Stage9OfficialWebAcquisitionError", "official_web_evidence_invalid"),
+    ("Stage9DevelopmentAcquisitionRouterError", "acquisition_routing_failed"),
+    ("Stage9AcquisitionAwareResearchLoopError", "acquisition_loop_failed"),
+    ("Stage9PackedResearchLoopFactoryError", "packed_loop_composition_failed"),
+    ("Stage9DevelopmentCaseArtifactError", "artifact_persistence_failed"),
+    ("Stage9ConservativeCostEstimationError", "cost_estimation_failed"),
     ("Stage9PlannerUsageAccountingError", "planner_usage_accounting_failed"),
     ("PlannerClientError", "planner_output_invalid"),
     ("BoundedResearchPlanningLoopError", "planning_loop_failed"),
+    ("ValidationError", "contract_validation_failed"),
 )
 
 

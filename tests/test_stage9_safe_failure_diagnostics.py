@@ -80,6 +80,42 @@ def test_classifies_known_provider_type_without_retaining_message() -> None:
     assert secret not in code
 
 
+def test_classifies_stage9_runtime_boundaries_without_retaining_messages() -> None:
+    cases = {
+        "Stage9TavilyOfficialWebProviderError": "official_web_provider_failed",
+        "Stage9OfficialWebAcquisitionError": "official_web_evidence_invalid",
+        "Stage9DevelopmentAcquisitionRouterError": "acquisition_routing_failed",
+        "Stage9AcquisitionAwareResearchLoopError": "acquisition_loop_failed",
+        "Stage9PackedResearchLoopFactoryError": "packed_loop_composition_failed",
+        "Stage9DevelopmentCaseArtifactError": "artifact_persistence_failed",
+        "Stage9ConservativeCostEstimationError": "cost_estimation_failed",
+        "ValidationError": "contract_validation_failed",
+    }
+    secret = "secret-runtime-payload"
+
+    for class_name, expected in cases.items():
+        error_type = type(class_name, (RuntimeError,), {})
+        error = error_type(secret)
+        code = safe_stage9_failure_code(error)
+
+        assert code == expected
+        assert secret not in code
+
+
+def test_specific_inner_failure_wins_over_generic_outer_failure() -> None:
+    inner_type = type("Stage9OfficialWebAcquisitionError", (RuntimeError,), {})
+    outer_type = type("Stage9AcquisitionAwareResearchLoopError", (RuntimeError,), {})
+    try:
+        raise inner_type("secret-inner-message")
+    except RuntimeError as inner:
+        try:
+            raise outer_type("safe outer message") from inner
+        except RuntimeError as outer:
+            error = outer
+
+    assert safe_stage9_failure_code(error) == "official_web_evidence_invalid"
+
+
 def test_patched_runner_persists_only_safe_failure_code() -> None:
     runner = BoundedStage9DevelopmentBaselineRunner(
         experiment=load_approved_baseline(MANIFEST, REVIEW),
