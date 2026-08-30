@@ -1,5 +1,178 @@
 # AIRA CURRENT SYSTEM GUIDE
 
+> 현재 상태 기준일: 2026-08-30
+>
+> 현재 등급: **개인용 AI Research Agent Alpha — 제한적·감독형 사용 가능**
+>
+> 이 문서의 앞부분이 현재 운영 기준이며, 뒤의 2026-08-18 상세 내용은 구현 배경과 역사적 기준이다.
+
+## 0. 먼저 읽을 결론
+
+AIRA는 단순 프롬프트가 아니라 다음 실행 흐름을 코드로 연결한 AI Research Agent이다.
+
+```text
+질문
+→ 연구 계획
+→ 출처 경로 선택
+→ 자료 검색과 원문 획득
+→ 근거 묶음 구성
+→ 근거 기반 답변 생성
+→ 인용·품질 평가
+→ 사용량·추정 비용 기록
+→ 결과 저장
+```
+
+현재 AIRA는 실제로 실행되지만, 일반적인 질문을 완전히 자율적으로 맡길 수 있는 완성품은 아니다.
+Stage 9 Development 4건의 통합 실행은 완료됐으나 인간 품질 검토 결과는
+`ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`이었다. 따라서 다음 범위에서 사용하는 것이 안전하다.
+
+- 사용자가 신뢰할 문서나 정확한 출처를 직접 제공하는 조사
+- 로컬 문서, EPO 특허 원문, OpenAlex 학술 메타데이터처럼 획득 경로가 정해진 조사
+- 결과의 인용을 사용자가 직접 확인할 수 있는 개인 연구 보조
+- 요청 횟수와 비용 한도가 필요한 반복 실험
+
+다음 용도로는 아직 사용하지 않는다.
+
+- 결과를 검토하지 않는 완전 자율 연구
+- 법률 판단, 특허 침해·유효성 판단, 의료·재무 의사결정
+- “가장 좋은 원출처를 반드시 찾았다”는 보장이 필요한 조사
+- 최신성, 완전성 또는 규정 준수를 자동으로 보증하는 작업
+
+## 0.1 ChatGPT와 AIRA 중 무엇을 사용할까
+
+| 작업 | 권장 도구 |
+|---|---|
+| 빠른 설명, 아이디어, 일반 질문 | ChatGPT |
+| 대화하면서 넓게 탐색 | ChatGPT |
+| 지정한 로컬 문서만 근거로 답변 | AIRA `research` |
+| 웹과 승인한 로컬 자료를 함께 조사 | AIRA `research-integrated` |
+| 웹 원문과 인용을 파일로 남기는 조사 | AIRA `research-live` |
+| EPO 특허 기술 조사·비교 | AIRA 특허 명령 |
+| OpenAlex 학술 메타데이터·초록 획득 | AIRA 학술 명령 |
+| 사람 검토 없는 자율 결론 | 현재 사용하지 않음 |
+
+## 0.2 현재 실제 사용자 기능과 내부 평가 기능
+
+### 일반 사용자가 실행할 수 있는 기능
+
+```text
+aira research
+aira research-live
+aira research-integrated
+aira research-patent
+aira research-patent-compare
+aira research-scholarly-evidence
+aira cache
+```
+
+### 구현됐지만 일반 CLI 제품 기능은 아닌 것
+
+Stage 9의 잠금 데이터셋, baseline manifest, development runner, 비용 추정기,
+실패 진단기와 human-review sheet는 Agent의 품질을 개발자가 평가하기 위한 내부 장치다.
+이 기능이 존재한다고 해서 일반 연구 품질이 자동으로 보장되는 것은 아니다.
+
+## 0.3 가장 쉬운 실사용 시작 방법
+
+프로젝트 준비:
+
+```bash
+cd /home/moon/Project/agentic-ai-lab
+source .venv/bin/activate
+aira --help
+```
+
+첫 사용은 신뢰할 수 있는 비민감 로컬 문서로 시작한다.
+
+```bash
+aira research \
+  --mode deterministic \
+  --question "이 문서의 핵심 결정과 남은 문제는 무엇인가?" \
+  --source "$PWD/DECISIONS.md" \
+  --allowed-root "$PWD" \
+  --output-dir reports/my-first-research
+```
+
+이 모드는 외부 AI Provider에 문서 내용을 보내지 않는다. 더 강한 의미 분석이 필요하고
+해당 문서를 외부 Provider로 보내도 괜찮을 때만 다음처럼 실행한다.
+
+```bash
+aira research \
+  --mode semantic \
+  --question "이 문서에서 비용 통제 원칙을 설명해줘" \
+  --source "$PWD/DECISIONS.md" \
+  --allowed-root "$PWD" \
+  --approve-external-send \
+  --output-dir reports/semantic-cost-policy
+```
+
+`--approve-external-send`는 현재 실행에서 검증된 파일 내용의 외부 전송을 승인한다.
+비밀키, 개인정보, 계약상 비공개 자료에는 사용하지 않는다.
+
+## 0.4 현재 기능 지도
+
+| 경로 | 주요 자료 | 외부 요청 | 강점 | 주요 한계 |
+|---|---|---:|---|---|
+| Local deterministic | TXT/MD/PDF/HWPX | 없음 | 재현 가능, 저비용 | 의미 이해가 제한적 |
+| Local semantic | 승인한 로컬 문서 | 있음 | 의미 기반 근거·답변 | 외부 전송 승인 필요 |
+| Live Web | Tavily + 웹 원문 | 있음 | 실제 웹 조사 | 원출처 선택이 불안정할 수 있음 |
+| Integrated | 웹 + 승인 로컬 문서 | 있음 | 두 종류 근거 결합 | 비용·복잡성 증가 |
+| Patent | EPO OPS | 있음 | 정확한 공개번호·청구항 획득 | 법률 결론을 내리지 않음 |
+| Scholarly evidence | OpenAlex | 있음 | 메타데이터·초록 provenance | 논문 품질 평가나 최적 원문 보장 아님 |
+
+## 0.5 Stage 9에서 추가·검증된 핵심 능력
+
+- Development와 blind holdout 데이터 분리
+- 잠긴 실행 manifest와 구성 사전점검
+- 질문별 획득 경로 라우팅: 공식 웹, 학술, 특허, 로컬 저장소
+- 공식 웹의 discovery 후 exact-read 경로
+- HTML의 가시 텍스트 정제와 제한된 PDF 텍스트 추출
+- 근거 context 크기와 생성 token 한도
+- 최대 8개 비어 있지 않은 답변 줄과 line-bounded citation 지침
+- Provider 요청 수, 외부 요청 수, 기록 token, 추정 비용의 보수적 계측
+- 자동 재시도 금지, 한도 초과 전 중단, 안전한 실패 코드
+- 사례별 artifact 저장과 인간 품질 검토
+
+Stage 9 공식 Development baseline v4 실행 결과:
+
+```text
+cases: tech-01, academic-01, patent-01, cross-01
+run_status: completed
+cases_persisted: 4
+provider_requests: 16
+external_requests: 19
+recorded_tokens: 17,894
+estimated_cost_usd: 0.214728
+blind_holdout_cases_executed: 0
+```
+
+여기서 `estimated_cost_usd`는 기록된 token과 가격표로 계산한 추정치다.
+실제 청구 금액이 아니며 invoice 검증도 아니다.
+
+## 0.6 현재 알려진 품질 한계
+
+1. **출처 발견**: 검색이 관련 문서를 찾더라도 질문에 가장 적합한 최초·원출처를 놓칠 수 있다.
+2. **답변 완전성**: 인용 형식이 맞아도 질문의 모든 부분을 충분히 답하지 못할 수 있다.
+3. **평가 통과율**: Development 인간 검토는 4건 중 1건만 바로 승인됐다.
+4. **일반화 미검증**: blind holdout 6건은 열거나 실행하지 않았다.
+5. **Provider 의존성**: OpenAI, Tavily, OpenAlex, EPO 상태와 응답 형식에 영향을 받는다.
+6. **비용 권위**: 사용량은 관측할 수 있지만 비용은 추정치이며 실제 청구와 구분한다.
+7. **짧은 답변**: Stage 9 경로는 인용 예산을 맞추기 위해 최대 8줄로 제한될 수 있다.
+8. **자동 복구 제한**: 안전을 위해 자동 재시도를 금지한 실행에서는 사람이 실패 원인을 보고 다시 실행한다.
+
+## 0.7 개인용 운영 원칙
+
+1. 일반 질문은 먼저 ChatGPT에 묻는다.
+2. AIRA는 출처 통제, 파일 기록 또는 반복 실행이 필요한 작업에 쓴다.
+3. 중요한 조사에는 사용자가 알고 있는 출처를 직접 제공한다.
+4. `report.md`만 읽지 말고 인용된 원문 위치를 표본 확인한다.
+5. `result.json`의 상태와 요청 수, 추정 비용을 함께 확인한다.
+6. 답변이 부족하면 곧바로 반복 호출하지 말고 질문·출처·목표 중 무엇이 잘못됐는지 먼저 판단한다.
+7. 법률·규정·의료·재무 판단에는 전문가 검토 없이 사용하지 않는다.
+
+---
+
+## 역사적 상세 가이드 시작 — 2026-08-18 기준
+
 ## 1. 문서 목적
 
 본 문서는 2026-08-18 현재 `/home/moon/Project/agentic-ai-lab` 저장소에 구현·검증된

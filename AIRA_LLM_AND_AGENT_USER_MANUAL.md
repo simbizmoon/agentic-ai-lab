@@ -1,5 +1,257 @@
 # AIRA Local LLM / OpenAI LLM / Agent 사용 매뉴얼
 
+> 현재 운영 기준일: 2026-08-30
+>
+> 대상: AIRA를 혼자 실제로 사용하려는 사용자
+>
+> 권장 방식: **필요한 명령만 실행하고 결과를 사람이 확인하는 Lean Personal Mode**
+
+## 0. 5분 사용 안내
+
+### 0.1 AIRA란 무엇인가
+
+AIRA는 OpenAI 또는 Local LLM 하나를 단순히 호출하는 프로그램이 아니다. 질문을 받고,
+자료를 구하고, 근거를 골라 답변을 만들고, 인용과 사용량을 기록하는 연구 작업 흐름이다.
+현재는 실행 가능한 Alpha 버전이며 사람의 감독이 필요하다.
+
+### 0.2 매번 공통으로 하는 준비
+
+```bash
+cd /home/moon/Project/agentic-ai-lab
+source .venv/bin/activate
+aira --help
+```
+
+실제 외부 서비스를 사용하는 명령은 `.env`의 credential이 필요할 수 있다.
+비밀값을 화면이나 로그에 출력하지 않는다.
+
+```bash
+set -a
+source .env
+set +a
+```
+
+환경변수가 현재 shell에 이미 설정돼 있다면 이 과정은 반복하지 않아도 된다.
+
+### 0.3 목적에 따라 명령 고르기
+
+| 내가 하려는 일 | 사용할 명령 |
+|---|---|
+| 내 문서만 안전하게 요약·조사 | `aira research --mode deterministic` |
+| 내 문서를 의미 기반으로 분석 | `aira research --mode semantic` |
+| 인터넷 자료 조사 | `aira research-live` |
+| 인터넷과 내 문서를 함께 조사 | `aira research-integrated` |
+| 특허 기술 조사 | `aira research-patent` |
+| 명시한 특허끼리 청구항 비교 | `aira research-patent-compare` |
+| 논문 메타데이터와 초록 획득 | `aira research-scholarly-evidence` |
+| 캐시 상태 확인 | `aira cache status` |
+
+## 0.4 가장 권장하는 개인용 사용 순서
+
+```text
+1. 질문을 한 문장으로 적는다.
+2. 원하는 결과를 objective로 구체화한다.
+3. 가능하면 신뢰할 출처를 직접 준비한다.
+4. 가장 작은 요청 한도로 한 번 실행한다.
+5. report.md를 읽는다.
+6. 인용 원문을 직접 확인한다.
+7. result.json에서 상태·요청 수·추정 비용을 확인한다.
+8. 부족하면 원인을 고친 뒤에만 다시 실행한다.
+```
+
+## 0.5 실전 예제
+
+### 예제 A — 외부 전송 없는 로컬 문서 조사
+
+```bash
+aira research \
+  --mode deterministic \
+  --question "현재 프로젝트의 확정된 비용 통제 원칙은 무엇인가?" \
+  --objective "DECISIONS.md에 기록된 원칙만 근거로 핵심 내용을 설명한다." \
+  --source "$PWD/DECISIONS.md" \
+  --allowed-root "$PWD" \
+  --output-dir reports/personal-cost-policy
+```
+
+이 명령은 첫 실사용에 가장 적합하다. 문서를 외부 AI Provider로 보내지 않지만 의미 기반
+생성 품질은 semantic 모드보다 제한될 수 있다.
+
+### 예제 B — 승인한 문서의 의미 기반 조사
+
+```bash
+aira research \
+  --mode semantic \
+  --question "측정 사용량, 추정 비용, 청구 비용을 어떻게 구분해야 하는가?" \
+  --objective "정의, 권위, 기록 위치와 주의점을 구분해 설명한다." \
+  --source "$PWD/DECISIONS.md" \
+  --allowed-root "$PWD" \
+  --approve-external-send \
+  --output-dir reports/semantic-cost-authority
+```
+
+실행 전에 문서가 외부 Provider로 전송돼도 되는지 반드시 확인한다.
+
+### 예제 C — 제한된 웹 조사
+
+```bash
+aira research-live \
+  --question "NIST AI RMF는 생성형 AI 위험 관리를 어떻게 설명하는가?" \
+  --objective "NIST 공식 자료를 우선해 핵심 개념과 한계를 요약한다." \
+  --maximum-sources 3 \
+  --maximum-bytes 1000000 \
+  --output-dir reports/nist-ai-rmf
+```
+
+검색 결과가 공식 원문인지와 질문의 모든 부분을 답했는지는 사용자가 다시 확인한다.
+
+### 예제 D — 웹과 로컬 문서 결합
+
+```bash
+aira research-integrated \
+  --question "현재 외부 기준과 우리 프로젝트의 비용 통제 원칙은 어떻게 다른가?" \
+  --objective "웹 근거와 DECISIONS.md 근거를 구분해 비교한다." \
+  --source "$PWD/DECISIONS.md" \
+  --allowed-root "$PWD" \
+  --approve-external-send \
+  --maximum-sources 4 \
+  --maximum-bytes 1000000 \
+  --output-dir reports/integrated-cost-policy
+```
+
+### 예제 E — 특허 기술 조사
+
+```bash
+aira research-patent \
+  --question "이 기술 개념과 관련된 EPO 공개 문헌의 기술적 특징은 무엇인가?" \
+  --objective "기술적 관련성만 설명하고 법률 결론은 내리지 않는다." \
+  --maximum-search-results 5 \
+  --maximum-sources 3 \
+  --maximum-bytes 1000000
+```
+
+특허 경로는 기술적 조사 도구다. 신규성, 진보성, 침해 또는 유효성에 관한 법률 의견이 아니다.
+
+### 예제 F — 정확한 특허 공개번호 비교
+
+```bash
+aira research-patent-compare \
+  --target-publication EP1000000B1 \
+  --comparison-publication EP1000000A1 \
+  --comparison-publication EP1000000B1 \
+  --claim-language EN \
+  --claim-number 1 \
+  --maximum-claim-elements 1 \
+  --maximum-mapping-calls 2 \
+  --output-dir reports/patent-comparisons
+```
+
+비교 공개번호는 2~4개를 명시한다. 출력은 기술적 evidence mapping이지 특허 순위나 법률 결론이 아니다.
+
+### 예제 G — 학술자료 획득
+
+```bash
+aira research-scholarly-evidence \
+  --query "retrieval-augmented generation" \
+  --maximum-results 5 \
+  --maximum-provider-requests 1 \
+  --require-abstract \
+  --output-dir reports/scholarly-evidence
+```
+
+OpenAlex가 반환한 메타데이터와 초록을 보존한다. 이 명령은 최고의 논문을 자동 선정하거나
+논문의 주장 품질을 평가하지 않는다.
+
+## 0.6 출력 읽는 법
+
+일반 연구 경로의 대표 출력은 다음 두 파일이다.
+
+- `report.md`: 사람이 읽는 답변과 인용
+- `result.json`: 상태, 근거 provenance, 평가, 사용량 등 기계 판독 기록
+
+확인 순서:
+
+1. 실행 상태가 성공인지 확인한다.
+2. 답변이 실제 질문을 모두 다루는지 읽는다.
+3. 핵심 주장 2~3개의 인용이 원문을 정말 지지하는지 확인한다.
+4. 공식·1차 출처인지 확인한다.
+5. Provider 요청 수와 token 사용량을 확인한다.
+6. 비용 값이 `estimated`인지 `billed`인지 구분한다.
+
+`PASS`는 해당 프로그램 검사가 통과했다는 뜻이다. 사실의 완전성, 법률 결론, 규정 준수 또는
+사람의 품질 승인을 자동으로 의미하지 않는다.
+
+## 0.7 Local LLM, OpenAI, Agent의 차이
+
+- **Local LLM**: 내 PC에서 실행되는 언어 모델이다. 비용과 데이터 통제가 유리하지만 판단 품질이 낮을 수 있다.
+- **OpenAI LLM**: 외부 API로 실행되는 모델이다. 더 강한 판단을 기대할 수 있지만 외부 전송과 비용이 발생한다.
+- **AIRA Agent**: LLM 자체가 아니라, LLM과 검색·원문 읽기·평가·저장을 순서와 한도 안에서 연결한 프로그램이다.
+
+현재 권장 Local bounded worker는 `qwen3.5:4b`이다. 설치된 더 큰 모델이 자동으로 더 좋은
+AIRA worker라는 뜻은 아니다.
+
+## 0.8 권장 운영 프로필
+
+### Profile 1 — 개인용 안전 모드
+
+- 로컬 deterministic 우선
+- 신뢰할 문서를 사용자가 직접 제공
+- 외부 전송 없음
+- 결과의 핵심 인용을 직접 확인
+
+### Profile 2 — 개인용 품질 모드
+
+- semantic 또는 integrated 사용
+- 비민감 문서만 명시적으로 외부 전송 승인
+- 작은 source/request 한도
+- 실행 후 비용과 품질 확인
+
+### Profile 3 — 개발·평가 모드
+
+- Stage 9 manifest, runner, dataset, human review 사용
+- 일반 일상 사용자가 아니라 Agent 개발자가 회귀와 품질을 비교할 때 사용
+- baseline 실행 성공을 제품 품질 승인으로 해석하지 않음
+
+## 0.9 현재 하지 말아야 할 것
+
+- 같은 실패를 원인 확인 없이 유료로 반복 실행
+- 민감한 로컬 파일에 `--approve-external-send` 사용
+- `estimated_cost`를 실제 청구 금액으로 기록
+- 검색 결과 첫 문서를 자동으로 정답 원출처라고 가정
+- 인용 형식 통과를 답변 완전성 통과로 간주
+- Stage 9 blind holdout을 개발 중에 열어 튜닝 자료로 사용
+- 특허 결과를 법률 의견으로 사용
+
+## 0.10 문제 해결
+
+### Credential 오류
+
+`.env`를 읽었는지 확인하되 키 값 자체는 출력하지 않는다. 어떤 환경변수가 필요한지는
+실행 명령의 오류와 프로젝트 설정을 확인한다.
+
+### Provider 400 오류
+
+무작정 재시도하지 않는다. 요청 schema, query 형식 또는 지원 옵션이 현재 Provider 계약과
+맞는지 먼저 확인한다.
+
+### 자료는 찾았지만 답변이 부족함
+
+검색 횟수를 먼저 늘리지 않는다. 질문이 너무 넓은지, 원출처가 맞는지, objective가 필요한
+결과를 구체적으로 말하는지 확인한다.
+
+### 비용을 알고 싶음
+
+기록된 token과 `estimated_cost`는 계획·통제용이다. 실제 비용 확인은 Provider 청구 기록을
+별도로 확인해야 한다.
+
+### AIRA가 ChatGPT보다 불편함
+
+일반 질문에는 ChatGPT를 사용해도 된다. AIRA는 출처 통제, 결과 파일, 반복 가능성 또는
+비용 상한이 실질적으로 필요한 작업에만 사용한다.
+
+---
+
+## 역사적 상세 매뉴얼 시작 — 2026-08-18 기준
+
 - 기준일: 2026-08-18
 - 프로젝트: Agentic AI Lab / AIRA
 - 프로젝트 경로: `/home/moon/Project/agentic-ai-lab`
