@@ -82,6 +82,7 @@ def test_expands_gai_terms_and_uses_nist_allowlist_without_golden_source() -> No
     assert "Generative Artificial Intelligence" in query
     assert "risk management profile" in query
     assert "suggested actions" in query
+    assert query.endswith("site:nist.gov")
     assert "https://" not in query
     assert domains == ("nist.gov",)
     assert maximum_results == 2
@@ -96,8 +97,16 @@ def test_expands_gai_terms_and_uses_nist_allowlist_without_golden_source() -> No
         )
 
 
-def test_non_gai_provider_query_is_not_expanded() -> None:
+def test_non_gai_nist_query_gets_only_the_domain_lock() -> None:
     question = "Which NIST controls are relevant?"
+
+    assert Stage9OfficialWebAcquisitionAdapter._provider_query(question) == (
+        f"{question} site:nist.gov"
+    )
+
+
+def test_non_nist_query_does_not_get_the_nist_domain_lock() -> None:
+    question = "Which OpenAI controls are relevant?"
 
     assert Stage9OfficialWebAcquisitionAdapter._provider_query(question) == question
 

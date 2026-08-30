@@ -136,14 +136,16 @@ class Stage9OfficialWebAcquisitionAdapter:
     @staticmethod
     def _provider_query(question: str) -> str:
         normalized = question.casefold()
-        if re.search(r"\bnist\b", normalized) and (
-            re.search(r"\bgai\b", normalized)
-            or "generative artificial intelligence" in normalized
-        ):
-            return (
-                f"{question} NIST Generative Artificial Intelligence "
-                "risk management profile suggested actions"
-            )
+        if re.search(r"\bnist\b", normalized):
+            domain_lock = "site:nist.gov"
+            if re.search(r"\bgai\b", normalized) or (
+                "generative artificial intelligence" in normalized
+            ):
+                return (
+                    f"{question} NIST Generative Artificial Intelligence "
+                    f"risk management profile suggested actions {domain_lock}"
+                )
+            return f"{question} {domain_lock}"
         return question
 
     @staticmethod
