@@ -5,15 +5,20 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from datetime import UTC, datetime
+from io import BytesIO
 from urllib.parse import urlsplit
 
 import httpx
+from pypdf import PdfReader
+from pypdf.errors import PyPdfError
 
 from app.research.stage9_official_web_acquisition_adapter import (
     Stage9OfficialWebDocument,
 )
 
-_MAXIMUM_DOCUMENT_BYTES = 512_000
+_MAXIMUM_RESPONSE_BYTES = 5_000_000
+_MAXIMUM_EXTRACTED_TEXT_BYTES = 512_000
+_MAXIMUM_PDF_PAGES = 100
 _ALLOWED_CONTENT_TYPES = frozenset({"text/html", "text/plain", "application/xhtml+xml"})
 
 
@@ -55,6 +60,10 @@ class Stage9OfficialDocumentContentBoundaryError(
 
 class Stage9OfficialDocumentDecodingError(Stage9HttpExactOfficialDocumentReaderError):
     """An exact official document could not be decoded safely."""
+
+
+class Stage9OfficialDocumentPdfError(Stage9HttpExactOfficialDocumentReaderError):
+    """An official PDF could not produce bounded, extractable text."""
 
 
 class Stage9HttpExactOfficialDocumentReader:
@@ -101,23 +110,26 @@ class Stage9HttpExactOfficialDocumentReader:
 
         self._validate_url(str(response.url))
         content_type = response.headers.get("content-type", "").split(";", 1)[0].strip()
-        if content_type not in _ALLOWED_CONTENT_TYPES:
+        if content_type not in {*_ALLOWED_CONTENT_TYPES, "application/pdf"}:
             raise Stage9OfficialDocumentContentTypeError(
                 "official document content type is not exact text"
             )
-        if not response.content or len(response.content) > _MAXIMUM_DOCUMENT_BYTES:
+        if not response.content or len(response.content) > _MAXIMUM_RESPONSE_BYTES:
             raise Stage9OfficialDocumentContentBoundaryError(
                 "official document crossed the byte boundary"
             )
-        try:
-            content = response.content.decode(response.encoding or "utf-8")
-        except UnicodeDecodeError as error:
-            raise Stage9OfficialDocumentDecodingError(
-                "official document text decoding failed"
-            ) from error
+        content = (
+            self._extract_pdf_text(response.content)
+            if content_type == "application/pdf"
+            else self._decode_text(response)
+        )
         if not content.strip():
             raise Stage9OfficialDocumentContentBoundaryError(
                 "official document content is blank"
+            )
+        if len(content.encode("utf-8")) > _MAXIMUM_EXTRACTED_TEXT_BYTES:
+            raise Stage9OfficialDocumentContentBoundaryError(
+                "official document extracted text crossed the byte boundary"
             )
         return Stage9OfficialWebDocument(
             url=str(response.url),
@@ -126,6 +138,40 @@ class Stage9HttpExactOfficialDocumentReader:
             retrieved_at=self._clock().isoformat(),
             response_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
         )
+
+    @staticmethod
+    def _decode_text(response: httpx.Response) -> str:
+        try:
+            return response.content.decode(response.encoding or "utf-8")
+        except UnicodeDecodeError as error:
+            raise Stage9OfficialDocumentDecodingError(
+                "official document text decoding failed"
+            ) from error
+
+    @staticmethod
+    def _extract_pdf_text(content: bytes) -> str:
+        try:
+            reader = PdfReader(BytesIO(content))
+            if reader.is_encrypted:
+                raise Stage9OfficialDocumentPdfError(
+                    "encrypted official PDF is unsupported"
+                )
+            if len(reader.pages) > _MAXIMUM_PDF_PAGES:
+                raise Stage9OfficialDocumentPdfError(
+                    "official PDF crossed the page boundary"
+                )
+            pages = [(page.extract_text() or "").strip() for page in reader.pages]
+        except Stage9OfficialDocumentPdfError:
+            raise
+        except (OSError, PyPdfError) as error:
+            raise Stage9OfficialDocumentPdfError(
+                "official PDF could not be parsed"
+            ) from error
+        if not any(pages):
+            raise Stage9OfficialDocumentPdfError(
+                "official PDF contains no extractable text"
+            )
+        return "\n\n".join(page for page in pages if page)
 
     def _get(self, url: str) -> httpx.Response:
         kwargs = {"timeout": self._timeout_seconds, "follow_redirects": False}

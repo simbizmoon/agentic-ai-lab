@@ -21,6 +21,7 @@ _CLASS_CODE_PRIORITY = (
         "official_document_content_boundary_failed",
     ),
     ("Stage9OfficialDocumentDecodingError", "official_document_decoding_failed"),
+    ("Stage9OfficialDocumentPdfError", "official_document_pdf_failed"),
     (
         "Stage9HttpExactOfficialDocumentReaderError",
         "official_document_read_failed",

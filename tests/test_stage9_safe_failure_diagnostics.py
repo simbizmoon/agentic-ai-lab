@@ -105,6 +105,7 @@ def test_classifies_stage9_runtime_boundaries_without_retaining_messages() -> No
             "official_document_content_boundary_failed"
         ),
         "Stage9OfficialDocumentDecodingError": "official_document_decoding_failed",
+        "Stage9OfficialDocumentPdfError": "official_document_pdf_failed",
         "Stage9HttpExactOfficialDocumentReaderError": "official_document_read_failed",
         "Stage9OpenAIOfficialSourceDiscoveryError": (
             "official_source_discovery_failed"
