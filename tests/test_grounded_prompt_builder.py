@@ -101,6 +101,7 @@ def test_system_instructions_match_line_bounded_citation_validation() -> None:
     assert "only one factual claim on each line" in instructions
     assert "separate heading or bullet line" in instructions
     assert "evidence boundary on one cited line" in instructions
+    assert "at most 8 nonblank answer lines" in instructions
 
 
 def test_system_instructions_reject_document_instructions() -> None:

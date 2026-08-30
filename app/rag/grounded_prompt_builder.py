@@ -28,6 +28,7 @@ does not contain enough information.
 9. Put only one factual claim on each line; split claims that require different evidence.
 10. Do not emit a separate heading or bullet line unless that same line contains its supporting citation.
 11. If the evidence answers only part of the question, state the evidence boundary on one cited line.
+12. When evidence is supplied, use at most 8 nonblank answer lines.
 """
 
 
