@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.planning.openai_responses_protocol import (
     OpenAIResponsesClient,
 )
+from app.planning.openai_strict_json_schema import to_openai_strict_json_schema
 from app.planning.planner_client import (
     PlannerClient,
     PlannerClientError,
@@ -42,9 +43,7 @@ class OpenAIPlannerClient(PlannerClient):
     ) -> None:
         self._client = client
         self._config = config or PlannerClientConfig()
-        self._validator = (
-            validator or PlannerOutputValidator()
-        )
+        self._validator = validator or PlannerOutputValidator()
 
     @property
     def config(self) -> PlannerClientConfig:
@@ -84,19 +83,16 @@ class OpenAIPlannerClient(PlannerClient):
                 "format": {
                     "type": "json_schema",
                     "name": "plan_draft_output",
-                    "description": (
-                        "Structured steps for an executable "
-                        "agent plan."
-                    ),
+                    "description": ("Structured steps for an executable agent plan."),
                     "strict": True,
                     "schema": (
-                        PlanDraftOutput.model_json_schema()
+                        to_openai_strict_json_schema(
+                            PlanDraftOutput.model_json_schema()
+                        )
                     ),
                 }
             },
-            max_output_tokens=(
-                self.config.max_output_tokens
-            ),
+            max_output_tokens=(self.config.max_output_tokens),
             store=self.config.store,
             **self._reasoning_arguments(),
         )
@@ -108,23 +104,16 @@ class OpenAIPlannerClient(PlannerClient):
         )
 
         if not isinstance(raw_output, str):
-            raise PlannerClientError(
-                "OpenAI response did not contain output_text"
-            )
+            raise PlannerClientError("OpenAI response did not contain output_text")
 
         if not raw_output.strip():
-            raise PlannerClientError(
-                "OpenAI planner returned blank output"
-            )
+            raise PlannerClientError("OpenAI planner returned blank output")
 
         try:
-            output = PlanDraftOutput.model_validate_json(
-                raw_output
-            )
+            output = PlanDraftOutput.model_validate_json(raw_output)
         except ValidationError as exc:
             raise PlannerClientError(
-                "OpenAI planner output failed "
-                "PlanDraftOutput validation"
+                "OpenAI planner output failed PlanDraftOutput validation"
             ) from exc
 
         validation = self.validator.validate(
@@ -153,11 +142,7 @@ class OpenAIPlannerClient(PlannerClient):
         if self.config.reasoning_effort is None:
             return {}
 
-        return {
-            "reasoning": {
-                "effort": self.config.reasoning_effort
-            }
-        }
+        return {"reasoning": {"effort": self.config.reasoning_effort}}
 
     @staticmethod
     def _validate_prompt_request(
@@ -168,25 +153,16 @@ class OpenAIPlannerClient(PlannerClient):
         """Validate prompt metadata against its request."""
 
         if prompt.maximum_steps != request.maximum_steps:
-            raise PlannerClientError(
-                "prompt maximum_steps does not match request"
-            )
+            raise PlannerClientError("prompt maximum_steps does not match request")
 
         if prompt.available_tools != request.available_tools:
-            raise PlannerClientError(
-                "prompt available_tools do not match request"
-            )
+            raise PlannerClientError("prompt available_tools do not match request")
 
-        if [
-            message.role
-            for message in prompt.messages
-        ] != [
+        if [message.role for message in prompt.messages] != [
             PlannerPromptRole.SYSTEM,
             PlannerPromptRole.USER,
         ]:
-            raise PlannerClientError(
-                "planner prompt role order is invalid"
-            )
+            raise PlannerClientError("planner prompt role order is invalid")
 
     @staticmethod
     def _optional_text_attribute(
