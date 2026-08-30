@@ -149,7 +149,7 @@ def _adapter(provider: ScholarlyMetadataProvider):
     )
 
 
-def test_uses_exact_case_question_without_golden_source_injection() -> None:
+def test_removes_terminal_wildcard_without_golden_source_injection() -> None:
     provider = DynamicFixtureProvider(ScholarlySearchStatus.SUCCEEDED)
     request = _request("academic-01")
     result = _adapter(provider).acquire(
@@ -158,7 +158,9 @@ def test_uses_exact_case_question_without_golden_source_injection() -> None:
     )
 
     provider_request = provider.requests[0]
-    assert provider_request.query == request.question
+    assert request.question.endswith("?")
+    assert provider_request.query == request.question.removesuffix("?")
+    assert "?" not in provider_request.query
     assert provider_request.require_abstract is True
     assert provider_request.maximum_provider_requests == 1
     assert provider_request.metadata["golden_evidence_supplied"] == "false"

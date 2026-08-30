@@ -20,6 +20,15 @@ from app.schemas.stage9_development_acquisition import (
 from app.schemas.stage9_evaluation_manifest import Stage9EvaluationDomain
 
 
+def _scholarly_search_query(question: str) -> str:
+    """Keep the locked question while removing its sentence-final wildcard."""
+
+    query = question.removesuffix("?").strip()
+    if not query:
+        raise ValueError("scholarly search query must not be blank")
+    return query
+
+
 class Stage9ScholarlyAcquisitionAdapter:
     """Use only a case question to obtain bounded whole-abstract evidence."""
 
@@ -44,7 +53,7 @@ class Stage9ScholarlyAcquisitionAdapter:
 
         provider_request = ScholarlySearchRequest(
             request_id=request.request_id,
-            query=request.question,
+            query=_scholarly_search_query(request.question),
             maximum_results=min(request.budget.maximum_documents, 4),
             maximum_provider_requests=1,
             require_abstract=True,
