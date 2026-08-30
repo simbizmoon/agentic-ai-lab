@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Protocol
 
+from app.evals.stage9_safe_failure_diagnostics import safe_stage9_failure_code
 from app.schemas.provider_cost import CostKind
 from app.schemas.stage9_baseline_runtime_stack import Stage9LockedBaselineExperiment
 from app.schemas.stage9_development_baseline_run import (
@@ -93,7 +94,7 @@ class BoundedStage9DevelopmentBaselineRunner:
                     records=records,
                     status=Stage9DevelopmentRunStatus.FAILED,
                     budget_exhausted=False,
-                    reason=f"case executor failed safely: {type(error).__name__}",
+                    reason=f"case executor failed safely: {safe_stage9_failure_code(error)}",
                 )
             if not isinstance(record, Stage9DevelopmentCaseRecord):
                 raise Stage9DevelopmentBaselineRunnerError(
