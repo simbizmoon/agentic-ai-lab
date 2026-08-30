@@ -102,7 +102,7 @@ class Stage9OfficialWebAcquisitionAdapter:
         allowed_domains = self._domains_from_question(request.question)
         maximum_results = min(request.budget.maximum_documents, 2)
         documents = self._provider.acquire(
-            query=request.question,
+            query=self._provider_query(request.question),
             allowed_domains=allowed_domains,
             maximum_results=maximum_results,
         )
@@ -132,6 +132,19 @@ class Stage9OfficialWebAcquisitionAdapter:
             channel=channel,
             documents=documents,
         )
+
+    @staticmethod
+    def _provider_query(question: str) -> str:
+        normalized = question.casefold()
+        if re.search(r"\bnist\b", normalized) and (
+            re.search(r"\bgai\b", normalized)
+            or "generative artificial intelligence" in normalized
+        ):
+            return (
+                f"{question} NIST Generative Artificial Intelligence "
+                "risk management profile suggested actions"
+            )
+        return question
 
     @staticmethod
     def _domains_from_question(question: str) -> tuple[str, ...]:

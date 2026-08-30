@@ -69,7 +69,7 @@ class FixtureOfficialProvider:
         return self.documents
 
 
-def test_uses_question_and_nist_allowlist_without_golden_source() -> None:
+def test_expands_gai_terms_and_uses_nist_allowlist_without_golden_source() -> None:
     provider = FixtureOfficialProvider((_document(),))
     request = _request()
     result = Stage9OfficialWebAcquisitionAdapter(provider=provider).acquire(
@@ -78,7 +78,11 @@ def test_uses_question_and_nist_allowlist_without_golden_source() -> None:
     )
 
     query, domains, maximum_results = provider.calls[0]
-    assert query == request.question
+    assert query.startswith(request.question)
+    assert "Generative Artificial Intelligence" in query
+    assert "risk management profile" in query
+    assert "suggested actions" in query
+    assert "https://" not in query
     assert domains == ("nist.gov",)
     assert maximum_results == 2
     assert result.status is Stage9AcquisitionStatus.EVIDENCE_AVAILABLE
@@ -90,6 +94,12 @@ def test_uses_question_and_nist_allowlist_without_golden_source() -> None:
         assert document.content[evidence.start_character : evidence.end_character] == (
             evidence.excerpt
         )
+
+
+def test_non_gai_provider_query_is_not_expanded() -> None:
+    question = "Which NIST controls are relevant?"
+
+    assert Stage9OfficialWebAcquisitionAdapter._provider_query(question) == question
 
 
 def test_rejects_nonofficial_or_cross_domain_result() -> None:
