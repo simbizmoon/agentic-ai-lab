@@ -149,7 +149,7 @@ def _adapter(provider: ScholarlyMetadataProvider):
     )
 
 
-def test_builds_question_derived_keyphrase_query_without_golden_source() -> None:
+def test_builds_question_derived_canonical_topic_query_without_golden() -> None:
     provider = DynamicFixtureProvider(ScholarlySearchStatus.SUCCEEDED)
     request = _request("academic-01")
     result = _adapter(provider).acquire(
@@ -159,9 +159,7 @@ def test_builds_question_derived_keyphrase_query_without_golden_source() -> None
 
     provider_request = provider.requests[0]
     assert request.question.endswith("?")
-    assert provider_request.query == (
-        '"retrieval augmented generation" parametric non-parametric'
-    )
+    assert provider_request.query == '"retrieval-augmented generation"'
     assert "?" not in provider_request.query
     assert provider_request.require_abstract is True
     assert provider_request.maximum_provider_requests == 1
@@ -206,9 +204,12 @@ def test_cross_source_case_may_use_scholarly_channel() -> None:
 
     assert result.status is Stage9AcquisitionStatus.EVIDENCE_AVAILABLE
     query = provider.requests[0].query
-    assert query.startswith('"retrieval augmented generation"')
-    assert "AIRA roadmap" in query
+    assert query == '"retrieval-augmented generation"'
+    assert "AIRA" not in query
+    assert "roadmap" not in query
     assert "2005.11401" not in query
+    assert "Lewis" not in query
+    assert "doi.org" not in query
 
 
 def test_adapter_rejects_wrong_channel() -> None:

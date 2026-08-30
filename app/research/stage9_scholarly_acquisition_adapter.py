@@ -48,13 +48,13 @@ def _scholarly_search_query(question: str) -> str:
 
     tokens = re.findall(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*", question)
     has_rag = any(token.casefold() == "rag" for token in tokens)
-    retained = [
-        token
-        for token in tokens
-        if token.casefold() != "rag" and token.casefold() not in _QUESTION_BOILERPLATE
-    ]
-    parts = (['"retrieval augmented generation"'] if has_rag else []) + retained
-    query = " ".join(parts).strip()
+    if has_rag:
+        query = '"retrieval-augmented generation"'
+    else:
+        retained = [
+            token for token in tokens if token.casefold() not in _QUESTION_BOILERPLATE
+        ]
+        query = " ".join(retained).strip()
     if not query:
         raise ValueError("scholarly search query must not be blank")
     return query
