@@ -19,7 +19,10 @@ from app.research.stage9_http_exact_official_document_reader import (
     Stage9OfficialDocumentRedirectError,
 )
 
-CONTENT = b"<html><title>NIST</title><body>Exact GAI content.</body></html>"
+CONTENT = (
+    b"<html><title>NIST</title><script>hidden executable text</script>"
+    b"<body><main><p>Exact GAI content.</p></main></body></html>"
+)
 
 
 def _pdf_bytes(text: str) -> bytes:
@@ -66,8 +69,13 @@ def test_reads_one_exact_official_text_document_without_redirects() -> None:
     document = _reader(handler).read(url="https://www.nist.gov/example")
 
     assert len(seen) == 1
-    assert document.content == CONTENT.decode()
-    assert document.response_sha256 == hashlib.sha256(CONTENT).hexdigest()
+    assert document.content == "NIST\n\nExact GAI content."
+    assert "hidden executable text" not in document.content
+    assert b"<html" not in document.content.encode()
+    assert (
+        document.response_sha256
+        == hashlib.sha256(document.content.encode("utf-8")).hexdigest()
+    )
     assert document.url == "https://www.nist.gov/example"
 
 

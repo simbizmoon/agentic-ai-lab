@@ -35,8 +35,8 @@ from app.schemas.stage9_development_baseline_run import STAGE9_DEVELOPMENT_CASE_
 from app.schemas.stage9_evaluation_manifest import Stage9DatasetPartition
 
 _MAXIMUM_PACKED_ITEMS = 8
-_MAXIMUM_CONTEXT_BYTES = 64_000
-_MAXIMUM_ESTIMATED_TOKENS = 64_000
+_MAXIMUM_CONTEXT_BYTES = 6_000
+_MAXIMUM_ESTIMATED_TOKENS = 6_000
 
 
 class Stage9PackedResearchLoopFactory(Protocol):

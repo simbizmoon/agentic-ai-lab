@@ -320,6 +320,8 @@ def test_all_development_cases_acquire_pack_and_account_usage(case_id: str) -> N
     packing = factory.values[0][1]
     assert factory.values[0][0] == case_id
     assert packing.included
+    assert packing.usage.context_utf8_bytes <= 6_000
+    assert packing.usage.estimated_tokens <= 6_000
     assert result.rounds[0].observations[0].workflow_result.request.packing == packing
     acquisition_calls = len(provider.requests)
     external_acquisition_calls = sum(

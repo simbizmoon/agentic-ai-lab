@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from io import BytesIO
+from typing import ClassVar
 from urllib.parse import urlsplit
 
 import httpx
@@ -66,6 +68,69 @@ class Stage9OfficialDocumentPdfError(Stage9HttpExactOfficialDocumentReaderError)
     """An official PDF could not produce bounded, extractable text."""
 
 
+class _VisibleOfficialTextParser(HTMLParser):
+    _BLOCK_TAGS: ClassVar[set[str]] = {
+        "article",
+        "blockquote",
+        "br",
+        "div",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "li",
+        "main",
+        "p",
+        "pre",
+        "section",
+        "table",
+        "td",
+        "th",
+        "title",
+        "tr",
+    }
+    _IGNORED_TAGS: ClassVar[set[str]] = {"script", "style", "noscript", "template"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._ignored_depth = 0
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        del attrs
+        if tag in self._IGNORED_TAGS:
+            self._ignored_depth += 1
+        elif self._ignored_depth == 0 and tag in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._IGNORED_TAGS:
+            self._ignored_depth = max(0, self._ignored_depth - 1)
+        elif self._ignored_depth == 0 and tag in self._BLOCK_TAGS:
+            self._parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored_depth == 0 and data.strip():
+            self._parts.append(data)
+
+    def text(self) -> str:
+        lines = [" ".join(line.split()) for line in "".join(self._parts).splitlines()]
+        paragraphs: list[str] = []
+        current: list[str] = []
+        for line in lines:
+            if line:
+                current.append(line)
+            elif current:
+                paragraphs.append(" ".join(current))
+                current = []
+        if current:
+            paragraphs.append(" ".join(current))
+        return "\n\n".join(paragraphs).strip()
+
+
 class Stage9HttpExactOfficialDocumentReader:
     """Read one official text document without following redirects."""
 
@@ -123,6 +188,11 @@ class Stage9HttpExactOfficialDocumentReader:
             if content_type == "application/pdf"
             else self._decode_text(response)
         )
+        if content_type in {"text/html", "application/xhtml+xml"}:
+            parser = _VisibleOfficialTextParser()
+            parser.feed(content)
+            parser.close()
+            content = parser.text()
         if not content.strip():
             raise Stage9OfficialDocumentContentBoundaryError(
                 "official document content is blank"
