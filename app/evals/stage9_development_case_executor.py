@@ -15,6 +15,9 @@ from app.evals.stage9_development_case_artifact_writer import (
 from app.research.bounded_research_planning_loop import (
     BoundedResearchPlanningLoopError,
 )
+from app.research.stage9_acquisition_aware_research_loop import (
+    Stage9AcquisitionAwareResearchLoopError,
+)
 from app.schemas.bounded_research_agent_loop import (
     BoundedResearchAgentLoopBudget,
     BoundedResearchAgentLoopRequest,
@@ -104,7 +107,10 @@ class Stage9DevelopmentCaseExecutorAdapter:
         )
         try:
             loop_result = self._research_loop.run(request=loop_request)
-        except BoundedResearchPlanningLoopError as error:
+        except (
+            BoundedResearchPlanningLoopError,
+            Stage9AcquisitionAwareResearchLoopError,
+        ) as error:
             raise Stage9DevelopmentCaseExecutionError(
                 "bounded research loop failed safely"
             ) from error

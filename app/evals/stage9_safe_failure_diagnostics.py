@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+_ACQUISITION_FAILURE_CODES = {
+    "ProviderTimeout": "acquisition_provider_timeout",
+    "ProviderNetworkError": "acquisition_provider_connection_failed",
+    "ProviderHttpError": "acquisition_provider_http_failed",
+    "ResponseValidationError": "acquisition_provider_response_invalid",
+}
+
 _CLASS_CODE_PRIORITY = (
     ("AuthenticationError", "provider_authentication_failed"),
     ("PermissionDeniedError", "provider_permission_denied"),
@@ -99,6 +106,11 @@ def safe_stage9_failure_code(error: BaseException) -> str:
             break
         visited.add(identity)
         names.add(type(current).__name__)
+        failure_code = getattr(current, "failure_code", None)
+        if isinstance(failure_code, str):
+            normalized = _ACQUISITION_FAILURE_CODES.get(failure_code)
+            if normalized is not None:
+                return normalized
         current = current.__cause__ or current.__context__
 
     for class_name, code in _CLASS_CODE_PRIORITY:

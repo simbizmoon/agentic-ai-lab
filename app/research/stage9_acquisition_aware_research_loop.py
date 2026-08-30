@@ -59,6 +59,10 @@ class Stage9ResearchLoopProtocol(Protocol):
 class Stage9AcquisitionAwareResearchLoopError(RuntimeError):
     """Acquisition could not be joined to the loop without losing auditability."""
 
+    def __init__(self, message: str, *, failure_code: str | None = None) -> None:
+        super().__init__(message)
+        self.failure_code = failure_code
+
 
 class Stage9AcquisitionContextBuilder:
     """Convert exact acquired evidence into whole, bounded RAG chunks."""
@@ -151,7 +155,8 @@ class Stage9AcquisitionAwareResearchLoop:
         acquisition = self._router.acquire(acquisition_request)
         if acquisition.status is Stage9AcquisitionStatus.FAILED:
             raise Stage9AcquisitionAwareResearchLoopError(
-                "development acquisition failed safely"
+                "development acquisition failed safely",
+                failure_code=acquisition.failure_code,
             )
         packing = self._context_builder.build(acquisition)
         delegated_request = self._reserve_acquisition_usage(request, acquisition)
