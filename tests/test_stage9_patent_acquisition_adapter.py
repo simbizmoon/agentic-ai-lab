@@ -83,7 +83,8 @@ def test_extracts_identity_only_from_question_and_preserves_exact_claim() -> Non
     assert retriever.records[0].publication_number == "EP1000000B1"
     assert retriever.records[0].publication_docdb == "EP.1000000.B1"
     assert result.status is Stage9AcquisitionStatus.EVIDENCE_AVAILABLE
-    assert result.provider_requests == result.external_requests == 1
+    assert result.provider_requests == 1
+    assert result.external_requests == 2
     evidence = result.evidence_set.evidence[0]
     document = result.evidence_set.document_set.documents[0]
     assert evidence.excerpt == CLAIM_TEXT == document.content

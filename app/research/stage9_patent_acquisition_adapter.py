@@ -177,7 +177,7 @@ class Stage9PatentAcquisitionAdapter:
             status=Stage9AcquisitionStatus.EVIDENCE_AVAILABLE,
             evidence_set=evidence_set,
             provider_requests=1,
-            external_requests=1,
+            external_requests=2,
         )
 
     @staticmethod
@@ -238,5 +238,5 @@ class Stage9PatentAcquisitionAdapter:
             status=Stage9AcquisitionStatus.NO_EVIDENCE,
             evidence_set=evidence_set,
             provider_requests=1,
-            external_requests=1,
+            external_requests=2,
         )
