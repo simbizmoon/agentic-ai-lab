@@ -1018,3 +1018,31 @@ Step 4 — Single-Agent Baseline Experiment Manifest and Harness
 Step 4는 기존 Stage 8 cost contracts와 Stage 7 bounded Single-Agent path를 연결하되 실행 전에
 provider/model, effective price, request/token/time/monetary budget, repetitions, rubric과 execution order를
 고정한다. Development로 harness를 검증하고 blind holdout은 고정된 설정으로만 실행한다.
+
+
+# 30. 2026-08-30 Stage 9 Step 4 Baseline Manifest and Harness Integration 완료
+
+완료된 integration:
+
+```text
+human-locked Golden Dataset
+→ explicit runtime/price/budget settings
+→ development-before-holdout protocol
+→ human runtime-budget approval
+→ approved manifest + review SHA-256
+→ repository importer
+→ zero-call production-adapter preflight
+```
+
+이 integration은 Stage 7 bounded Single-Agent runtime과 Stage 8 cost contracts를 하나의 변경 통제된
+Stage 9 baseline configuration에 연결했다. 실제 provider 실행은 포함하지 않았으며 API 요청은 0회였다.
+
+다음 Integration Work Item:
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 5 — Bounded Single-Agent Development Baseline Execution
+```
+
+Step 5는 development 4건만 순차 실행해 harness의 실제 결과 아티팩트, 품질 검토, usage, estimated cost와
+elapsed time을 측정한다. Holdout 6건은 development 검토와 필요 시 새 manifest lock 전까지 열지 않는다.

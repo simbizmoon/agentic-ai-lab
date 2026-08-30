@@ -720,3 +720,25 @@ Next:    Stage 9 / Step 1 Real Research Evaluation Existing Capability Audit
 Current: Stage 9 / Step 3 Curated Golden Dataset FINAL PASS
 Next:    Stage 9 / Step 4 Single-Agent Baseline Experiment Manifest and Harness
 ```
+
+
+## 26. 2026-08-30 Stage 9 Step 4 Baseline Manifest and Harness FINAL PASS
+
+| Evaluation capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Human-approved baseline manifest | Repository integrated | review and manifest SHA-256 locked |
+| Golden Dataset binding | Locked | exact 10 cases, development 4 / holdout 6 |
+| Runtime component stack | Locked | planner/generator/evaluator use `gpt-5.6-terra` |
+| Effective-dated price entries | Locked estimated authority | not billed cost or invoice |
+| Operational/monetary ceilings | Locked | request/token/time/USD hard bounds |
+| Development-before-holdout protocol | Locked | one repetition; no holdout tuning |
+| Production adapter preflight | Offline verified | recording clients, provider calls 0 |
+| Manifest/review tamper detection | Offline verified | exact checksum and strict JSON validation |
+| Development baseline result | Not measured | Stage 9 Step 5 |
+| Blind holdout result | Not measured | prohibited before development review |
+| Source authority/legal conclusions | Not validated | outside manifest-lock claim |
+
+```text
+Current: Stage 9 / Step 4 Single-Agent Baseline Manifest and Harness FINAL PASS
+Next:    Stage 9 / Step 5 Bounded Single-Agent Development Baseline Execution
+```

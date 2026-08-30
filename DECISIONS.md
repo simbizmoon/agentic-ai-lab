@@ -5338,3 +5338,28 @@ Stage 8 Step 2 Provider-neutral Usage and Price Contracts.
 Dataset lock은 source authority, semantic correctness, patent/academic quality, 법률적 결론 또는 NIST
 준수를 인증하지 않는다. 현재 단계는 OpenAI 품질이나 실제 비용을 측정하지 않았고, 외부 요청도 만들지
 않았다.
+
+
+## D-096 — Stage 9 Single-Agent baseline은 사람 승인 manifest와 zero-call preflight 후에만 실행한다
+
+- 상태: 확정
+- 날짜: 2026-08-30
+- 적용 범위: Stage 9 Step 4 및 이후 Single/Multi-Agent 비교
+
+### 결정
+
+- 세 model-bearing 역할은 승인된 `gpt-5.6-terra` 하나로 고정해 불필요한 model 변수를 줄인다.
+- planner만 기존 adapter가 노출하는 reasoning `low`를 고정하고 generator/evaluator에는 지원되지 않는
+  reasoning field를 발명하지 않는다.
+- documented price는 estimated authority로만 사용하며 billed 또는 provider-reported cost로 표현하지 않는다.
+- 전체 ceiling은 provider 40, external 60, recorded token 300,000, elapsed 7,200초와 estimated USD 4.00이다.
+- development 4건을 먼저 실행하고 사람이 결과를 검토하기 전 blind holdout 6건을 실행하지 않는다.
+- 모델, 가격, prompt, rubric, code 또는 budget이 변경되면 기존 lock을 수정하지 않고 새 manifest version을 만든다.
+- 날짜 snapshot이 없는 Terra alias의 한계는 실제 response model ID, manifest/review hash, code commit과
+  실행일 zero-call preflight 보존으로 통제한다.
+- approved manifest와 사람 검토표는 각각 SHA-256으로 연결해 저장소에 보존한다.
+
+### 제한
+
+Step 4 완료는 실제 OpenAI 품질이나 실제 비용 측정이 아니다. API 요청은 0회였고 paid baseline은 아직
+시작하지 않았다. 다음 Step 5에서 development 4건만 USD 1.50 phase ceiling 아래 실행한다.

@@ -4330,3 +4330,30 @@ development와 holdout을 엄격히 분리한다.
 
 Stage 9 Step 4에서 Single-Agent baseline 실험의 provider/model, 가격 기준, budget, 반복 횟수, rubric과
 실행 순서를 사전에 고정하고, 먼저 development에서 harness를 검증한 뒤 holdout을 실행한다.
+
+
+## 2026-08-30 — Stage 9 Step 4 Single-Agent Baseline Manifest and Harness 완료
+
+### 핵심 개념
+
+평가 manifest는 실행 전에 바꾸지 않기로 합의한 실험 조건의 봉인본이다. 단순 설정 파일과 달리 Dataset,
+모델, 가격 기준일, budget, 반복 횟수, rubric, 실행 순서와 사람 승인 증거를 함께 변경 통제한다.
+
+문서 가격은 백만 token당 단가다. 입력 USD 2.00, cached input USD 0.20, output USD 12.00을 더해 호출당
+USD 14.20으로 해석하지 않는다. 각 실제 token 수량에 해당 rate를 따로 적용하며 cached input은 일반 input과
+중복 가격을 적용하지 않는다. USD 4.00은 전체 실험의 예상 지출 목표가 아니라 hard safety ceiling이다.
+
+### 직접 실습과 실패 분석
+
+- 사람 검토표에서 모델, 역할, 개발/전체 budget과 alias 한계를 직접 승인했다.
+- 첫 lock 검증은 strict Pydantic 모델을 Python-object mode로 읽어 tuple, Decimal과 enum이 거부됐다.
+- 저장 데이터가 잘못된 것이 아니므로 검증을 완화하지 않고 `model_validate_json`으로 JSON mode를 사용했다.
+- 실패 시 불완전한 출력 디렉터리가 자동 정리되는 것을 확인한 뒤 동일 승인 입력으로 다시 잠갔다.
+- manifest, checksum, 승인 검토표와 importer를 저장소에 통합하고 변조 거부 테스트를 통과했다.
+- 실제 adapter mapping preflight는 recording client를 사용해 OpenAI 호출 0회를 확인했다.
+- 전체 저장소 `6393 passed`, Ruff, Step 4 format, diff와 clean working tree가 통과했다.
+
+### 다음 학습
+
+다음은 Stage 9 Step 5 Bounded Single-Agent Development Baseline Execution이다. 공개된 development 4건만
+먼저 실행하고 품질·비용·시간 및 실패를 검토한다. Blind holdout 6건은 설정 확정 전까지 실행하지 않는다.

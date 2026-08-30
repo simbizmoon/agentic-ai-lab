@@ -5252,3 +5252,58 @@ Step 4 — Single-Agent Baseline Experiment Manifest and Harness
 
 Step 4에서는 동일 Dataset 비교가 가능하도록 provider/model, 가격 기준일, monetary·request·token·time
 budget, 반복 횟수, rubric과 실행 순서를 실행 전에 고정한다. Holdout 결과를 본 뒤 설정을 바꾸지 않는다.
+
+
+## 34.39 2026-08-30 Stage 9 Step 4 Single-Agent Baseline Manifest and Harness FINAL PASS
+
+### 완료 범위
+
+- canonical Golden Dataset 10건과 development 4 / blind holdout 6 순서를 manifest에 고정
+- architecture, provider/model, 세 runtime 역할과 operation을 실행 전에 고정
+- `gpt-5.6-terra`를 planner, grounded-answer generator와 citation evaluator에 동일 적용
+- planner reasoning `low`; generator/evaluator는 현재 adapter가 지원하는 provider default 유지
+- 2026-08-30 공식 문서 가격을 estimated-cost authority로 고정하고 billed cost와 분리
+- 전체 hard ceiling을 provider 40, external 60, recorded token 300,000, elapsed 7,200초,
+  estimated USD 4.00으로 고정
+- development → blind holdout 순서, repetition 1, holdout tuning 금지와 변경 시 새 manifest 의무화
+- 사람 승인표, 승인표 SHA-256, approved manifest와 checksum을 저장소에 통합
+- 실제 production adapter에 대한 zero-call runtime preflight PASS
+- manifest/review 변조 거부 및 strict typed round-trip 검증
+
+### 잠긴 기준선
+
+```text
+dataset SHA-256          = 9405c96ec598c89ba2d7097dea61d01a9485c7f71a5bb4ac872da728999d0b2a
+approval review SHA-256 = f36c0b7bee7cc9548f2f3a36946e4b49293883b69349b4499f2c80d27190cae7
+manifest SHA-256        = 60179543f5290136d434d4f4c72598af8f74eb569a1d06b43c7490320d81e191
+model                   = gpt-5.6-terra
+development / holdout   = 4 / 6
+repetitions             = 1
+maximum estimated cost  = USD 4.00
+```
+
+### 최종 검증
+
+```text
+approved-manifest focused tests = 23 passed
+full repository pytest          = 6393 passed in 26.05s
+full Ruff / Step 4 format       = PASS / PASS
+git diff / working tree         = PASS / CLEAN
+OpenAI / external requests      = 0 / 0
+paid baseline execution         = NOT STARTED
+```
+
+Step 4의 `harness` 완료는 locked manifest를 만들고 기존 production adapter에 side-effect 없이 결합하는
+preflight 경로가 준비됐다는 뜻이다. 실제 답변 품질, source authority, semantic correctness, billed cost 또는
+holdout 결과를 검증했다는 뜻이 아니다. Terra alias에는 날짜 snapshot이 없으므로 실행 직전 공식 모델·가격을
+재확인하고 응답의 실제 model ID, manifest hash와 code commit을 보존한다.
+
+### 다음 공식 작업
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 5 — Bounded Single-Agent Development Baseline Execution
+```
+
+Step 5는 공개된 development 4건만 순차 실행한다. 개발 상한은 provider 16, external 24,
+recorded token 120,000, elapsed 2,880초, estimated USD 1.50이며, 결과 검토 전 holdout은 실행하지 않는다.
