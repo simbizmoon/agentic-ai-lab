@@ -59,6 +59,18 @@ class Stage9TavilyBoundaryError(Stage9TavilyOfficialWebProviderError):
     """Tavily data crossed a locked count, size, or identity boundary."""
 
 
+class Stage9TavilyResultCountBoundaryError(Stage9TavilyBoundaryError):
+    """Tavily returned more items than requested."""
+
+
+class Stage9TavilyContentSizeBoundaryError(Stage9TavilyBoundaryError):
+    """No retained item fit the exact-content byte boundary."""
+
+
+class Stage9TavilyDomainBoundaryError(Stage9TavilyBoundaryError):
+    """No retained item belonged to the official-domain allowlist."""
+
+
 class Stage9TavilyOfficialWebProvider:
     """Fetch exact markdown from explicitly allowlisted official domains once."""
 
@@ -128,22 +140,27 @@ class Stage9TavilyOfficialWebProvider:
             ) from exc
 
         if len(envelope.results) > maximum_results:
-            raise Stage9TavilyBoundaryError(
+            raise Stage9TavilyResultCountBoundaryError(
                 "Tavily exceeded the requested result boundary"
             )
         retrieved_at = self._clock().isoformat()
         documents: list[Stage9OfficialWebDocument] = []
         missing_raw_content = 0
+        oversized_content = 0
+        outside_allowlist = 0
         for result in envelope.results:
             content = result.raw_content
             if content is None or not content.strip():
                 missing_raw_content += 1
                 continue
             if len(content.encode("utf-8")) > _MAXIMUM_DOCUMENT_BYTES:
-                raise Stage9TavilyBoundaryError(
-                    "Tavily raw content exceeded the byte boundary"
-                )
-            self._validate_url(result.url, allowed_domains)
+                oversized_content += 1
+                continue
+            try:
+                self._validate_url(result.url, allowed_domains)
+            except Stage9TavilyDomainBoundaryError:
+                outside_allowlist += 1
+                continue
             documents.append(
                 Stage9OfficialWebDocument(
                     url=result.url,
@@ -153,10 +170,19 @@ class Stage9TavilyOfficialWebProvider:
                     response_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
                 )
             )
-        if envelope.results and not documents and missing_raw_content:
-            raise Stage9TavilyRawContentUnavailableError(
-                "Tavily results did not include exact raw content"
-            )
+        if envelope.results and not documents:
+            if outside_allowlist:
+                raise Stage9TavilyDomainBoundaryError(
+                    "Tavily results were outside the allowlist"
+                )
+            if oversized_content:
+                raise Stage9TavilyContentSizeBoundaryError(
+                    "Tavily results exceeded the byte boundary"
+                )
+            if missing_raw_content:
+                raise Stage9TavilyRawContentUnavailableError(
+                    "Tavily results did not include exact raw content"
+                )
         return tuple(documents)
 
     @staticmethod
@@ -167,7 +193,7 @@ class Stage9TavilyOfficialWebProvider:
         if parsed.scheme != "https" or not any(
             host == domain or host.endswith(f".{domain}") for domain in allowed
         ):
-            raise Stage9TavilyBoundaryError(
+            raise Stage9TavilyDomainBoundaryError(
                 "Tavily result URL was outside the allowlist"
             )
 

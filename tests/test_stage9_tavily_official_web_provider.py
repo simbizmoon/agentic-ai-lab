@@ -10,10 +10,12 @@ import httpx
 import pytest
 
 from app.research.stage9_tavily_official_web_provider import (
-    Stage9TavilyBoundaryError,
+    Stage9TavilyContentSizeBoundaryError,
+    Stage9TavilyDomainBoundaryError,
     Stage9TavilyHttpStatusError,
     Stage9TavilyOfficialWebProvider,
     Stage9TavilyRawContentUnavailableError,
+    Stage9TavilyResultCountBoundaryError,
 )
 
 CONTENT = "# NIST AI RMF\n\nGovern, Map, Measure, and Manage are core functions."
@@ -119,9 +121,68 @@ def test_rejects_non_https_or_cross_domain_results(url: str) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_response(_result(url=url)), request=request)
 
-    with pytest.raises(Stage9TavilyBoundaryError, match="allowlist"):
+    with pytest.raises(Stage9TavilyDomainBoundaryError, match="allowlist"):
         _provider(handler).acquire(
             query="NIST AI RMF",
+            allowed_domains=("nist.gov",),
+            maximum_results=1,
+        )
+
+
+def test_retains_valid_document_when_another_result_is_outside_allowlist() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_response(
+                _result(url="https://example.com/untrusted"),
+                _result(),
+            ),
+            request=request,
+        )
+
+    documents = _provider(handler).acquire(
+        query="NIST GAI profile",
+        allowed_domains=("nist.gov",),
+        maximum_results=2,
+    )
+
+    assert len(documents) == 1
+    assert documents[0].url.startswith("https://www.nist.gov/")
+
+
+def test_retains_valid_document_when_another_result_is_oversized() -> None:
+    oversized = "x" * 512_001
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_response(_result(raw_content=oversized), _result()),
+            request=request,
+        )
+
+    documents = _provider(handler).acquire(
+        query="NIST GAI profile",
+        allowed_domains=("nist.gov",),
+        maximum_results=2,
+    )
+
+    assert len(documents) == 1
+    assert documents[0].content == CONTENT
+
+
+def test_rejects_all_oversized_results_with_typed_boundary() -> None:
+    oversized = "x" * 512_001
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_response(_result(raw_content=oversized)),
+            request=request,
+        )
+
+    with pytest.raises(Stage9TavilyContentSizeBoundaryError, match="byte boundary"):
+        _provider(handler).acquire(
+            query="NIST GAI profile",
             allowed_domains=("nist.gov",),
             maximum_results=1,
         )
@@ -133,7 +194,7 @@ def test_rejects_provider_result_count_over_requested_boundary() -> None:
             200, json=_response(_result(), _result()), request=request
         )
 
-    with pytest.raises(Stage9TavilyBoundaryError, match="result boundary"):
+    with pytest.raises(Stage9TavilyResultCountBoundaryError, match="result boundary"):
         _provider(handler).acquire(
             query="NIST AI RMF",
             allowed_domains=("nist.gov",),

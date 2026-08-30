@@ -91,6 +91,13 @@ def test_classifies_stage9_runtime_boundaries_without_retaining_messages() -> No
         "Stage9TavilyRawContentUnavailableError": (
             "official_web_raw_content_unavailable"
         ),
+        "Stage9TavilyResultCountBoundaryError": (
+            "official_web_result_count_boundary_failed"
+        ),
+        "Stage9TavilyContentSizeBoundaryError": (
+            "official_web_content_size_boundary_failed"
+        ),
+        "Stage9TavilyDomainBoundaryError": ("official_web_domain_boundary_failed"),
         "Stage9TavilyBoundaryError": "official_web_provider_boundary_failed",
         "Stage9TavilyOfficialWebProviderError": "official_web_provider_failed",
         "Stage9OfficialWebAcquisitionError": "official_web_evidence_invalid",
