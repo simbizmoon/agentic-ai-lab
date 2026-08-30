@@ -36,6 +36,11 @@ class NoPaidLoopFactory:
         raise AssertionError(f"paid loop was not expected: {case_id}, {packing}")
 
 
+class VerifiedOfficialProvider:
+    def acquire(self, *, request, channel):
+        raise AssertionError(f"acquisition was not expected: {request}:{channel}")
+
+
 def _secrets() -> dict[str, str]:
     return {
         TAVILY_API_KEY_ENV: "private-tavily-value",
@@ -80,6 +85,21 @@ def test_missing_acquisition_secret_fails_before_client_use() -> None:
             repository_root=Path.cwd(),
             packed_loop_factory=NoPaidLoopFactory(),
         )
+
+
+def test_verified_official_override_removes_tavily_credential_requirement() -> None:
+    secrets = _secrets()
+    secrets.pop(TAVILY_API_KEY_ENV)
+    runtime = create_stage9_real_development_runtime(
+        experiment=load_approved_baseline(MANIFEST, REVIEW),
+        environ=secrets,
+        repository_root=Path.cwd(),
+        packed_loop_factory=NoPaidLoopFactory(),
+        official_web=VerifiedOfficialProvider(),
+    )
+
+    assert isinstance(runtime, Stage9DevelopmentRuntime)
+    assert "Stage9TavilyOfficialWebProvider" not in repr(runtime)
 
 
 def test_repository_root_must_exist() -> None:

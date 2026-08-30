@@ -15,6 +15,9 @@ from app.research.epo_ops_client import EpoOpsClient
 from app.research.openalex_scholarly_metadata_provider import (
     OpenAlexScholarlyMetadataProvider,
 )
+from app.research.stage9_development_acquisition_router import (
+    Stage9AcquisitionChannelProvider,
+)
 from app.research.stage9_development_runtime_factory import (
     Stage9DevelopmentRuntime,
     Stage9PackedResearchLoopFactory,
@@ -54,20 +57,17 @@ def create_stage9_real_development_runtime(
     environ: Mapping[str, str],
     repository_root: Path,
     packed_loop_factory: Stage9PackedResearchLoopFactory,
+    official_web: Stage9AcquisitionChannelProvider | None = None,
     tavily_client: httpx.Client | None = None,
     openalex_client: httpx.Client | None = None,
     epo_client: httpx.Client | None = None,
 ) -> Stage9DevelopmentRuntime:
     """Compose real provider bindings without executing any provider request."""
 
-    values = {
-        name: environ.get(name, "").strip()
-        for name in (
-            TAVILY_API_KEY_ENV,
-            EPO_CONSUMER_KEY_ENV,
-            EPO_CONSUMER_SECRET_ENV,
-        )
-    }
+    required_names = [EPO_CONSUMER_KEY_ENV, EPO_CONSUMER_SECRET_ENV]
+    if official_web is None:
+        required_names.append(TAVILY_API_KEY_ENV)
+    values = {name: environ.get(name, "").strip() for name in required_names}
     missing = tuple(name for name, value in values.items() if not value)
     if missing:
         raise Stage9RealDevelopmentRuntimeFactoryError(
@@ -80,12 +80,13 @@ def create_stage9_real_development_runtime(
             "repository_root must be a directory"
         )
 
-    official_web = Stage9OfficialWebAcquisitionAdapter(
-        provider=Stage9TavilyOfficialWebProvider(
-            api_key=values[TAVILY_API_KEY_ENV],
-            client=tavily_client,
+    if official_web is None:
+        official_web = Stage9OfficialWebAcquisitionAdapter(
+            provider=Stage9TavilyOfficialWebProvider(
+                api_key=values[TAVILY_API_KEY_ENV],
+                client=tavily_client,
+            )
         )
-    )
     scholarly_primary = Stage9ScholarlyAcquisitionAdapter(
         workflow=BoundedScholarlyEvidenceWorkflow(
             provider=OpenAlexScholarlyMetadataProvider(client=openalex_client)

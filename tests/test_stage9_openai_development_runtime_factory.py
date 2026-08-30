@@ -18,7 +18,6 @@ from app.research.stage9_openai_development_runtime_factory import (
 from app.research.stage9_real_provider_binding_preflight import (
     EPO_CONSUMER_KEY_ENV,
     EPO_CONSUMER_SECRET_ENV,
-    TAVILY_API_KEY_ENV,
 )
 
 MANIFEST = Path(
@@ -45,7 +44,6 @@ def _never_http(request: httpx.Request) -> httpx.Response:
 
 def _environment():
     return {
-        TAVILY_API_KEY_ENV: "private-tavily",
         EPO_CONSUMER_KEY_ENV: "private-epo-key",
         EPO_CONSUMER_SECRET_ENV: "private-epo-secret",
     }
@@ -58,6 +56,7 @@ def test_composes_locked_openai_and_acquisition_runtime_without_calls() -> None:
         environ=_environment(),
         repository_root=Path.cwd(),
         openai_client=SimpleNamespace(responses=NoCallResponses()),
+        official_web_client=no_http,
         tavily_client=no_http,
         openalex_client=no_http,
         epo_client=no_http,
@@ -66,6 +65,7 @@ def test_composes_locked_openai_and_acquisition_runtime_without_calls() -> None:
     assert isinstance(runtime, Stage9DevelopmentRuntime)
     representation = repr(runtime)
     assert all(secret not in representation for secret in _environment().values())
+    assert "Stage9TavilyOfficialWebProvider" not in representation
 
 
 @pytest.mark.parametrize("missing_method", ["create", "parse"])
