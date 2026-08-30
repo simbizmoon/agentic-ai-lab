@@ -27,7 +27,7 @@ class Stage9ChannelAcquisitionResult(BaseModel):
     status: Stage9AcquisitionStatus
     evidence_set: ResearchEvidenceSet
     provider_requests: int = Field(ge=0, le=1)
-    external_requests: int = Field(ge=0, le=2)
+    external_requests: int = Field(ge=0, le=3)
     failure_code: str | None = None
 
     @model_validator(mode="after")
