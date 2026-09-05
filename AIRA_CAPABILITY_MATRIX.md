@@ -1,5 +1,9 @@
 # AIRA CAPABILITY MATRIX
 
+> 최신 상태(2026-08-30): Stage 9 Step 5 development 4건의 실행·저장·인간 검토를 완료했다.
+> 품질 결과는 `ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`이며 blind holdout은 미실행이다.
+> 아래 과거 `Current`/`Next` 표시는 각 시점의 historical checkpoint다.
+
 ## 1. 판정 기준
 
 - **Implemented**: 실제 코드가 존재한다.
@@ -741,4 +745,23 @@ Next:    Stage 9 / Step 4 Single-Agent Baseline Experiment Manifest and Harness
 ```text
 Current: Stage 9 / Step 4 Single-Agent Baseline Manifest and Harness FINAL PASS
 Next:    Stage 9 / Step 5 Bounded Single-Agent Development Baseline Execution
+```
+
+## 27. 2026-08-30 Stage 9 Step 5 Development Baseline 실행 및 인간 검토
+
+| Evaluation capability | 상태 | 현재 역할 / 제한 |
+|---|---|---|
+| Development execution | Complete | 4/4 cases executed sequentially |
+| Case artifact persistence | Complete | 4/4 cases persisted |
+| Provider/external accounting | Measured | 16 / 19 requests |
+| Recorded tokens | Measured | 17,894 |
+| Estimated cost | Measured | USD 0.214728; not billed cost |
+| Human review | Complete | ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0 |
+| Blind holdout | Not executed | 6 cases remain sealed from execution |
+| Quality baseline finalization | Not complete | remediation and closeout decision required |
+
+```text
+Current: Stage 9 / Step 5 development run and review COMPLETE
+Quality: REVISION REQUIRED
+Next:    Step 5 remediation and closeout decision
 ```

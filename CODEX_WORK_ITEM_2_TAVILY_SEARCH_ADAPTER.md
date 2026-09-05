@@ -1,5 +1,8 @@
 # CODEX WORK ITEM 2 — TAVILY LIVE WEB SEARCH ADAPTER
 
+> 이 Work Item은 완료된 historical implementation record다. 현재 공식 위치는 `ROADMAP.md`의
+> Stage 9 Step 5 development baseline remediation 및 closeout decision이다.
+
 ## 1. 작업 목적
 
 AIRA Live Research Vertical Slice의 첫 실제 외부 기능으로

@@ -1,5 +1,8 @@
 # AIRA INTEGRATION PLAN
 
+> 최신 상태(2026-08-30): Stage 9 Step 5 development 실행과 인간 검토까지 완료했다.
+> 품질 수정이 필요하므로 blind holdout과 Stage 10 비교로 아직 진행하지 않는다.
+
 ## 1. 문서 목적
 
 본 문서는 AIRA Live Research Vertical Slice를 작은 Integration Work Item으로
@@ -1046,3 +1049,23 @@ Step 5 — Bounded Single-Agent Development Baseline Execution
 
 Step 5는 development 4건만 순차 실행해 harness의 실제 결과 아티팩트, 품질 검토, usage, estimated cost와
 elapsed time을 측정한다. Holdout 6건은 development 검토와 필요 시 새 manifest lock 전까지 열지 않는다.
+
+# 31. 2026-08-30 Stage 9 Step 5 Development Baseline Integration 실행
+
+완료된 integration:
+
+```text
+approved manifest + development partition
+→ bounded real-provider runtime
+→ four sequential development cases
+→ per-case artifacts and usage/cost accounting
+→ human review
+```
+
+실행은 `completed`, 저장은 4/4이며 provider 16회, external 19회, recorded token 17,894,
+estimated USD 0.214728로 development ceiling 안에서 종료됐다. 인간 검토는
+`ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`이었다.
+
+따라서 execution integration은 완료됐지만 quality closeout은 완료하지 않는다. Blind holdout 6건은
+실행하지 않았으며 다음 Integration Work Item은 Step 5 remediation과 새 manifest 필요 여부를 포함한
+closeout decision이다.

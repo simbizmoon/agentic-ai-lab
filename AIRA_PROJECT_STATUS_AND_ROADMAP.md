@@ -1,7 +1,8 @@
 # AIRA PROJECT STATUS AND ROADMAP
 ## Agentic AI Lab — 전체 로드맵, 현재 진행상황, 향후 과제
 
-- 기준일: 2026-08-18
+- 역사적 본문 기준일: 2026-08-18
+- 최신 상태 갱신일: 2026-08-30
 - 프로젝트: Agentic AI Lab
 - 제품명: AIRA (Agentic Intelligence Research Assistant)
 - 개발 경로: `/home/moon/Project/agentic-ai-lab`
@@ -27,6 +28,20 @@
 - `AIRA_MULTI_AGENT_ROADMAP.md`: Multi-Agent 학습·구현 계획
 
 본 문서는 위 문서를 대체하지 않는다.
+
+## 최신 상태 요약
+
+```text
+Stage 9 — Mandatory Real Research Evaluation            IN PROGRESS
+Step 5 development run and artifact persistence          COMPLETE
+Step 5 human review                                      COMPLETE
+Quality result                                           ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0
+Blind holdout                                            NOT EXECUTED
+Next                                                      Step 5 remediation and closeout decision
+```
+
+아래 장문의 Stage A~I 및 과거 `CURRENT`/`NEXT` 표시는 historical snapshot이다. 현재 위치와
+다음 실행 순서는 항상 `ROADMAP.md`의 최신 authoritative section을 우선한다.
 
 ---
 

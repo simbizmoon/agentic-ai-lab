@@ -442,7 +442,9 @@ verification_status=not_applicable
 
 ### 13.4 Remaining Patent architecture
 
-다음 공식 작업은 `Step 4A — Patent Metadata Expansion`이다.
+이 절의 다음 작업 표시는 Patent Step 3G 시점의 historical checkpoint다. 현재 공식 위치는
+`ROADMAP.md`의 Stage 9 Step 5이며 development 실행과 인간 검토를 완료한 뒤 품질 remediation
+및 closeout 결정을 기다리고 있다.
 
 Claim acquisition/parsing, claim-element decomposition, claim chart,
 multi-patent comparison, legal-status verification 및 authoritative legal-analysis는

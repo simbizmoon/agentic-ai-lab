@@ -5,6 +5,9 @@
 > 대상: AIRA를 혼자 실제로 사용하려는 사용자
 >
 > 권장 방식: **필요한 명령만 실행하고 결과를 사람이 확인하는 Lean Personal Mode**
+>
+> 프로젝트 상태: Stage 9 Step 5 development 실행·인간 검토 완료. 품질 수정이 필요하며
+> blind holdout은 아직 실행하지 않았다.
 
 ## 0. 5분 사용 안내
 

@@ -1,5 +1,9 @@
 # AIRA MULTI-AGENT ROADMAP
 
+> 현재 상태(2026-08-30): 이 문서는 Stage 10 비교 실험을 위한 계획 문서다. Stage 9 Step 5
+> development 실행과 인간 검토는 완료됐지만 품질 결과가 `ACCEPT 1 / NEEDS_REVISION 3`이므로,
+> Single-Agent baseline closeout 전에는 Multi-Agent 비교를 시작하지 않는다.
+
 ## 1. 문서 목적
 
 본 문서는 AIRA(Agentic Intelligence Research Assistant)의 다음 학습·개발 단계인

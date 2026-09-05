@@ -1,5 +1,9 @@
 # AIRA PROJECT AUDIT REPORT
 
+> 이 문서는 2026-08-06 Existing Capability Audit의 historical snapshot이다. 최신 공식 위치는
+> `ROADMAP.md`를 따른다. 2026-08-30 현재 Stage 9 Step 5 development 실행·인간 검토가 완료됐고,
+> 품질 수정이 필요하며 blind holdout은 미실행이다.
+
 ## 1. 문서 목적
 
 본 문서는 2026-08-06 기준 `/home/moon/Project/agentic-ai-lab` 저장소의

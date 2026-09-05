@@ -1,5 +1,9 @@
 # AIRA MVP Specification
 
+> 이 문서는 초기 MVP 범위의 historical specification이다. 현재 제품 Stage와 다음 작업은
+> `ROADMAP.md`를 우선한다. 2026-08-30 현재 Stage 9 Step 5 development 실행·인간 검토가 완료됐고
+> 품질 remediation이 남아 있다.
+
 ## 1. 제품 정의
 
 AIRA는 개인이 연구 질문과 로컬 문서를 입력하면,

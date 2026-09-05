@@ -36,16 +36,29 @@ source .venv/bin/activate
 
 ## Quality Baseline
 
-Latest accepted code checkpoint (Patent Step 3G):
+Latest documented real-development baseline (Stage 9 Step 5, 2026-08-30):
 
 ```text
-focused patent regression: 66 passed
-full repository pytest: 5302 passed
-Ruff: PASS
-changed Python format: PASS
-git diff --check: PASS
-Patent live UAT: PASS
+development cases: 4 completed and persisted
+provider requests: 16
+external requests: 19
+recorded tokens: 17,894
+estimated cost: USD 0.214728
+human review: ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0
+blind holdout cases executed: 0
 ```
+
+Documentation reconciliation verification (2026-09-05):
+
+```text
+full repository pytest: 6550 passed
+Ruff: PASS
+git diff --check: PASS
+external/provider requests: 0
+```
+
+실행 완료는 품질 승인을 뜻하지 않는다. 현재 세 사례가 수정 필요 판정이며 blind holdout은
+development 결과의 remediation과 closeout 결정 전까지 실행하지 않는다.
 
 ## Core Documents
 
@@ -67,24 +80,24 @@ Patent live UAT: PASS
 ## Current Status
 
 ```text
-Stage 4 — Local Document Expansion
-→ BASELINE COMPLETE
+Stage 8 — Essential Cost Control
+→ COMPLETE
 
-Stage 5 — Internet Research Expansion
+Stage 9 — Mandatory Real Research Evaluation
 → IN PROGRESS
 
-Patent Research Vertical Slice
-→ Step 3G — Patent User Acceptance Test FINAL PASS
+Step 5 — Bounded Single-Agent Development Baseline Execution
+→ RUN AND HUMAN REVIEW COMPLETE / QUALITY REVISION REQUIRED
 ```
 
-현재 usable Patent first slice는 `aira research-patent` CLI까지 연결되어 있다.
+현재 development 4건은 모두 실행·저장됐지만 인간 검토에서 1건만 바로 승인됐다.
+Blind holdout 6건은 아직 실행하지 않았다.
 
 다음 공식 작업:
 
 ```text
-Stage 5 — Internet Research Expansion
-Patent Research Vertical Slice
-Step 4A — Patent Metadata Expansion
+Stage 9 — Mandatory Real Research Evaluation
+Step 5 — Development baseline remediation and closeout decision
 ```
 
 ## AIRA MVP

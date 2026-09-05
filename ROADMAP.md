@@ -36,9 +36,9 @@
 ## 3. 현재 위치
 
 - 기존 학습 Phase: Phase 0부터 Phase 13까지 완료된 역사적 학습·구현 이력으로 보존
-- 현재 제품 단계: Stage 8 — Essential Cost Control and Provider Foundation `COMPLETE`
+- 현재 제품 단계: Stage 9 — Mandatory Real Research Evaluation `IN PROGRESS`
 - 직전 완료 Vertical Slice: Stage 5 / Academic Research Vertical Slice
-- 현재 완료 지점: Stage 6 / Step 9 — Bounded Grounded Answer Workflow `FINAL PASS`
+- 최신 완료 지점: Stage 9 / Step 5 — development 4건 실행·저장·인간 검토 `COMPLETE`
 - 현재 상태: Stage 4 Local Document Expansion baseline은 COMPLETE다. Stage 5 Patent Research
   Vertical Slice에서는 first usable technical-research slice(Step 3A~3G), Patent Metadata
   Expansion(Step 4A), exact DOCDB Claim Acquisition & Parsing(Step 4B), structured Claim
@@ -51,9 +51,13 @@
 - Stage 6 전체 상태: COMPLETE
 - Stage 7 bounded single-agent vertical slice 상태: COMPLETE
 - Stage 8 전체 상태: `COMPLETE`
-- 현재 단계: Stage 8 — Essential Cost Control and Provider Foundation `FINAL PASS`
-- 다음 공식 작업: Stage 9 / Step 1 — Real Research Evaluation Existing Capability Audit
-- 현재 기준일: 2026-08-28
+- 현재 단계: Stage 9 / Step 5 — Bounded Single-Agent Development Baseline Execution
+- 현재 판정: development 4건 실행·저장·인간 검토 완료, 품질 수정 필요
+- 인간 검토: `ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`
+- Blind holdout: 6건 모두 미실행
+- 다음 공식 작업: Step 5 remediation 및 closeout decision
+- 현재 기준일: 2026-08-30
+- 문서 정합성 재검증일: 2026-09-05 (`6550 passed`, Ruff PASS, `git diff --check` PASS)
 - 기본 개발 경로: `/home/moon/Project/agentic-ai-lab`
 - 기본 실행 전략: LLM 기반 Single Research Agent 우선
 - 기본 관리 방식:
@@ -1082,17 +1086,17 @@ Model Routing과 추가 Provider는 Stage 9의 동일 Dataset 품질·비용 결
 
 ## 상태
 
-- [ ] 시작 전
+- [~] 진행 중 — Step 5 development 실행과 인간 검토 완료, 품질 remediation 필요
 - 수행: 필수
 
 ## 반드시 포함하는 Work Items
 
 ### 9.1 Golden Dataset
 
-- [ ] 실제 관심 분야 기반 10~20개 초기 과제
-- [ ] 일반 기술, 학술, 특허와 인터넷/로컬 통합 과제
-- [ ] 필수 Source, 핵심 Evidence, 금지 주장과 예상 불확실성
-- [ ] 사람의 review rubric
+- [x] 실제 관심 분야 기반 초기 과제 10건 잠금
+- [x] 일반 기술, 학술, 특허와 인터넷/로컬 통합 과제
+- [x] 필수 Source, 핵심 Evidence, 금지 주장과 예상 불확실성
+- [x] 사람의 review rubric
 
 ### 9.2 품질 평가
 
@@ -5307,3 +5311,45 @@ Step 5 — Bounded Single-Agent Development Baseline Execution
 
 Step 5는 공개된 development 4건만 순차 실행한다. 개발 상한은 provider 16, external 24,
 recorded token 120,000, elapsed 2,880초, estimated USD 1.50이며, 결과 검토 전 holdout은 실행하지 않는다.
+
+## 34.40 2026-08-30 Stage 9 Step 5 Development Baseline 실행 및 인간 검토
+
+상태: `EXECUTION COMPLETE / QUALITY REVISION REQUIRED`
+
+### 실행 결과
+
+```text
+cases                                  = tech-01, academic-01, patent-01, cross-01
+run_status                             = completed
+cases_persisted                        = 4
+provider_requests                      = 16 / 16 development ceiling
+external_requests                      = 19 / 24 development ceiling
+recorded_tokens                        = 17,894 / 120,000 development ceiling
+estimated_cost_usd                     = 0.214728 / 1.50 development ceiling
+blind_holdout_cases_executed           = 0
+human_review                           = ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0
+```
+
+### 판정
+
+Development 4건의 bounded 실행, artifact 저장, usage/cost 계측과 인간 검토는 완료했다. 모든 측정값은
+development ceiling 안에 있으며 blind holdout은 실행하지 않았다. `estimated_cost_usd`는 잠긴 가격표에
+따른 추정치이며 실제 청구 금액이 아니다.
+
+실행 성공을 품질 승인으로 해석하지 않는다. 네 사례 중 세 사례가 수정 필요 판정이므로 Stage 9
+Single-Agent baseline을 아직 고정하지 않고 Stage 10으로 이동하지 않는다. Holdout을 열기 전에 실패 유형과
+수정 범위를 검토하고, prompt·runtime·code·rubric 또는 budget 변경이 승인 manifest 계약을 바꾸는 경우 새
+manifest version을 잠근다.
+
+### 다음 공식 작업
+
+```text
+Stage 9 — Mandatory Real Research Evaluation
+Step 5 — Development baseline remediation and closeout decision
+```
+
+### 2026-09-05 문서 정합성 검증
+
+현재 상태를 주장하는 루트 문서의 authoritative summary를 위 판정으로 통일했다. 과거 Stage/Step 기록은
+삭제하지 않고 historical checkpoint로 보존했다. 문서 변경 후 전체 저장소 `6550 passed`, Ruff와
+`git diff --check`가 통과했으며 외부 Provider 요청과 blind holdout 실행은 0회였다.

@@ -5363,3 +5363,26 @@ Dataset lock은 source authority, semantic correctness, patent/academic quality,
 
 Step 4 완료는 실제 OpenAI 품질이나 실제 비용 측정이 아니다. API 요청은 0회였고 paid baseline은 아직
 시작하지 않았다. 다음 Step 5에서 development 4건만 USD 1.50 phase ceiling 아래 실행한다.
+
+## D-097 — Stage 9 development 실행 완료와 품질 closeout을 분리한다
+
+- 상태: 확정
+- 날짜: 2026-08-30
+- 적용 범위: Stage 9 Step 5 및 blind holdout 진입 조건
+
+### 결정
+
+- 승인 manifest의 development 4건 실행, 4건 artifact 저장과 인간 검토 완료를 execution complete로 기록한다.
+- 실제 계측값은 provider 16회, external 19회, recorded token 17,894와 estimated USD 0.214728이다.
+- 비용은 잠긴 가격표에 따른 estimate이며 billed 또는 provider-reported 비용으로 표현하지 않는다.
+- 인간 검토 `ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`을 근거로 quality closeout은 완료하지 않는다.
+- Blind holdout 6건은 development remediation과 closeout 결정 전에는 실행하지 않는다.
+- 승인 manifest가 잠근 prompt, runtime, code, rubric 또는 budget을 변경해야 하면 기존 manifest를 덮어쓰지
+  않고 새 version과 사람 승인을 만든다.
+- Stage 10 Multi-Agent 비교는 Stage 9 Single-Agent baseline이 고정된 뒤에만 시작한다.
+
+### 이유와 제한
+
+프로그램 실행 성공과 연구 품질 승인은 서로 다른 gate다. 낮은 개발 승인율을 무시하고 holdout을 실행하면
+제한된 평가 예산을 낭비하고 baseline의 의미를 흐릴 수 있다. 이 결정은 세 수정 필요 사례가 이미 개선됐거나
+holdout 일반화가 검증됐다는 뜻이 아니다.

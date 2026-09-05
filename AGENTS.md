@@ -14,12 +14,14 @@ while teaching the learner every major concept and implementation decision.
 Authoritative current position is defined by `ROADMAP.md`.
 
 ```text
-Stage 5 — Internet Research Expansion
-Patent Research Vertical Slice
-Step 3G — Patent User Acceptance Test FINAL PASS
+Stage 9 — Mandatory Real Research Evaluation
+Step 5 — Bounded Single-Agent Development Baseline Execution
+Development run and human review COMPLETE
+Quality gate: ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0
 
 NEXT
-Step 4A — Patent Metadata Expansion
+Step 5 remediation and closeout decision
+Blind holdout remains unexecuted
 ```
 
 Historical Phase 0~13, Stage A~I, and Local/Multi-Agent experimental phase numbers

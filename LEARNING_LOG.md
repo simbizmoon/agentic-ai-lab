@@ -4357,3 +4357,25 @@ USD 14.20으로 해석하지 않는다. 각 실제 token 수량에 해당 rate�
 
 다음은 Stage 9 Step 5 Bounded Single-Agent Development Baseline Execution이다. 공개된 development 4건만
 먼저 실행하고 품질·비용·시간 및 실패를 검토한다. Blind holdout 6건은 설정 확정 전까지 실행하지 않는다.
+
+## 2026-08-30 — Stage 9 Step 5 Development Baseline 실행과 인간 검토
+
+### 핵심 개념
+
+실행 완료와 품질 승인은 다르다. 네 사례가 모두 끝나고 artifact와 usage가 저장됐더라도, 사람이 답변의
+출처 선택·완전성·근거성을 검토해 수정 필요로 판정하면 baseline은 아직 고정할 수 없다.
+
+### 실행과 관찰
+
+- Development `tech-01`, `academic-01`, `patent-01`, `cross-01`을 순차 실행했다.
+- 실행 상태는 `completed`, artifact 저장은 4/4였다.
+- Provider 16회, external 19회, recorded token 17,894를 기록했다.
+- 잠긴 가격표 기준 estimated cost는 USD 0.214728이며 실제 청구 금액은 아니다.
+- 인간 검토 결과는 `ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`이었다.
+- Blind holdout 실행은 0건으로 유지했다.
+
+### 다음 학습
+
+세 수정 필요 사례의 공통 실패 유형을 분리하고 가장 작은 remediation을 선택한다. 변경이 승인 manifest의
+고정 조건에 영향을 주면 새 version을 사람에게 승인받은 뒤 development를 다시 검증한다. 이 closeout 전에는
+blind holdout이나 Stage 10 Multi-Agent 비교로 넘어가지 않는다.

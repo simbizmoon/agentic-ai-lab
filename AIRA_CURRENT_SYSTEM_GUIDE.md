@@ -1,6 +1,9 @@
 # AIRA CURRENT SYSTEM GUIDE
 
 > 현재 상태 기준일: 2026-08-30
+
+> 현재 공식 위치: Stage 9 Step 5 development 실행과 인간 검토 완료. 품질 gate는
+> `ACCEPT 1 / NEEDS_REVISION 3 / REJECT 0`이며 blind holdout은 실행하지 않았다.
 >
 > 현재 등급: **개인용 AI Research Agent Alpha — 제한적·감독형 사용 가능**
 >
